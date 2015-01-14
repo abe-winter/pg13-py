@@ -32,6 +32,9 @@ assert pool.tables['model'].rows == [[1, 2, 'three']] # everything is stored lik
 # this is a multitenant-autoincrement insert
 Model.insert_mtac(pool, {'userid':1}, 'id2', ('content',), ('hello',))
 assert pool.tables['model'].rows[1] == [1, 3, 'hello'] # notice that 'id2' is one more than for the previous row
+
+# the mocking engine is reasonably complete and you can query it with SQL
+assert pool.select('select userid,id2 from model where userid=2-1')==[[1,2],[1,3]]
 ```
 
 ## status
