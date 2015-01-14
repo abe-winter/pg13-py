@@ -20,20 +20,21 @@ class Model(pg.Row):
   def content_len(self):
     "this will get cached until the 'text' field is changed"
     return len(self['content'])
-
+```
+Note: everything below is happening in-python and in-memory. Each instance (table dictionary) is completely isolated so your tests can run in parallel or whatever, you don't need a live DB on your system. Interacting with a live database looks exactly the same as below except for creating the pool.
+```python
 pool = pgmock.PgPoolMock()
-# note: everything below is happening in-python and in-memory.
-# Each instance is completely isolated so your tests can run in parallel or whatever, you don't need a live DB on your system.
-# The calls would look the same (except for creating the pool above) for interacting with a live database.
 Model.create_table(pool)
 Model.insert_all(pool, 1, 2, 'three')
 assert pool.tables['model'].rows == [[1, 2, 'three']] # everything is stored like you'd expect
-
-# this is a multitenant-autoincrement insert
+```
+This is a multitenant autoincrement insert:
+```python
 Model.insert_mtac(pool, {'userid':1}, 'id2', ('content',), ('hello',))
 assert pool.tables['model'].rows[1] == [1, 3, 'hello'] # notice that 'id2' is one more than for the previous row
-
-# the mocking engine is reasonably complete and you can query it with SQL
+```
+The mocking engine is reasonably complete and you can query it with SQL.
+```python
 assert pool.select('select userid,id2 from model where userid=2-1')==[[1,2],[1,3]]
 ```
 
