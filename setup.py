@@ -16,6 +16,6 @@ setuptools.setup(
   author_email='abe-winter@users.noreply.github.com',
   url='https://github.com/abe-winter/pg13-py',
   license='MIT',
-  packages=setuptools.find_packages(exclude=('test*',)),
+  packages=setuptools.find_packages(),
   install_requires=['pytest','psycopg2','ujson','msgpack-python','lrparsing'], # note: stubredis relies on redis, but doesn't get imported by __init__.
 )
