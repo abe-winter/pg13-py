@@ -2,11 +2,11 @@
 
 pg13 is a simple SQL-modeling package with simple priorities:
 * basic support for multi-tenancy
-* built-in mocking
+* built-in mocking **at the SQL level**
 
-The advantage of built-in mocking is that your tests run without any external dependencies so they're fast and repeatable, parallelizable if you want. (big test-suites that used to chat with your DB for ten minutes can run in seconds now). The disadvantage is that the mocking engine may not act the same as your database. A lot of SQL features aren't supported.
+The advantage of built-in mocking is that your tests run without any external dependencies so they're fast and repeatable, parallelizable if you want. (big test-suites that used to chat with your DB for ten minutes can run in seconds now). Mocking at the SQL level (instead of just the model object) means that your app code can 'talk past' the model layer where needed and still be testable.
 
-The 'pg' doesn't stand for postgres (although postgres is the only platform it's ever been tested on). It's PG-13 like the movie rating (parental guidance suggested). You know how `requests` is 'http for humans'? This is 'orm for adults'.
+A disadvantage of built-in mocking is that the mocking engine may not act the same as your database. A lot of SQL features aren't supported.
 
 ## examples
 
