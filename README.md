@@ -1,4 +1,4 @@
-# pg13
+# pg13 ![travis-ci build](https://travis-ci.org/abe-winter/pg13-py.svg?branch=master)
 
 http://pg13.readthedocs.org/en/latest/
 
