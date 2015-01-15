@@ -1,6 +1,7 @@
 # pg13 ![travis-ci build](https://travis-ci.org/abe-winter/pg13-py.svg?branch=master)
 
-http://pg13.readthedocs.org/en/latest/
+**install** with `pip install pg13`  
+**docs** at http://pg13.readthedocs.org/en/latest/
 
 pg13 is a simple SQL-modeling package with simple priorities:
 * basic support for multi-tenancy
