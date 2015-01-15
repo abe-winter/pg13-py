@@ -1,5 +1,7 @@
 # pg13
 
+http://pg13.readthedocs.org/en/latest/
+
 pg13 is a simple SQL-modeling package with simple priorities:
 * basic support for multi-tenancy
 * built-in mocking **at the SQL level**
