@@ -23,7 +23,7 @@ class Model(pg.Row):
     "this will get cached until the 'text' field is changed"
     return len(self['content'])
 ```
-Note: everything below is happening in-python and in-memory. Each instance (table dictionary) is completely isolated so your tests can run in parallel or whatever, you don't need a live DB on your system. Interacting with a live database looks exactly the same as below except for creating the pool.
+Note: everything below is happening in-python and in-memory. Each instance (table dictionary) is completely isolated so your tests can run in parallel or whatever, you don't need a live DB on your system. Interacting with a live database looks exactly the same as below except for creating the pool and the pool.tables lines.
 ```python
 pool = pgmock.PgPoolMock()
 Model.create_table(pool)
@@ -35,15 +35,22 @@ This is a multitenant autoincrement insert:
 Model.insert_mtac(pool, {'userid':1}, 'id2', ('content',), ('hello',))
 assert pool.tables['model'].rows[1] == [1, 3, 'hello'] # notice that 'id2' is one more than for the previous row
 ```
-The mocking engine is reasonably complete and you can query it with SQL.
+The mocking engine is a partial implementation of SQL. Here's an example of querying it.
 ```python
 assert pool.select('select userid,id2 from model where userid=2-1')==[[1,2],[1,3]]
 ```
 
 ## status
 
-Very very new. Don't use it to run your nuclear facility. Don't use it as a live database.
+Very very new. Don't use it to run your nuclear facility. Probably don't use the mocking engine as a live database.
 
-SQL is a standards-based system. No implementations replicate the standard exactly. This one doesn't either.
+SQL is a standards-based system. No implementations replicate the standard exactly. This one also doesn't.
 
-Run `py.test` after installing to see if pg13 will work on your system.
+Run `pip install . && py.test` in the root dir to see if pg13 will work on your system.
+
+Ongoing list of SQL features that **aren't** supported:
+* common table expressions
+* indexes and constraints ('create index' statements will parse but are a no-op)
+* there's nothing like a query planner
+* asc and desc keywords in 'order by' expressions
+* multi-table selects, 'as' keyword in selects. nested selects can access another table.
