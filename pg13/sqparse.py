@@ -84,6 +84,10 @@ class CaseX(BaseX):
   def __eq__(self,other): return isinstance(other,CaseX) and (self.cases,self.elsex)==(other.cases,other.elsex)
   def treeall(self,f): return f(self) and all(x.treeall(f) for x in self.cases) and self.elsex.treeall(f)
   def treeany(self,f): return f(self) or any(x.treeany(f) for x in self.cases) or self.elsex.treeany(f)
+class AttrX(BaseX):
+  def __init__(self,parent,attr): self.parent,self.attr=parent,attr
+  def __repr__(self): return 'AttrX(%r,%r)'%(self.parent,self.attr)
+  def __eq__(self,other): return isinstance(other,AttrX) and (self.parent,self.attr)==(other.parent,other.attr)
 
 class CommandX(BaseX): "base class for top-level commands. probably won't ever be used."
 class SelectX(CommandX):
@@ -267,6 +271,7 @@ class SQLG(lrparsing.Grammar):
       returning = returning=x[-1] if isinstance(x[-1], ReturnX) else None
       return InsertX(table,cols,vals,returning)
     elif node is clas.assign: return AssignX(*x[1::2])
+    elif node is clas.attr: return AttrX(x[1],x[3])
     elif node is clas.updatex:
       ret=x[-1] if isinstance(x[-1],ReturnX) else None
       return UpdateX(*(list(keywordify(('update','set','where'),x[1::2],x[2::2])) + [ret]))

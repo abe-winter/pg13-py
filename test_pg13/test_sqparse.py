@@ -134,3 +134,12 @@ def test_parse_delete():
     NameX('t1'),
     BinX(OpX('cmp_op','='), NameX('a'), Literal(3))
   )
+
+def test_attr():
+  from pg13.sqparse import AttrX,NameX
+  assert sqparse.parse('a.b.c')==AttrX(AttrX(NameX('a'),NameX('b')),NameX('c'))
+
+def test_simple_join():
+  "'simple' in that it doesn't require any special syntax"
+  ex=sqparse.parse('select * from t1,t2 where t1.x=t2.y')
+  assert all(isinstance(x,sqparse.AttrX) for x in (ex.where.left,ex.where.right))
