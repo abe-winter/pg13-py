@@ -1,0 +1,16 @@
+pg13.stubredis module
+=====================
+
+Don't worry about this if you're on unix or osx.
+
+For windows users, this provides something kind of like a redis server.
+
+To use this, install these packages that aren't referenced by the pg13 installer:
+
+* `hiredis` (optional, for performance)
+* `redis` (mandatory)
+
+.. automodule:: pg13.stubredis
+    :members:
+    :undoc-members:
+    :show-inheritance:

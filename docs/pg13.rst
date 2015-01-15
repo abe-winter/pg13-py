@@ -1,0 +1,28 @@
+pg13 package
+============
+
+Submodules
+----------
+
+.. toctree::
+
+   pg13.cdiff
+   pg13.diff
+   pg13.misc
+   pg13.pg
+   pg13.pgmock
+   pg13.redismodel
+   pg13.sqex
+   pg13.sqparse
+   pg13.stubredis
+   pg13.syncmessage
+   pg13.syncschema
+   pg13.threevl
+
+Module contents
+---------------
+
+.. automodule:: pg13
+    :members:
+    :undoc-members:
+    :show-inheritance:

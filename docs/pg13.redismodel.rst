@@ -1,0 +1,7 @@
+pg13.redismodel module
+======================
+
+.. automodule:: pg13.redismodel
+    :members:
+    :undoc-members:
+    :show-inheritance:

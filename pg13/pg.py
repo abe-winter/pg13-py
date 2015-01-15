@@ -1,4 +1,4 @@
-"pg -- postgres wrapper for outlin.es."
+"To use pg13 for ORM, inherit your model classes from Row."
 # todo: make everything take a pool_or_cursor instead of just a pool (at least make them all check for it)
 # todo: don't allow JSONFIELDS to overlap with primary key? think about it. >> is this obsolete with SpecialField?
 # todo: add profiling hooks
@@ -24,7 +24,9 @@ def eqexpr(key,value):
   return key+(' is %s' if value is None else '=%s')
 
 class SpecialField(object):
-  "helper for fields that are stored as text (or json?) by PG with special ser/des rules in python"
+  """Helper for fields that are stored as text (or json?) by PG with special ser/des rules in python.
+  
+  The documentation for this is nonexistent for now and the way these are used is likely to change."""
   # todo(awinter): think about collection of serdes classes
   # todo(awinter): inability to do dict of lists means no easy multimap. whatever.
   KNOWN_SERDES=('json','class')
@@ -66,6 +68,20 @@ class SpecialField(object):
   def sqltype(self): return 'text'
 
 class PgPool(object):
+  """
+  This is a wrapper for a psycopg2 pool. Most of the Row methods expect one of these as the first argument.
+
+  Here's an example of how to construct one to connect to your database::
+
+    def mkpool():
+      dets=dict(
+        host='127.0.0.1',
+        dbname='yourdb',
+        user='username',
+        password='topsecret',
+      )
+      return pg.PgPool(' '.join("%s='%s'"%(k,v) for k,v in dets.items()))
+  """
   def __init__(self,dbargs):
     # http://stackoverflow.com/questions/12650048/how-can-i-pool-connections-using-psycopg-and-gevent
     self.pool = psycopg2.pool.ThreadedConnectionPool(5,10,dbargs) # I think that this is safe combined with psycogreen patching
@@ -105,7 +121,30 @@ def dirty(field,ttl=None):
   return decorator
 
 class Row(object):
-  "base class for models"
+  """Base class for models.
+  
+  :cvar FIELDS: list of (name,sql_type_string) tuples. pg13 doesn't know anything about sql types except for SpecialField (which you shouldn't use yet). So you can use anything psycopg2 knows how to translate.
+  :cvar PKEY: string with comma-separated names. This will probably become a tuple in the future.
+  :cvar INDEXES: list of strings. Each string can be one of:
+
+    * string of comma-separated field names, which will be wrapped into a 'create index' statement.
+    * string starting with 'create index' which will be run as-is.
+
+  :cvar TABLE: string, table name.
+  :cvar REFKEYS: don't use this yet. It's for automatic child detection in client-server interactions.
+
+  Example::
+
+    class Model(pg.Row):
+      FIELDS = [('a','int'),('b','int'),('c','text')]
+      PKEY = 'a,b'
+      TABLE = 'model'
+      @pg.dirty('c') # the dirty decorator caches computations until the field is changed
+      def textlen(self):
+        return len(self['c'])
+      def aplusb(self):
+        return self['a'] + self['b'] # note how __getitem__ (square brackets) is used to access fields
+  """
   # todo: metaclass stuff to check field names on class creation? forbidden column names: returning
   FIELDS = []
   PKEY = ''
@@ -121,6 +160,11 @@ class Row(object):
       pool_or_cursor.commit(query) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(query)
   @classmethod
   def create_table(clas,pool_or_cursor):
+    """Use FIELDS, PKEY, INDEXES and TABLE members to create a sql table for the model.
+
+    .. warning:: this uses 'if not exists' so if you've updated your model, you need to delete the old table first.
+    (even better, increment the TABLE member from 'mymodel' to 'mymodel2')
+    """
     print clas.__name__,'create_table'
     def mkfield((name,tp)): return name,(tp.sqltype() if isinstance(tp,SpecialField) else tp)
     fields = ','.join(map(' '.join,map(mkfield,clas.FIELDS)))
@@ -130,7 +174,7 @@ class Row(object):
     pool_or_cursor.commit(base) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(base)
     clas.create_indexes(pool_or_cursor)
   @classmethod
-  def names(class_): return zip(*class_.FIELDS)[0]
+  def names(class_): "helper; returns list of the FIELD names"; return zip(*class_.FIELDS)[0]
   def __eq__(self,other): return all(self[k]==other[k] for k in self.names()) if isinstance(other,type(self)) else False
   def __neq__(self,other): return (not (self==other)) if isinstance(other,type(self)) else False
   def __init__(self,*cols):
@@ -146,7 +190,7 @@ class Row(object):
     except ValueError: raise FieldError("%s.%s"%(self.__class__.__name__,name))
     return self.FIELDS[index][1].des(self.values[index]) if isinstance(self.FIELDS[index][1],SpecialField) else self.values[index]
   @classmethod
-  def index(class_,name): return class_.names().index(name)
+  def index(class_,name): "helper; returns index of field name in row"; return class_.names().index(name)
   @classmethod
   def pkey_get(clas,pool_or_cursor,*vals):
     "lookup by primary keys in order"
@@ -163,6 +207,27 @@ class Row(object):
     raise NotImplementedError('todo')
   @classmethod
   def select(clas,pool_or_cursor,**kwargs):
+    """
+    :param PgPool pool_or_cursor: can also be a psycopg2 cursor.
+    :param kwargs: see examples above.
+    :return: generator yielding raw rows (i.e. generator of lists)
+
+    .. seealso:: select_models
+
+    Example::
+
+      Model.select(pool, a=1, b=2)
+
+    That would get translated into 'select * from tablename where a=1 and b=2'
+
+    Be careful, the 'columns' keyword is treated specially::
+
+      Model.select(pool, a=1, b=2, columns='a,c')
+
+    That would run 'select a,c from tablename where a=1 and b=2'
+
+    .. note:: This returns a generator, not a list. All your expectations will be violated.
+    """
     columns = kwargs.pop('columns','*')
     # todo(awinter): write a test for whether eqexpr matters; figure out pg behavior and apply to pgmock
     query="select %s from %s"%(columns,clas.TABLE)
@@ -174,12 +239,28 @@ class Row(object):
       return pool_or_cursor # iterable just like the generator ret by pool.select
   @classmethod
   def select_models(clas,pool_or_cursor,**kwargs):
-    "this returns a generator, not a list; careful"
+    """
+    Same input as Row.select (and calls it internally), different return.
+
+    :return: generator yielding instances of the class.
+    """
     if 'columns' in kwargs: raise ValueError("don't pass 'columns' to select_models")
     return (clas(*row) for row in clas.select(pool_or_cursor,**kwargs))
   @classmethod
   def selectwhere(clas,pool_or_cursor,userid,qtail,vals=(),needs_and=True):
-    "shortcut for passing in the part of the query after 'select * from table where '. yields models, not rows."
+    """
+    Shortcut for passing in the part of the query after 'select * from table where '. This is 'multitenant' in the sense that it demands a userid column.
+
+    Example::
+
+      Model.selectwhere(pool,15,'a-b=%s+1',(50,))
+
+    That gets translated into 'select * from tablename where userid=15 and a-b=50-1'
+
+    :return: generator yielding instances of the class.
+
+    .. seealso:: select_xiny
+    """
     qstring=('select * from %s where userid=%i '%(clas.TABLE,userid))+('and ' if needs_and else '')+qtail
     if isinstance(pool_or_cursor,PgPool):
       retgen=pool_or_cursor.select(qstring,tuple(vals)) # it's a generator (not that that affects performance of big Qs without SS cursors)
@@ -189,15 +270,31 @@ class Row(object):
     return (clas(*row) for row in retgen)
   @classmethod
   def select_xiny(clas,pool_or_cursor,userid,field,values):
-    "selectwhere shortcut for 'docid in (1,2,3)' type queries"
+    """
+    'Select X in Y'. selectwhere shortcut for 'docid in (1,2,3)' queries. Assumes multitenancy with 'userid' column.
+
+    :param field str:
+    :param values list:
+
+    Examples::
+
+      Model.select_xiny(pool,15,'docid',[1,2,3])
+      Model.select_xiny(pool,15,'(docid,subdocid)',[(1,2),(1,3)]) # I'm not sure if the parens around the field are necessary here
+    """
     if not values: return []
     return clas.selectwhere(pool_or_cursor,userid,'%s in %%s'%field,(tuple(values),))
   @classmethod
   def serialize_row(clas,fieldnames,vals):
+    "I think this is only relevant if you're using SpecialField"
     fieldtypes=[clas.FIELDS[clas.index(name)][1] for name in fieldnames]
     return tuple(map(transform_specialfield,zip(fieldtypes,vals)))
   @classmethod
   def insert_all(clas,pool_or_cursor,*vals):
+    """
+    Use this to create a new row by passing all fields.
+    :param vals: must be the same length as clas.FIELDS
+    :return: an instance of the class *as returned by the DB*; in other words, defaults are not being handled by wonky client logic.
+    """
     # note: it would be nice to write this on top of clas.insert, but this returns an object and that has a returning feature. tricky semantics.
     if len(clas.FIELDS)!=len(vals): raise ValueError('fv_len_mismatch',len(clas.FIELDS),len(vals),clas.TABLE)
     vals=clas.serialize_row([f[0] for f in clas.FIELDS],vals)
@@ -209,6 +306,19 @@ class Row(object):
     return clas(*vals)
   @classmethod
   def insert(clas,pool_or_cursor,fields,vals,returning=None):
+    """
+    Use this to create a new row without passing all fields (i.e. accepting defaults).
+    Examples::
+
+      Model.insert(pool,('a','b'),(1,2))
+      Model.insert(pool,('a','b'),(1,2),'*') # returning [row_list]
+      Model.insert(pool,('a','b'),(1,2),'c') # returning [[c]]
+
+    :param fields iterable:
+    :param vals iterable: must match len of fields
+    :return: it *should* return an instance of the class but instead it returns whatever you ask it for with the returning field.
+      I guess you can pass '*' to get a raw row back (i.e. a list) >> or might be a list of lists.
+    """
     if len(fields)!=len(vals): raise ValueError('fv_len_mismatch',len(fields),len(vals),clas.TABLE)
     vals=clas.serialize_row(fields,vals)
     query = "insert into %s (%s) values (%s)"%(clas.TABLE,','.join(fields),','.join(['%s']*len(vals)))
@@ -231,7 +341,11 @@ class Row(object):
   def checkdb(clas,pool_or_cursor): raise NotImplementedError("check that DB table matches our fields")
   @classmethod
   def insert_mtac(clas,pool_or_cursor,restrict,incfield,fields=(),vals=()):
-    "multitenant auto-increment insert. restrict is a dict of keys and raw values to use for looking up the new incfield id"
+    """
+    multitenant auto-increment insert. restrict is a dict of keys and raw values to use for looking up the new incfield id.
+
+    This needs better doc but there's an exampe on the github page.
+    """
     if isinstance(clas.FIELDS[clas.index(incfield)][1],SpecialField): raise TypeError('mtac_specialfield_unsupported','incfield',incfield)
     if any(isinstance(clas.FIELDS[clas.index(f)][1],SpecialField) for f in restrict):
       raise TypeError('mtac_specialfield_unsupported','restrict')
@@ -250,7 +364,13 @@ class Row(object):
       return clas(*pool_or_cursor.fetchone())
   @classmethod
   def pkey_update(clas,pool_or_cursor,pkey_vals,escape_keys,raw_keys=None):
-    "raw_keys vs escape_keys -- raw_keys doesn't get escaped, so you can do something like column=column+1"
+    """raw_keys vs escape_keys -- raw_keys doesn't get escaped, so you can do something like column=column+1
+
+    Example::
+
+      Model.pkey_update(pool,(1,2),{'counter':10}) # update tablename set counter=10 where a=1 and b=2
+      Model.pkey_update(pool,(1,2),{},{'counter':'counter+1'}) # the last arg is raw_keys. this *doesn't get escaped* so the DB will actually increment the field.
+    """
     if not clas.PKEY: raise ValueError("can't update %s, no primary key"%clas.TABLE)
     if any(isinstance(clas.FIELDS[clas.index(f)][1],SpecialField) for f in (raw_keys or ())): raise TypeError('rawkeys_specialfield_unsupported')
     escape_keys=dict(zip(escape_keys,clas.serialize_row(escape_keys,escape_keys.values())))
@@ -274,10 +394,21 @@ class Row(object):
     else:
       pool_or_cursor.commit(query,vals) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(query,vals)
   def pkey_vals(self):
-    "get primary key values"
+    """
+    :return: tuple of the instance's primary key (the values, not the field names)
+    """
     if not hasattr(self,'PKEY') or not self.PKEY: raise KeyError("no primary key on %s"%self.TABLE)
     return tuple(map(self.__getitem__,self.PKEY.split(',')))
   def update(self,pool_or_cursor,escape_keys,raw_keys=None):
+    """
+    Same as Row.pkey_update except it works on an instance.
+
+    The instance's fields are updated. Row has no __setitem__ (intentionally); this is the only sanctioned way to edit values and it requires a database roundtrip.
+
+    Example::
+
+      model_instance.update(pool,{},{'counter':'counter+1'})
+    """
     pkey_vals=self.pkey_vals()
     # note: do not serialize SpecialField. pkey_update takes care of it.
     rawvals=self.pkey_update(pool_or_cursor,pkey_vals,escape_keys,raw_keys)
@@ -299,16 +430,17 @@ class Row(object):
     vals = tuple(update_keys.values()+where_keys.values())
     pool_or_cursor.commit(q,vals) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(q,vals)
   def delete(self,pool_or_cursor):
+    ".. warning:: pgmock doesn't support delete yet, so this isn't tested"
     vals=self.pkey_vals()
     whereclause=' and '.join('%s=%%s'%k for k in self.PKEY.split(','))
     q='delete from %s where %s'%(self.TABLE,whereclause)
     pool_or_cursor.commit(q,vals) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(q,vals)
   def clientmodel(self):
-    "use the class's CLIENTFIELDS attribute to create a dictionary the client can read"
+    "Use the class's CLIENTFIELDS attribute to create a dictionary the client can read. Don't use this."
     raise NotImplementedError # todo delete: this is only used in dead pinboard code and a test
     return {k:self[k] for k in self.CLIENTFIELDS}
   def refkeys(self,fields):
-    "returns {ModelClass:list_of_pkey_tuples}. see syncschema.RefKey."
+    "returns {ModelClass:list_of_pkey_tuples}. see syncschema.RefKey. Don't use this yet."
     # todo doc: better explanation of what refkeys are and how fields plays in
     dd=collections.defaultdict(list)
     if any(f not in self.REFKEYS for f in fields): raise ValueError(fields,'not all in',self.REFKEYS.keys())

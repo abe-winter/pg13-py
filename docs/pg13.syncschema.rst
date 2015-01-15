@@ -1,0 +1,7 @@
+pg13.syncschema module
+======================
+
+.. automodule:: pg13.syncschema
+    :members:
+    :undoc-members:
+    :show-inheritance:

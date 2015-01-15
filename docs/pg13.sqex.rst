@@ -1,0 +1,7 @@
+pg13.sqex module
+================
+
+.. automodule:: pg13.sqex
+    :members:
+    :undoc-members:
+    :show-inheritance:

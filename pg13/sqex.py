@@ -4,6 +4,7 @@ import functools
 from . import sqparse,threevl
 
 def is_aggregate(ex):
+  "is the expression something that runs on a list of rows rather than a single row"
   # todo: I think the SQL term for this is 'scalar subquery'. use SQL vocabulary
   # todo doc: explain why it's not necessary to do this check on the whereclause
   return isinstance(ex,sqparse.CallX) and ex.f in (sqparse.NameX('min'),sqparse.NameX('max'))

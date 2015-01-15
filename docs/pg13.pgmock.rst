@@ -1,0 +1,7 @@
+pg13.pgmock module
+==================
+
+.. automodule:: pg13.pgmock
+    :members:
+    :undoc-members:
+    :show-inheritance:

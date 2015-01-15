@@ -1,0 +1,7 @@
+pg13.sqparse module
+===================
+
+.. automodule:: pg13.sqparse
+    :members:
+    :undoc-members:
+    :show-inheritance:

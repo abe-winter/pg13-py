@@ -1,0 +1,7 @@
+pg13.misc module
+================
+
+.. automodule:: pg13.misc
+    :members:
+    :undoc-members:
+    :show-inheritance:
