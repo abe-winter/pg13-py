@@ -71,13 +71,9 @@ class Table:
     for row in match_rows:
       for x in setx.children: row[self.lookup(x.col.name).index]=sqex.evalex(x.expr,row,self.name,tables_dict)
     if returning: return [sqex.evalex(returning,row,self.name,tables_dict)] # todo: find spec support for wrapping this in a list. todo: use returnrows?
-
-"""
-class XDelete(Command):
-  ATTRS=('fromx','where','returning')
-  def __init__(self,fromx,where,returning): super(XDelete,self).__init__('delete',(fromx,where,returning))
-  def __call__(self,tables_dict): raise NotImplementedError
-"""
+  def delete(self,where,tables_dict):
+    # todo: what's the deal with nested selects in delete. does it get evaluated once to a scalar before running the delete?
+    self.rows=[r for r in self.rows if not sqex.evalex(where,r,self.name,tables_dict)]
 
 def apply_sql(ex,values,tables_dict):
   "call the stmt in tree with values subbed on the tables in t_d\
@@ -93,6 +89,7 @@ def apply_sql(ex,values,tables_dict):
     if any(c.pkey for c in ex.cols): raise NotImplementedError('inline pkey')
     tables_dict[ex.name.name]=Table(ex.name,ex.cols,ex.pkey.fields if ex.pkey else [])
   elif isinstance(ex,sqparse.IndexX): pass
+  elif isinstance(ex,sqparse.DeleteX): return tables_dict[ex.table.name].delete(ex.where,tables_dict)
   else: raise TypeError(type(ex))
 
 class ConnectionMock:

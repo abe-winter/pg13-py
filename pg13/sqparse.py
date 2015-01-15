@@ -46,12 +46,14 @@ class OpX(BaseX):
     return self.PRIORITY.index(self.optype) < self.PRIORITY.index(other.optype)
   def __eq__(self,other): return isinstance(other,OpX) and (self.optype,self.op)==(other.optype,other.op)
 class BinX(BaseX):
+  "binary operator expression"
   def __init__(self,op,left,right): self.op,self.left,self.right=op,left,right
   def __repr__(self): return 'BinX[%r](%r,%r)'%(self.op,self.left,self.right)
   def __eq__(self,other): return isinstance(other,BinX) and (self.op,self.left,self.right)==(other.op,other.left,other.right)
   def treeall(self,f): return f(self) and self.left.treeall(f) and self.right.treeall(f)
   def treeany(self,f): return f(self) or self.left.treeany(f) or self.right.treeany(f)
 class UnX(BaseX):
+  "unary operator expression"
   def __init__(self,op,val): self.op,self.val=op,val
   def __repr__(self): return 'UnX[%r](%r)'%(self.op,self.val)
   def __eq__(self,other): return isinstance(other,UnX) and (self.op,self.val)==(other.op,other.val)
@@ -127,6 +129,11 @@ class IndexX(CommandX):
   def __init__(self,string): self.string=string
   def __repr__(self): return 'IndexX()'
 
+class DeleteX(CommandX):
+  def __init__(self,table,where): self.table,self.where=table,where
+  def __repr__(self): return 'DeleteX(%r,%r)'%(self.table,self.where)
+  def __eq__(self,other): return isinstance(other,DeleteX) and (self.table,self.where)==(other.table,other.where)
+
 def bin_priority(op,left,right):
   "I don't know how to handle order of operations in the LR grammar, so here it is"
   # note: recursion limits protect this from infinite looping. I'm serious. (i.e. it will crash rather than hanging)
@@ -196,8 +203,10 @@ class SQLG(lrparsing.Grammar):
   assignlist = lrparsing.List(assign, ',', 1)
   updatex = kw('update') + namelist + kw('set') + assignlist + lrparsing.Opt('where' + expr) + lrparsing.Opt(returning)
 
+  deletex = kw('delete') + kw('from') + T.name + kw('where') + expr
+
   # todo: deletex = 
-  START = selectx | createx | insertx | updatex | expr # note: expr doesn't need to be here except that it's useful to run and verify smaller strings
+  START = selectx | createx | insertx | updatex | deletex | expr # note: expr doesn't need to be here except that it's useful to run and verify smaller strings
 
   @classmethod
   def tovalue(clas,x):
@@ -261,6 +270,7 @@ class SQLG(lrparsing.Grammar):
     elif node is clas.updatex:
       ret=x[-1] if isinstance(x[-1],ReturnX) else None
       return UpdateX(*(list(keywordify(('update','set','where'),x[1::2],x[2::2])) + [ret]))
+    if node is clas.deletex: return DeleteX(x[3],x[5])
     elif node is clas.START: return value
     else: raise NotImplementedError(node,x)
 

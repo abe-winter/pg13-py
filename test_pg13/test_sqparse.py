@@ -127,3 +127,10 @@ def test_parse_index():
     sqparse.parse('create index on t1 using gist (a,b) where x=5'),
   ]
   assert all(isinstance(x,sqparse.IndexX) for x in stmts)
+
+def test_parse_delete():
+  from pg13.sqparse import NameX,OpX,BinX,Literal
+  assert sqparse.parse('delete from t1 where a=3')==sqparse.DeleteX(
+    NameX('t1'),
+    BinX(OpX('cmp_op','='), NameX('a'), Literal(3))
+  )

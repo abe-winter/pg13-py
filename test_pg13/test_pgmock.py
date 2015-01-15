@@ -216,3 +216,9 @@ def test_nested_select():
   tables['t2'].rows=[[0,1],[0,3],[0,5],[6,1]]
   assert [[1,2]]==runsql('select * from t1 where a=(select b from t2 where a=6)')
   assert []==runsql('select * from t1 where a=(select b from t2 where a=7)')
+
+def test_delete():
+  tables,runsql=prep('create table t1 (a int, b int)')
+  tables['t1'].rows=[[0,1],[1,1],[2,0],[2,1]]
+  runsql('delete from t1 where b=1')
+  assert tables['t1'].rows==[[2,0]]
