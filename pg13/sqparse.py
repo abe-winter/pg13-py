@@ -12,22 +12,6 @@ from lrparsing import Token,THIS,Opt,Prio,Ref,List,Repeat,Choice # I hate import
 class PgMockError(StandardError): pass
 class SQLSyntaxError(PgMockError): "base class for errors during parsing. beware: this gets called during table execution for things a real parser would have caught"
 
-class Literal(object):
-  def __init__(self,val): self.val=val
-  def __repr__(self): return '%s(%r)'%(self.__class__.__name__,self.val)
-  def __eq__(self,other): return type(other) is Literal and self.val==other.val # careful: ArrayLit is an instance of Literal
-  def toliteral(self): return self.val
-  def treeall(self,f): return f(self)
-  def treeany(self,f): return f(self)
-class ArrayLit(Literal):
-  def __init__(self,vals): self.vals=list(vals) # list so it's settable by sqex.sub_slots
-  def __repr__(self): return 'Literal[Array](%r)'%(self.vals,)
-  def __eq__(self,other): return isinstance(other,ArrayLit) and self.vals==other.vals
-  def toliteral(self): return self.vals
-  def treeall(self,f): return all(x.treeall(f) for x in self.vals)
-  def treeany(self,f): return any(x.treeany(f) for x in self.vals)
-class SubLit(Literal): pass
-
 class BaseX(object):
   "note: expressions could just be dicts, *but* classes save 'what attrs does this have' experimentation runs. may also help the smater (isinstance-aware) linters."
   def __eq__(self,other): raise NotImplementedError('%s.eq'%(self.__class__.__name__)) # to avoid false negatives
@@ -56,6 +40,23 @@ class BaseX(object):
         getattr(self,attr)[ilist] = x
       else: setattr(self,i[0],x)
     else: self.child(i[0])[i[1:]] = x
+
+class Literal(BaseX):
+  def __init__(self,val): self.val=val
+  def __repr__(self): return '%s(%r)'%(self.__class__.__name__,self.val)
+  def __eq__(self,other): return type(other) is Literal and self.val==other.val # careful: ArrayLit is an instance of Literal
+  def toliteral(self): return self.val
+  def treeall(self,f): return f(self)
+  def treeany(self,f): return f(self)
+class ArrayLit(BaseX):
+  def __init__(self,vals): self.vals=list(vals) # list so it's settable by sqex.sub_slots
+  def __repr__(self): return 'Literal[Array](%r)'%(self.vals,)
+  def __eq__(self,other): return isinstance(other,ArrayLit) and self.vals==other.vals
+  def toliteral(self): return self.vals
+  def treeall(self,f): return all(x.treeall(f) for x in self.vals)
+  def treeany(self,f): return any(x.treeany(f) for x in self.vals)
+class SubLit(object): pass
+
 class NameX(BaseX):
   def __init__(self,name): self.name=name
   def __repr__(self): return 'NameX(%r)'%self.name
