@@ -8,15 +8,15 @@ pg13 is a SQL evaluator for python designed for testing. Normally when you want 
 1. **artisanal mocking**: standard mocking frameworks make you specify the output of every DB call
  * bad because it's extra work, maintenance nightmare, and you're feeding the test the right answer
 2. **local db**: have a running copy of the database
- * bad because your tests are less portable, slower, and may have inter-test data dependencies
+ * bad because your tests are less portable and may have hidden inter-test data dependencies
 3. **everything but**: test everything but the DB interaction
  * bad because you're not testing a big part of your app
 
 pg13 takes a different approach:
 * SQL is simulated in python
 * every test can create and populate its own lightweight database
-* tests are completely deterministic
-* parallelization is safe (because parallel tests have no chance of touching the same data)
+* tests are deterministic (at least with respect to database reuse)
+* parallelization is safe (at least with respect to data)
 * performance: about 100 tests per second on my laptop
 
 ## examples
@@ -71,3 +71,4 @@ Missing SQL features:
 * common table expressions (`with t0 as (select * from t1 where a=5) select * from t0,t2 where t0.a=t2.a`)
 * indexes and constraints (`create index` statements will parse but are a no-op)
 * asc and desc keywords in `order by` expressions (asc by default; but you can use a minus sign to simulate desc in some cases)
+* drop table

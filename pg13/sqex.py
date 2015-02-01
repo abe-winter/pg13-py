@@ -72,9 +72,6 @@ class NameIndexer:
   def rowset(self,tables_dict,row_list,index): raise NotImplementedError # note: shouldn't need this until update uses this
   def __repr__(self): return '<NameIndexer %s>'%self.table_order
 
-class TreePath:
-  "thing for indexing into a tree. used for lazy replacement"
-
 def decompose_select(selectx):
   "return [(treepath,scalar_subquery),...], wherex_including_on, NameIndexer, table_list"
   raise NotImplementedError
@@ -155,33 +152,40 @@ SUBSLOT_ATTRS=[
   (sqparse.SelectX, ('cols','tables','where','order','limit','offset')),
   (sqparse.CaseX, ('elsex',)),
   (sqparse.WhenX, ('when','then')),
+  (sqparse.NameX, ('name',)),
+  (sqparse.AttrX, ('parent','attr')),
+  (sqparse.OpX, ('optype','op')),
+  (sqparse.DeleteX, ('table','where')),
+  (sqparse.JoinX, ('a','b','on_stmt')),
+  (sqparse.FromTableX, ('name','alias')),
 ]
 VARLEN_ATTRS=[
   (sqparse.ArrayLit,('vals',)),
   (sqparse.CommaX,('children',)),
   (sqparse.CaseX, ('cases',)),
+  (sqparse.FromListX,('fromlist',)),
 ]
-def sub_slots(x,arr=None):
-  "recursive. for each SubLit found, add a (parent,setter_fn) tuple to arr"
+def sub_slots(x,match_fn,arr=None):
+  "recursive. for each match found, add a (parent,setter_fn) tuple to arr"
   if arr is None: arr=[]
   for clas,attrs in VARLEN_ATTRS:
     if isinstance(x,clas):
       for attr in attrs:
         for i,elt in enumerate(getattr(x,attr)):
-          if elt is sqparse.SubLit: arr.append((x,functools.partial(getattr(x,attr).__setitem__,i)))
-          else: sub_slots(elt,arr)
+          if match_fn(elt): arr.append((x,functools.partial(getattr(x,attr).__setitem__,i)))
+          else: sub_slots(elt,match_fn,arr)
       break # note: don't optimize this out. CaseX has subslot and varlen attrs
   for clas,attrs in SUBSLOT_ATTRS:
     if isinstance(x,clas):
       for attr in attrs:
-        if getattr(x,attr) is sqparse.SubLit: arr.append((x,lambda val: setattr(x,attr,val)))
-        else: sub_slots(getattr(x,attr),arr)
+        if match_fn(getattr(x,attr)): arr.append((x,lambda val: setattr(x,attr,val)))
+        else: sub_slots(getattr(x,attr),match_fn,arr)
       break
   return arr
 
 def depth_first_sub(expr,values):
   "this *modifies in place* the passed-in expression, recursively replacing SubLit with literals"
-  arr=sub_slots(expr)
+  arr=sub_slots(expr,lambda elt:elt is sqparse.SubLit)
   if len(arr)!=len(values): raise ValueError('len',len(arr),len(values))
   for (_,setter),val in zip(arr,values):
     if isinstance(val,(basestring,int,float)): setter(sqparse.Literal(val))

@@ -115,7 +115,7 @@ class SelectX(CommandX):
   def treeany(self,f): return f(self) or any(getattr(self,a).treeany(f) for a in self.ATTRS)
 
 class ColX(BaseX):
-  ATTRS=('name','coltp','isarray','defaeult','pkey','not_null')
+  ATTRS=('name','coltp','isarray','default','pkey','not_null')
   def __init__(self,name,coltp,isarray,default,pkey,not_null):
     self.name,self.coltp,self.isarray,self.default,self.pkey,self.not_null=name,coltp,isarray,default,pkey,not_null
   def __repr__(self): return 'ColX[%s,%r](%r,default=%r,pkey=%r,not_null=%r)'%(self.coltp.name,self.isarray,self.name.name,self.default,self.pkey,self.not_null)
