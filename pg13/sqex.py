@@ -73,7 +73,8 @@ class NameIndexer:
   def __repr__(self): return '<NameIndexer %s>'%self.table_order
 
 def decompose_select(selectx):
-  "return [(treepath,scalar_subquery),...], wherex_including_on, NameIndexer, table_list"
+  "return [(parent,setter) for scalar_subquery], wherex_including_on, NameIndexer, table_list"
+  subqueries = sub_slots(selectx, lambda x:isinstance(x,sqparse.SelectX))
   raise NotImplementedError
 
 def run_select(ex,tables):

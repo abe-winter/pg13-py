@@ -34,6 +34,28 @@ class BaseX(object):
   def __repr__(self): return '%s(???)'%(self.__class__.__name__)
   def treeall(self,f): return f(self)
   def treeany(self,f): return f(self)
+  def child(self,index):
+    "helper for __getitem__/__setitem__"
+    if isinstance(index,tuple):
+      attr,i = index
+      return getattr(self,attr)[i]
+    else: return getattr(self,index)
+  def check_i(self,i):
+    "helper"
+    if not isinstance(i,tuple): raise TypeError('index_by_tuple')
+    if not i: raise ValueError('empty_index')
+  def __getitem__(self,i):
+    self.check_i(i)
+    if len(i)==1: return self.child(i[0])
+    else: return self.child(i[0])[i[1:]]
+  def __setitem__(self,i,x):
+    self.check_i(i)
+    if len(i)==1:
+      if isinstance(i[0],tuple):
+        attr,ilist = i[0]
+        getattr(self,attr)[ilist] = x
+      else: setattr(self,i[0],x)
+    else: self.child(i[0])[i[1:]] = x
 class NameX(BaseX):
   def __init__(self,name): self.name=name
   def __repr__(self): return 'NameX(%r)'%self.name

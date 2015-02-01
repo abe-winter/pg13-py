@@ -167,3 +167,18 @@ def test_join_syntax():
     FromTableX('t2',None),
     BinX(OpX('cmp_op','='),AttrX(NameX('t1'),NameX('x')),AttrX(NameX('t2'),NameX('y')))
   )])
+
+def test_xgetset():
+  "tree-aware getitem/setitem for expressions"
+  from pg13.sqparse import NameX,AttrX,FromTableX
+  x = sqparse.parse('select * from t1,t2 where t1.x=t2.y')
+  # named get
+  assert x['where','left','attr']==NameX('x')
+  # named set
+  x['where','left','attr'] = 'hello'
+  assert x['where','left']==AttrX(NameX('t1'),'hello')
+  # index get
+  assert x['tables',('fromlist',0)]==FromTableX('t1',None)
+  # index set
+  x['tables',('fromlist',0)] = 'hello'
+  assert x['tables','fromlist'][0]=='hello'
