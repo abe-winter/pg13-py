@@ -30,9 +30,9 @@ def evalop(op,left,right):
   else: raise NotImplementedError(op,left,right)
 
 def run_select(ex,tables):
-  if len(ex.tables.children)!=1: raise NotImplementedError('todo: multi-table select')
+  if len(ex.tables.fromlist)!=1: raise NotImplementedError('todo: multi-table select')
   if ex.limit or ex.offset: raise NotImplementedError('notimp: limit,offset')
-  return tables[ex.tables.children[0].name].select(ex.cols,ex.where,tables,ex.order)
+  return tables[ex.tables.fromlist[0].name].select(ex.cols,ex.where,tables,ex.order)
 
 def evalex(x,row,tablename,tables):
   if isinstance(x,sqparse.BinX):
