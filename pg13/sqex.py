@@ -1,6 +1,6 @@
 "expression evaluation helpers for pgmock. has duck-dependencies on pgmock's Table class, needs redesign."
 
-import functools
+import functools,itertools
 from . import sqparse,threevl
 
 # todo: derive errors below from something pg13-specific
@@ -35,19 +35,25 @@ def evalop(op,left,right):
 
 class NameIndexer:
   "helper that takes str, NameX or attrx and returns the right thing (or raises an error on ambiguity)"
-  def update_aliases(self,ftx):
+  @staticmethod
+  def update_aliases(aliases,ftx):
     "helper for ctor. takes FromTableX"
-    self.aliases[ftx.name]=ftx.name
-    if ftx.alias: self.aliases[ftx.alias]=ftx.name
-  def __init__(self,fromlistx):
-    self.aliases={}
+    aliases[ftx.name]=ftx.name
+    if ftx.alias: aliases[ftx.alias]=ftx.name
+  @classmethod
+  def ctor_fromlist(clas,fromlistx):
+    aliases={}
     for from_item in fromlistx.fromlist:
-      if isinstance(from_item,sqparse.FromTableX): self.update_aliases(from_item)
+      if isinstance(from_item,sqparse.FromTableX): clas.update_aliases(aliases,from_item)
       elif isinstance(from_item,sqparse.JoinX):
-        self.update_aliases(from_item.a)
-        self.update_aliases(from_item.b)
+        clas.update_aliases(aliases,from_item.a)
+        clas.update_aliases(aliases,from_item.b)
       else: raise TypeError(type(from_item))
-    self.table_order=sorted(set(self.aliases.values()))
+    table_order=sorted(set(aliases.values()))
+    return clas(aliases,table_order)
+  @classmethod
+  def ctor_name(clas,name): return clas({name:name},[name])
+  def __init__(self,aliases,table_order): self.aliases,self.table_order = aliases,table_order
   def index_tuple(self,tables_dict,index,is_set):
     "helper for rowget/rowset"
     if isinstance(index,sqparse.NameX): index = index.name
@@ -68,14 +74,16 @@ class NameIndexer:
     else: raise TypeError(type(index))
   def rowget(self,tables_dict,row_list,index):
     "row_list in self.row_order"
-    raise NotImplementedError
+    tmp=row_list
+    for i in self.index_tuple(tables_dict,index,False): tmp=tmp[i]
+    return tmp
   def rowset(self,tables_dict,row_list,index): raise NotImplementedError # note: shouldn't need this until update uses this
   def __repr__(self): return '<NameIndexer %s>'%self.table_order
 
 def decompose_select(selectx):
   "return [(parent,setter) for scalar_subquery], wherex_including_on, NameIndexer. helper for run_select"
   subqueries = sub_slots(selectx, lambda x:isinstance(x,sqparse.SelectX))
-  nix = NameIndexer(selectx.tables)
+  nix = NameIndexer.ctor_fromlist(selectx.tables)
   where = []
   for fromx in selectx.tables.fromlist:
     if isinstance(fromx,sqparse.JoinX) and fromx.on_stmt is not None:
@@ -84,33 +92,50 @@ def decompose_select(selectx):
   if selectx.where: where.append(selectx.where)
   return subqueries, nix, where
 
-def run_select(ex,tables):
-  subqueries, nix, where = decompose_select(selectx)
-  raise NotImplementedError
-  # what's the generic approach here:
-  # 1. scalar subquery to literal
-  # 2. cartesian product of rows? yes; don't do any join-pair optimization because correctness matters more than performance
-  if len(ex.tables.fromlist)!=1: raise NotImplementedError('todo: multi-table select')
-  if ex.limit or ex.offset: raise NotImplementedError('notimp: limit,offset')
-  return tables[ex.tables.fromlist[0].name].select(ex.cols,ex.where,tables,ex.order)
+def eval_where(where_list,composite_row,nix,tables_dict):
+  "join-friendly whereclause evaluator. composite_row is a list or tuple of row lists. where_list is the thing from decompose_select."
+  # todo: do I need to use 3vl instead of all() to merge where_list?
+  return all(evalex(w,c_row,nix,tables_dict) for w in where_list)
 
-def evalex(x,row,tablename,tables):
+def run_select(ex,tables):
+  subqueries, nix, where = decompose_select(ex)
+  for path in subqueries:
+    print 'subq path',path
+    raise NotImplementedError('replace subquery with value')
+  print 'torder',nix.table_order
+  composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
+  print 'composite_rows',composite_rows
+  if ex.limit or ex.offset:
+    print ex.limit, ex.offset
+    raise NotImplementedError('notimp: limit,offset')
+  if contains_aggregate(ex.cols):
+    raise NotImplementedError
+    """
+    if not all(map(sqex.contains_aggregate,fields.children)): raise sqparse.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
+    return self.order_rows([sqex.evalex(f,match_rows,self.name,tables_dict) for f in fields.children],order,tables_dict)
+    """
+  else: return [evalex(ex.cols,r,nix,tables) for r in composite_rows]
+  # todo above: take a sum-of-lists approach to joining columns because it also works for *. i.e. sum(([4],[7],[1,2,3]),[])
+
+def evalex(x,c_row,nix,tables):
+  "c_row is a composite row, i.e. a list/tuple of rows from all the query's tables, ordered by nix.table_order"
+  def subcall(x): "helper for recursive calls"; return evalex(x,c_row,nix,tables)
+  if not isinstance(nix, NameIndexer): raise NotImplementedError # todo: remove this once Table meths are all up-to-date
   if isinstance(x,sqparse.BinX):
-    l,r=[evalex(side,row,tablename,tables) for side in (x.left,x.right)]
+    l,r=map(subcall,(x.left,x.right))
     return evalop(x.op.op,l,r)
   elif isinstance(x,sqparse.UnX):
-    inner=evalex(x.val,row,tablename,tables)
+    inner=subcall(x.val)
     if x.op.op=='+': return inner
     elif x.op.op=='-': return -inner
     elif x.op.op=='not': return threevl.ThreeVL.nein(inner)
     else: raise NotImplementedError('unk_op',x.op)
-  elif isinstance(x,sqparse.NameX):
-    if x.name=='null': return None
-    return row[next(i for i,colx in enumerate(tables[tablename.name].fields) if colx.name==x)]
-  elif isinstance(x,sqparse.ArrayLit): return [evalex(elt,row,tablename,tables) for elt in x.vals]
+  elif isinstance(x,sqparse.NameX): return None if x.name=='null' else nix.rowget(tables,c_row,x)
+  elif isinstance(x,sqparse.ArrayLit): return map(subcall,x.vals)
   elif isinstance(x,(sqparse.Literal,sqparse.ArrayLit)): return x.toliteral()
-  elif isinstance(x,sqparse.CommaX): return [evalex(elt,row,tablename,tables) for elt in x.children]
+  elif isinstance(x,sqparse.CommaX): return map(subcall,x.children)
   elif isinstance(x,sqparse.CallX):
+    raise NotImplementedError('not sure how this works yet with new args')
     if is_aggregate(x): # careful: is_aggregate, not contains_aggregate
       if not isinstance(row,list): raise TypeError('aggregate function expected a list of rows')
       if len(x.args.children)!=1: raise ValueError('aggregate function expected a single value',x.args)
@@ -127,6 +152,7 @@ def evalex(x,row,tablename,tables):
         return b if a is None else a
       else: raise NotImplementedError('unk_function',x.f.name)
   elif isinstance(x,sqparse.SelectX):
+    raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
     # http://www.postgresql.org/docs/9.1/static/sql-expressions.html#SQL-SYNTAX-SCALAR-SUBQUERIES
     # see here for subquery conditions that *do* use multi-rows. ug. http://www.postgresql.org/docs/9.1/static/functions-subquery.html
     if len(x.cols.children)!=1: raise sqparse.SQLSyntaxError('scalar_subquery_requires_1col',len(x.cols.children))
@@ -138,14 +164,16 @@ def evalex(x,row,tablename,tables):
     return val
   elif isinstance(x,sqparse.CaseX):
     for case in x.cases:
-      if evalex(case.when,row,tablename,tables): return evalex(case.then,row,tablename,tables)
-    return evalex(x.elsex,row,tablename,tables)
+      if subcall(case.when): return subcall(case.then)
+    return subcall(x.elsex)
   elif isinstance(x,(int,basestring,float,type(None))): return x # I think Table.insert is creating this in expand_row
-  elif isinstance(x,tuple): return tuple(evalex(elt,row,tablename,tables) for elt in x)
-  elif isinstance(x,list): return [evalex(elt,row,tablename,tables) for elt in x]
+  # todo doc: why tuple and list below?
+  elif isinstance(x,tuple): return tuple(map(subcall, x))
+  elif isinstance(x,list): return map(subcall, x)
   elif isinstance(x,sqparse.ReturnX):
+    raise NotImplementedError('fix "returning" logic for c_row')
     if x.expr=='*': return row
-    ret=evalex(x.expr,row,tablename,tables)
+    ret=subcall(x.expr)
     return ret if isinstance(x.expr,sqparse.CommaX) else [ret] # todo: update parser so this is always * or a commalist
   else: raise NotImplementedError(type(x),x)
 

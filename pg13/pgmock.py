@@ -1,7 +1,4 @@
-"sql mocking. I'm not using a library because I thought this would be fun to write. Enter disaster.\
-This isn't supposed to be totally accurate (yikes).\
-It's designed to test application logic, not storage logic. This is sounding worse and worse.\
-For production testing, maybe embed a postgres runtime?"
+"table class and apply_sql. this is weirdly codependent with sqex.py"
 
 import re,collections,contextlib
 from . import pg,threevl,sqparse,sqex
@@ -9,7 +6,6 @@ from . import pg,threevl,sqparse,sqex
 # errors
 class PgExecError(sqparse.PgMockError): "base class for errors during table execution"
 class MissingPKeyError(PgExecError): pass
-class NotimpSyntaxError(sqparse.PgMockError): "features I should support but don't"
 
 class Missing: "for distinguishing missing columns vs passed-in null"
 
@@ -41,15 +37,16 @@ class Table:
     "apply defaults to missing cols for a row that's being inserted"
     return [(toliteral(f.default) if v is Missing else v) for f,v in zip(self.fields,row)]
   def insert(self,fields,values,returning,tables_dict):
+    nix = sqex.NameIndexer.ctor_name(self.name)
     expanded_row=self.fix_rowtypes(expand_row(self.fields,fields,values) if fields else values)
     row=self.apply_defaults(expanded_row)
     # todo: check ColX.not_null here. figure out what to do about null pkey field
     for i,elt in enumerate(row):
       # todo(awinter): think about dependency model if one field relies on another. (what do I mean? 'insert into t1 (a,b) values (10,a+5)'? is that valid?)
-      row[i]=sqex.evalex(elt,row,self.name,tables_dict)
+      row[i]=sqex.evalex(elt,row,nix,tables_dict)
     if self.pkey_get(row): raise pg.DupeInsert(row)
     self.rows.append(row)
-    if returning: return [sqex.evalex(returning,row,self.name,tables_dict)] # todo: find spec support for wrapping this in a list. todo: use returnrows?
+    if returning: return [sqex.evalex(returning,row,nix,tables_dict)] # todo: find spec support for wrapping this in a list. todo: use returnrows?
   def match(self,where,tables): return [r for r in self.rows if not where or threevl.ThreeVL.test(sqex.evalex(where,r,self.name,tables))]
   def lookup(self,name): return FieldLookup(*next((i,f) for i,f in enumerate(self.fields) if f.name.name==name))
   def returnrows(self,tables,fields,rows): return [sqex.evalex(fields,row,self.name,tables) for row in rows]
