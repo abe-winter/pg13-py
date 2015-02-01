@@ -140,11 +140,30 @@ def test_attr():
   assert sqparse.parse('a.b.c')==AttrX(AttrX(NameX('a'),NameX('b')),NameX('c'))
 
 def test_join_syntax():
+  from pg13.sqparse import JoinX,FromListX,FromTableX,BinX,OpX,NameX,AttrX,CommaX
   ex=sqparse.parse('select * from t1,t2 where t1.x=t2.y')
   assert all(isinstance(x,sqparse.AttrX) for x in (ex.where.left,ex.where.right))
-  print sqparse.parse('select * from t1 join t2')
-  print sqparse.parse('select * from t1 join t2 on x=y')
-  print sqparse.parse('select t1.* from t1 join t2 on x=y and z=a')
-  print sqparse.parse('select t1.*,t2.* from t1 join t2 on x=y')
-  print sqparse.parse('select * from t1 join t2 on t1.x=t2.y')
-  raise NotImplementedError
+  assert sqparse.parse('select * from t1 join t2').tables==FromListX([
+    JoinX(FromTableX('t1',None),FromTableX('t2',None),None)
+  ])
+  assert sqparse.parse('select * from t1 join t2 on x=y').tables==FromListX([JoinX(
+      FromTableX('t1',None),
+      FromTableX('t2',None),
+      BinX(OpX('cmp_op','='), NameX('x'), NameX('y'))
+  )])
+  x = sqparse.parse('select t1.* from t1 join t2 on x=y and z=a')
+  assert x.cols==CommaX([AttrX(NameX('t1'),'*')])
+  assert x.tables==FromListX([JoinX(
+      FromTableX('t1',None),
+      FromTableX('t2',None),
+      BinX(OpX('bool_op','and'),BinX(OpX('cmp_op','='),NameX('x'),NameX('y')),BinX(OpX('cmp_op','='),NameX('z'),NameX('a')))
+    )])
+  assert sqparse.parse('select t1.*,t2.* from t1 join t2 on x=y').cols==CommaX([
+    AttrX(NameX('t1'),'*'),
+    AttrX(NameX('t2'),'*')
+  ])
+  assert sqparse.parse('select * from t1 join t2 on t1.x=t2.y').tables==FromListX([JoinX(
+    FromTableX('t1',None),
+    FromTableX('t2',None),
+    BinX(OpX('cmp_op','='),AttrX(NameX('t1'),NameX('x')),AttrX(NameX('t2'),NameX('y')))
+  )])
