@@ -4,9 +4,13 @@
 **docs** at http://pg13.readthedocs.org/en/latest/
 
 pg13 is a SQL evaluator for python designed for testing. Normally when you want to test an application with database dependencies, you have three equally bad options:
-1. use standard mocking frameworks that make you specify the output of the DB call (bad because it's extra work and because you're feed the test the right answer)
-2. have a running copy of the database (bad because your tests are less portable, slower, and may have inter-test data dependencies)
-3. test everything but the DB interaction (bad because you're not testing a big part of your app)
+
+1. **artisanal mocking**: standard mocking frameworks make you specify the output of every DB call
+ * bad because it's extra work, maintenance nightmare, and you're feeding the test the right answer
+2. **local db**: have a running copy of the database
+ * bad because your tests are less portable, slower, and may have inter-test data dependencies
+3. **everything but**: test everything but the DB interaction
+ * bad because you're not testing a big part of your app
 
 pg13 takes a different approach:
 * SQL is simulated in python
@@ -14,7 +18,6 @@ pg13 takes a different approach:
 * tests are completely deterministic
 * parallelization is safe (because parallel tests have no chance of touching the same data)
 * performance: about 100 tests per second on my laptop
-* the database connection object is passed to ORM methods, so production code works as-is in test runs
 
 ## examples
 
@@ -30,9 +33,12 @@ class Model(pg.Row):
     "this will get cached until the 'text' field is changed"
     return len(self['content'])
 ```
-Connection setup.
+Connection setup. The pool object is passed into all the ORM methods, so it's a one-stop shop for switching between test and prod.
 ```python
 pool = pgmock.PgPoolMock()
+```
+Create table and do an insert.
+```python
 Model.create_table(pool)
 Model.insert_all(pool, 1, 2, 'three')
 assert pool.tables['model'].rows == [[1, 2, 'three']] # everything is stored like you'd expect
@@ -40,9 +46,10 @@ assert pool.tables['model'].rows == [[1, 2, 'three']] # everything is stored lik
 This is a multitenant autoincrement insert:
 ```python
 Model.insert_mtac(pool, {'userid':1}, 'id2', ('content',), ('hello',))
-assert pool.tables['model'].rows[1] == [1, 3, 'hello'] # notice that 'id2' is one more than for the previous row
+assert pool.tables['model'].rows[1] == [1, 3, 'hello']
+# notice that 'id2' is one more than for the previous row
 ```
-The mocking engine is a partial implementation of SQL. Here's an example of querying it directly.
+Here's an example of querying the SQL engine directly. This code is running in-process without talking to an external database.
 ```python
 assert pool.select('select userid,id2 from model where userid=2-1')==[[1,2],[1,3]]
 ```
