@@ -3,6 +3,10 @@
 import functools
 from . import sqparse,threevl
 
+# todo: derive errors below from something pg13-specific
+class ColumnNameError(StandardError): "name not in any tables or name matches too many tables"
+class TableNameError(StandardError): "expression referencing unk table"
+
 def is_aggregate(ex):
   "is the expression something that runs on a list of rows rather than a single row"
   # todo: I think the SQL term for this is 'scalar subquery'. use SQL vocabulary
@@ -29,7 +33,57 @@ def evalop(op,left,right):
     return left+right
   else: raise NotImplementedError(op,left,right)
 
+class NameIndexer:
+  "helper that takes str, NameX or attrx and returns the right thing (or raises an error on ambiguity)"
+  def update_aliases(self,ftx):
+    "helper for ctor. takes FromTableX"
+    self.aliases[ftx.name]=ftx.name
+    if ftx.alias: self.aliases[ftx.alias]=ftx.name
+  def __init__(self,fromlistx):
+    self.aliases={}
+    for from_item in fromlistx.fromlist:
+      if isinstance(from_item,sqparse.FromTableX): self.update_aliases(from_item)
+      elif isinstance(from_item,sqparse.JoinX):
+        self.update_aliases(from_item.a)
+        self.update_aliases(from_item.b)
+      else: raise TypeError(type(from_item))
+    self.table_order=sorted(set(self.aliases.values()))
+  def index_tuple(self,tables_dict,index,is_set):
+    "helper for rowget/rowset"
+    if isinstance(index,sqparse.NameX): index = index.name
+    # careful below: intentionally if, not elif
+    if isinstance(index,basestring):
+      candidates = [t for t in self.table_order if any(f.name.name==index for f in tables_dict[t].fields)]
+      if len(candidates)!=1: raise ColumnNameError(("ambiguous_column" if candidates else "no_such_column"),index)
+      tname, = candidates
+      return self.table_order.index(tname), tables_dict[tname].lookup(index).index
+    if isinstance(index,sqparse.AttrX):
+      if not index.parent in self.aliases: raise TableNameError('table_notin_x',index.parent)
+      tindex = self.table_order.index(self.aliases[index.parent])
+      if index.attr=='*':
+        if is_set: raise ValueError('cant_set_asterisk') # todo: better error class
+        else: return (tindex,)
+      else: return (tindex,tables_dict[self.aliases[index.parent]].lookup(index.attr).index)
+      # todo: stronger typing here. make sure both fields of the AttrX are always strings.
+    else: raise TypeError(type(index))
+  def rowget(self,tables_dict,row_list,index):
+    "row_list in self.row_order"
+    raise NotImplementedError
+  def rowset(self,tables_dict,row_list,index): raise NotImplementedError # note: shouldn't need this until update uses this
+  def __repr__(self): return '<NameIndexer %s>'%self.table_order
+
+class TreePath:
+  "thing for indexing into a tree. used for lazy replacement"
+
+def decompose_select(selectx):
+  "return [(treepath,scalar_subquery),...], wherex_including_on, NameIndexer, table_list"
+  raise NotImplementedError
+
 def run_select(ex,tables):
+  raise NotImplementedError
+  # what's the generic approach here:
+  # 1. scalar subquery to literal
+  # 2. cartesian product of rows? yes; don't do any join-pair optimization because correctness matters more than performance
   if len(ex.tables.fromlist)!=1: raise NotImplementedError('todo: multi-table select')
   if ex.limit or ex.offset: raise NotImplementedError('notimp: limit,offset')
   return tables[ex.tables.fromlist[0].name].select(ex.cols,ex.where,tables,ex.order)

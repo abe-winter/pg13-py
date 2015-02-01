@@ -208,6 +208,46 @@ def test_select_order():
   rows=runsql('select * from t1 order by a')
   assert rows==sorted(rows)
 
+def test_join_on():
+  tables,runsql=prep('create table t1 (a int,b int)')
+  runsql('create table t2 (c int, d int)')
+  tables['t1'].rows=[[1,2],[3,4]]
+  tables['t2'].rows=[[1,3],[2,5]]
+  print runsql('select * from t1 join t2 on a=c')
+  raise NotImplementedError
+
+def test_implicit_join():
+  # select * from t1,t2 where a=c
+  raise NotImplementedError
+
+def test_table_as():
+  # select * from t1 as t
+  # select * from t1 as t, t2 where t.a=t2.a
+  raise NotImplementedError
+
+def test_join_attr():
+  # select t1.* from t1 join t2 on t1.a=t2.a
+  raise NotImplementedError
+
+def test_name_indexer():
+  # this should be in test_sqex except for reliance on tables_dict
+  x = sqparse.parse('select * from t1, t2 as alias')
+  ni = sqex.NameIndexer(x.tables)
+  assert ni.table_order==['t1','t2']
+  tables,runsql=prep('create table t1 (a int,b int)')
+  runsql('create table t2 (a int,c int)')
+  assert (0,1)==ni.index_tuple(tables,'b',False)
+  assert (0,1)==ni.index_tuple(tables,sqparse.NameX('b'),False) # make sure NameX handling works
+  assert (1,1)==ni.index_tuple(tables,'c',False)
+  with pytest.raises(sqex.ColumnNameError): ni.index_tuple(tables,'a',False)
+  assert (0, 0) == ni.index_tuple(tables,sqparse.AttrX('t1','a'),False)
+  assert (1, 0) == ni.index_tuple(tables,sqparse.AttrX('alias','a'),False)
+  assert (1,) == ni.index_tuple(tables,sqparse.AttrX('alias','*'),False)
+  assert (0,) == ni.index_tuple(tables,sqparse.AttrX('t1','*'),False)
+  assert (1,) == ni.index_tuple(tables,sqparse.AttrX('t2','*'),False)
+  with pytest.raises(sqex.TableNameError): ni.index_tuple(tables,sqparse.AttrX('bad_alias','e'),False)
+  with pytest.raises(ValueError): ni.index_tuple(tables,sqparse.AttrX('t2','*'),True)
+
 def test_nested_select():
   "nested select has cardinality issues; add cases as they come up"
   tables,runsql=prep('create table t1 (a int, b int)')

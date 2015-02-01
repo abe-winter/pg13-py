@@ -39,3 +39,6 @@ def test_dfs():
   xsel = sqex.depth_first_sub(sqparse.parse('select a+%s from t1 where x=%s'), (10,[1,2]))
   assert xsel.cols.children[0].right==Literal(10)
   assert xsel.where.right==ArrayLit((1,2))
+
+def test_decompose_select():
+  raise NotImplementedError

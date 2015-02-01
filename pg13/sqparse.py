@@ -39,9 +39,9 @@ class NameX(BaseX):
   def __repr__(self): return 'NameX(%r)'%self.name
   def __eq__(self,other): return isinstance(other,NameX) and self.name==other.name
 class FromTableX(BaseX):
-  def __init__(self,name,as_alias): self.name, self.as_alias = name, as_alias
-  def __repr__(self): return 'FromTableX(%s,%s)'%(self.name,self.as_alias)
-  def __eq__(self,other): return isinstance(other,FromTableX) and (self.name,self.as_alias)==(other.name,other.as_alias)
+  def __init__(self,name,alias): self.name, self.alias = name, alias
+  def __repr__(self): return 'FromTableX(%s,%s)'%(self.name,self.alias)
+  def __eq__(self,other): return isinstance(other,FromTableX) and (self.name,self.alias)==(other.name,other.alias)
 class JoinX(BaseX):
   def __init__(self,a,b,on_stmt): self.a,self.b,self.on_stmt=a,b,on_stmt
   def __repr__(self): return 'JoinX(%r,%r,%r)'%(self.a,self.b,self.on_stmt)
@@ -116,7 +116,8 @@ class SelectX(CommandX):
 
 class ColX(BaseX):
   ATTRS=('name','coltp','isarray','defaeult','pkey','not_null')
-  def __init__(self,name,coltp,isarray,default,pkey,not_null): self.name,self.coltp,self.isarray,self.default,self.pkey,self.not_null=name,coltp,isarray,default,pkey,not_null
+  def __init__(self,name,coltp,isarray,default,pkey,not_null):
+    self.name,self.coltp,self.isarray,self.default,self.pkey,self.not_null=name,coltp,isarray,default,pkey,not_null
   def __repr__(self): return 'ColX[%s,%r](%r,default=%r,pkey=%r,not_null=%r)'%(self.coltp.name,self.isarray,self.name.name,self.default,self.pkey,self.not_null)
   def __eq__(self,other): return isinstance(other,ColX) and all(getattr(self,a)==getattr(other,a) for a in self.ATTRS)
 class PKeyX(BaseX):
