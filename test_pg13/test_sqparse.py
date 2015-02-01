@@ -8,7 +8,7 @@ def test_parse_arraylit():
 
 def test_parse_select():
   # this is also testing nesting and various whatever
-  from pg13.sqparse import NameX,CommaX,SelectX,Literal,ArrayLit,BinX,UnX,OpX,CallX
+  from pg13.sqparse import NameX,CommaX,SelectX,Literal,ArrayLit,BinX,UnX,OpX,CallX,FromListX,FromTableX
   selx=sqparse.parse('select *,coalesce(x+3,0),{4,5},array[1,2],(select i from tbl) from whatever where (z+-1=10) and (y<5.5)')
   assert selx.cols==CommaX((
     '*',
@@ -18,9 +18,9 @@ def test_parse_select():
     ))),
     ArrayLit((Literal(4),Literal(5))),
     ArrayLit((Literal(1),Literal(2))),
-    SelectX(CommaX((NameX('i'),)),CommaX((NameX('tbl'),)),None,None,None,None),
+    SelectX(CommaX([NameX('i')]),FromListX([FromTableX('tbl',None)]),None,None,None,None),
   ))
-  assert selx.tables==CommaX((NameX('whatever'),))
+  assert selx.tables==FromListX([FromTableX('whatever',None)])
   assert selx.where==BinX(
     OpX('bool_op','and'),
     BinX(
@@ -139,7 +139,12 @@ def test_attr():
   from pg13.sqparse import AttrX,NameX
   assert sqparse.parse('a.b.c')==AttrX(AttrX(NameX('a'),NameX('b')),NameX('c'))
 
-def test_simple_join():
-  "'simple' in that it doesn't require any special syntax"
+def test_join_syntax():
   ex=sqparse.parse('select * from t1,t2 where t1.x=t2.y')
   assert all(isinstance(x,sqparse.AttrX) for x in (ex.where.left,ex.where.right))
+  print sqparse.parse('select * from t1 join t2')
+  print sqparse.parse('select * from t1 join t2 on x=y')
+  print sqparse.parse('select t1.* from t1 join t2 on x=y and z=a')
+  print sqparse.parse('select t1.*,t2.* from t1 join t2 on x=y')
+  print sqparse.parse('select * from t1 join t2 on t1.x=t2.y')
+  raise NotImplementedError

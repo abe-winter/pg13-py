@@ -6,6 +6,7 @@
 # 1. sql probably allows 'table' as a table name. I think I'm stricter about keywords (and I don't allow quoting columns)
 
 import lrparsing
+from lrparsing import Token,THIS,Opt,Prio,Ref,List,Repeat,Choice # I hate import pollution but lrparsing.* 5 times a line makes the grammar unreadable
 
 # errors
 class PgMockError(StandardError): pass
@@ -37,11 +38,25 @@ class NameX(BaseX):
   def __init__(self,name): self.name=name
   def __repr__(self): return 'NameX(%r)'%self.name
   def __eq__(self,other): return isinstance(other,NameX) and self.name==other.name
+class FromTableX(BaseX):
+  def __init__(self,name,as_alias): self.name, self.as_alias = name, as_alias
+  def __repr__(self): return 'FromTableX(%s,%s)'%(self.name,self.as_alias)
+  def __eq__(self,other): return isinstance(other,FromTableX) and (self.name,self.as_alias)==(other.name,other.as_alias)
+class JoinX(BaseX):
+  def __init__(self,a,b,on_stmt): self.a,self.b,self.on_stmt=a,b,on_stmt
+  def __repr__(self): return 'JoinX(%r,%r,%r)'%(self.a,self.b,self.on_stmt)
+  def __eq__(self,other): return isinstance(other,JoinX) and (self.a,self.b,self.on_stmt)==(other.a,other.b,other.on_stmt)
+class FromListX(BaseX):
+  "fromlist is a list of FromTableX | JoinX"
+  def __init__(self,fromlist): self.fromlist=list(fromlist)
+  def __repr__(self): return 'FromListX(%r)'%self.fromlist
+  def __eq__(self,other): return isinstance(other,FromListX) and self.fromlist==other.fromlist
 class OpX(BaseX):
   PRIORITY=('bool_op','cmp_op','arith_op') # todo: make this bare operators instead of type
   def __init__(self,optype,op): self.optype,self.op=optype,op
   def __repr__(self): return 'OpX(%r)'%self.op # optype not necessary because op maps canonically to optype
   def __lt__(self,other):
+    "this is for order of operations"
     if not isinstance(other,OpX): raise TypeError
     return self.PRIORITY.index(self.optype) < self.PRIORITY.index(other.optype)
   def __eq__(self,other): return isinstance(other,OpX) and (self.optype,self.op)==(other.optype,other.op)
@@ -63,7 +78,7 @@ class CommaX(BaseX):
   def __init__(self,children): self.children=list(children) # needs to be a list (i.e. mutable) for SubLit substitution (in sqex.sub_slots)
   def __eq__(self,other): return isinstance(other,CommaX) and self.children==other.children
   def __repr__(self): return 'CommaX(%s)'%','.join(map(repr,self.children))
-  def __eq__(self,other): return isinstance(other,CommaX) and all(x==ox for x,ox in zip(self.children,other.children))
+  def __eq__(self,other): return isinstance(other,CommaX) and self.children==other.children
   def treeall(self,f): return f(self) and all(x.treeall(f) for x in self.children)
   def treeany(self,f): return f(self) or any(x.treeany(f) for x in self.children)
 class CallX(BaseX):
@@ -95,7 +110,7 @@ class SelectX(CommandX):
   def __init__(self,cols,tables,where,order,limit,offset): self.cols,self.tables,self.where,self.order,self.limit,self.offset=cols,tables,where,order,limit,offset
   def __eq__(self,other):
     return isinstance(other,SelectX) and all(getattr(self,attr)==getattr(other,attr) for attr in self.ATTRS)
-  def __repr__(self): return 'SelectX(%r,%r,%r,%r,%r)'%(self.cols,self.tables,self.where,self.offset,self.limit)
+  def __repr__(self): return 'SelectX(%r,%r,%r,%r,%r,%r)'%(self.cols,self.tables,self.where,self.offset,self.limit,self.offset)
   def treeall(self,f): return f(self) and all(getattr(self,a).treeall(f) for a in self.ATTRS)
   def treeany(self,f): return f(self) or any(getattr(self,a).treeany(f) for a in self.ATTRS)
 
@@ -165,47 +180,51 @@ class SQLG(lrparsing.Grammar):
   # todo: do I need to support things like select a.*,b.* from a,b (i.e. star-attribute). if yes, put it in attr, I think
   class T(lrparsing.TokenRegistry):
     # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
-    strlit = lrparsing.Token(re="'((?<=\\\\)'|[^'])+'")
-    intlit = lrparsing.Token(re='\d+')
-    name = lrparsing.Token(re='[A-Za-z]\w*')
-    operator = lrparsing.Token(re='\!\=|\|\||@>|[\/\+\-\*\=<>]')
-    sublit = lrparsing.Token('%s')
+    strlit = Token(re="'((?<=\\\\)'|[^'])+'")
+    intlit = Token(re='\d+')
+    name = Token(re='[A-Za-z]\w*')
+    operator = Token(re='\!\=|\|\||@>|[\/\+\-\*\=<>]')
+    sublit = Token('%s')
   floatlit = T.intlit + '.' + T.intlit # todo: no whitespace
-  token = lrparsing.Prio(T.strlit, floatlit, T.intlit, T.name, T.sublit)
-  attr = lrparsing.Prio(lrparsing.THIS, T.name) + '.' + T.name
-  call = lrparsing.Prio(attr, T.name) + '(' + lrparsing.Ref('commalist') + ')' # todo: commalist. also, not sure attrs are callable in sql.
+  token = Prio(T.strlit, floatlit, T.intlit, T.name, T.sublit)
+  attr = Prio(THIS, T.name) + '.' + (T.name | kw('*')) # warning: * shouldn't be allowed in calls
+  call = Prio(attr, T.name) + '(' + Ref('commalist') + ')' # todo: commalist. also, not sure attrs are callable in sql.
   unop = kw('not') | '+' | '-'
-  arith_op = lrparsing.Choice(*map(kw,('/','*','+','-')))
-  cmp_op = kw('>') | kw('<') | kw('@>') | kw('||') | lrparsing.Prio(kw('!='), kw('='), kw('is') + kw('not'), kw('is')) | kw('in')
+  arith_op = Choice(*map(kw,('/','*','+','-')))
+  cmp_op = kw('>') | kw('<') | kw('@>') | kw('||') | Prio(kw('!='), kw('='), kw('is') + kw('not'), kw('is')) | kw('in')
   bool_op = kw('or') | kw('and')
-  binop = lrparsing.Prio(cmp_op, bool_op, arith_op)
-  boolx =  lrparsing.Ref('expr') + binop + lrparsing.Ref('expr') | unop + lrparsing.Ref('expr')
-  parenx = '(' + lrparsing.Prio(lrparsing.Ref('selectx'), lrparsing.Ref('expr'), lrparsing.Ref('commalist')) + ')'
-  expr = lrparsing.Prio(lrparsing.Ref('case'), boolx, call, attr, token, parenx, lrparsing.Ref('array_ctor'))
+  binop = Prio(cmp_op, bool_op, arith_op)
+  boolx =  Ref('expr') + binop + Ref('expr') | unop + Ref('expr')
+  parenx = '(' + Prio(Ref('selectx'), Ref('expr'), Ref('commalist')) + ')'
+  expr = Prio(Ref('case'), boolx, call, attr, token, parenx, Ref('array_ctor'))
   whenx = kw('when') + expr + kw('then') + expr
-  case = kw('case') + lrparsing.Repeat(whenx,1) + kw('else') + expr + kw('end')
-  commalist = lrparsing.List(expr, ',', 1)
-  array_ctor = '{' + lrparsing.Ref('commalist') + '}' | kw('array') + '[' + lrparsing.Ref('commalist') + ']'
-  cols_list = lrparsing.List('*' | expr, ',')
-  selectx = kw('select') + cols_list + kw('from') + commalist + lrparsing.Opt(kw('where') + expr) + lrparsing.Opt(kw('order') + kw('by') + expr) + lrparsing.Opt(kw('limit') + expr) + lrparsing.Opt(kw('offset') + expr)
+  case = kw('case') + Repeat(whenx,1) + kw('else') + expr + kw('end')
+  commalist = List(expr, ',', 1)
+  array_ctor = '{' + Ref('commalist') + '}' | kw('array') + '[' + Ref('commalist') + ']'
+  cols_list = List('*' | expr, ',')
+  # todo below: can joins be chained?
+  from_table = Prio(T.name, (T.name + kw('as') + T.name))
+  joinx = from_table + kw('join') + from_table + Opt(kw('on') + expr)
+  from_list = List(from_table | joinx, ',')
+  selectx = kw('select') + cols_list + kw('from') + from_list + Opt(kw('where') + expr) + Opt(kw('order') + kw('by') + expr) + Opt(kw('limit') + expr) + Opt(kw('offset') + expr)
   
   # create stmt
   # note below: I'm not supporting 'not null' because lrparsing gets confused by out-of-context 'not'. todo: fix.
   not_null = kw('not') + T.name
-  col_spec = T.name + T.name + lrparsing.Opt('[]') + lrparsing.Opt(not_null) + lrparsing.Opt(kw('default') + expr) + lrparsing.Opt(kw('primary') + kw('key'))
-  namelist = lrparsing.List(T.name, ',', 1)
+  col_spec = T.name + T.name + Opt('[]') + Opt(not_null) + Opt(kw('default') + expr) + Opt(kw('primary') + kw('key'))
+  namelist = List(T.name, ',', 1)
   pkey = kw('primary') + kw('key') + '(' + namelist + ')' # todo: are parens required?
   if_nexists = kw('if') + kw('not') + kw('exists')
-  createx = kw('create') + kw('table') + lrparsing.Opt(if_nexists) + T.name + '(' + lrparsing.List(col_spec, ',', 1) + lrparsing.Opt(',' + pkey) + ')'
+  createx = kw('create') + kw('table') + Opt(if_nexists) + T.name + '(' + List(col_spec, ',', 1) + Opt(',' + pkey) + ')'
   
   # insert stmt
   returning = kw('returning') + ('*' | commalist | expr)
-  insertx = kw('insert') + kw('into') + T.name + lrparsing.Opt('(' + namelist + ')') + kw('values') + '(' + commalist + ')' + lrparsing.Opt(returning)
+  insertx = kw('insert') + kw('into') + T.name + Opt('(' + namelist + ')') + kw('values') + '(' + commalist + ')' + Opt(returning)
   
   # update stmt
   assign = (T.name | attr) + kw('=') + expr
-  assignlist = lrparsing.List(assign, ',', 1)
-  updatex = kw('update') + namelist + kw('set') + assignlist + lrparsing.Opt('where' + expr) + lrparsing.Opt(returning)
+  assignlist = List(assign, ',', 1)
+  updatex = kw('update') + namelist + kw('set') + assignlist + Opt('where' + expr) + Opt(returning)
 
   deletex = kw('delete') + kw('from') + T.name + kw('where') + expr
 
@@ -216,7 +235,7 @@ class SQLG(lrparsing.Grammar):
   def tovalue(clas,x):
     "not as useless as it looks"
     node,value=x[:2]
-    if isinstance(node,lrparsing.Token):
+    if isinstance(node,Token):
       if node is clas.T.name: return NameX(value)
       elif node is clas.T.intlit: return Literal(int(value))
       elif node is clas.T.strlit: return Literal(value[1:-1].replace("\\'","'")) # strip the quotes and replace escapes
@@ -241,6 +260,9 @@ class SQLG(lrparsing.Grammar):
     elif node is clas.parenx: return x[-2]
     elif node is clas.whenx: return WhenX(x[2],x[4])
     elif node is clas.case: return CaseX(x[2:-3],x[-2])
+    elif node is clas.from_table: return FromTableX(x[1].name, None if len(x)==2 else x[3].name)
+    elif node is clas.joinx: return JoinX(x[1],x[3],(x[5] if len(x)==6 else None))
+    elif node is clas.from_list: return FromListX(x[1::2])
     elif node is clas.selectx:
       x=tup_remove(x,'by') # ugly
       return SelectX(*keywordify(('select','from','where','order','limit','offset'), x[1::2], x[2::2]))
@@ -275,7 +297,7 @@ class SQLG(lrparsing.Grammar):
     elif node is clas.updatex:
       ret=x[-1] if isinstance(x[-1],ReturnX) else None
       return UpdateX(*(list(keywordify(('update','set','where'),x[1::2],x[2::2])) + [ret]))
-    if node is clas.deletex: return DeleteX(x[3],x[5])
+    elif node is clas.deletex: return DeleteX(x[3],x[5])
     elif node is clas.START: return value
     else: raise NotImplementedError(node,x)
 
