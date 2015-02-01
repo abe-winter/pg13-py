@@ -73,11 +73,19 @@ class NameIndexer:
   def __repr__(self): return '<NameIndexer %s>'%self.table_order
 
 def decompose_select(selectx):
-  "return [(parent,setter) for scalar_subquery], wherex_including_on, NameIndexer, table_list"
+  "return [(parent,setter) for scalar_subquery], wherex_including_on, NameIndexer. helper for run_select"
   subqueries = sub_slots(selectx, lambda x:isinstance(x,sqparse.SelectX))
-  raise NotImplementedError
+  nix = NameIndexer(selectx.tables)
+  where = []
+  for fromx in selectx.tables.fromlist:
+    if isinstance(fromx,sqparse.JoinX) and fromx.on_stmt is not None:
+      # todo: what happens if on_stmt columns are non-ambiguous in the context of the join tables but ambiguous overall? yuck.
+      where.append(fromx.on_stmt)
+  if selectx.where: where.append(selectx.where)
+  return subqueries, nix, where
 
 def run_select(ex,tables):
+  subqueries, nix, where = decompose_select(selectx)
   raise NotImplementedError
   # what's the generic approach here:
   # 1. scalar subquery to literal

@@ -229,8 +229,7 @@ def test_join_attr():
   # select t1.* from t1 join t2 on t1.a=t2.a
   raise NotImplementedError
 
-# todo: test_name_indexer and test_decompose select should be in test_sqex except for reliance on tables_dict. move Table to its own file.
-
+# todo: test_name_indexer should be in test_sqex except for reliance on tables_dict. move Table to its own file.
 def test_name_indexer():
   x = sqparse.parse('select * from t1, t2 as alias')
   ni = sqex.NameIndexer(x.tables)
@@ -248,10 +247,6 @@ def test_name_indexer():
   assert (1,) == ni.index_tuple(tables,sqparse.AttrX('t2','*'),False)
   with pytest.raises(sqex.TableNameError): ni.index_tuple(tables,sqparse.AttrX('bad_alias','e'),False)
   with pytest.raises(ValueError): ni.index_tuple(tables,sqparse.AttrX('t2','*'),True)
-
-def test_decompose_select():
-  print sqex.decompose_select(sqparse.parse('select * from t1, t2'))
-  raise NotImplementedError
 
 def test_nested_select():
   "nested select has cardinality issues; add cases as they come up"

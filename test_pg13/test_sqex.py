@@ -33,6 +33,17 @@ def test_sub_stmt():
   xins[p2] = Literal('b')
   assert xins.values==CommaX((Literal('a'),Literal('b')))
 
+def test_decompose_select():
+  # basics
+  subq,nix,where = sqex.decompose_select(sqparse.parse('select * from t1, t2'))
+  assert (subq,where == [],[]) and nix.table_order==['t1','t2']
+  # where from 'join on'
+  subq,nix,where = sqex.decompose_select(sqparse.parse('select * from t1 join t2 on x=y'))
+  assert nix.table_order==['t1','t2'] and isinstance(where[0],sqparse.BinX)
+  # subq index
+  subq,nix,where = sqex.decompose_select(sqparse.parse('select * from t1 where x=(select y from t2 where z=5)'))
+  assert subq==[('where','right')]
+
 def test_dfs():
   from pg13.sqparse import Literal,ArrayLit
   with pytest.raises(ValueError):
@@ -47,6 +58,7 @@ SUBSLOT_IGNORE = [
   sqparse.IndexX, # this is a stub for now
 ]
 def test_subslot_classes():
+  "scan list of expression classes from sqparse module for classes not handled by sqex.sub_slot"
   # todo: this isn't enough. these need to be exercised, not just tested for inclusion.
   subslot_classes = zip(*sqex.SUBSLOT_ATTRS)[0] + zip(*sqex.VARLEN_ATTRS)[0] + tuple(SUBSLOT_IGNORE)
   expression_classes = [x for x in [getattr(sqparse,name) for name in dir(sqparse)] if isinstance(x,type) and issubclass(x,sqparse.BaseX)]
