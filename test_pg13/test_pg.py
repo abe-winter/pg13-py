@@ -110,12 +110,13 @@ def test_updatewhere():
   Model.updatewhere(ebuns.pool,{'userid':1},content='userid_1')
   for userid,_,content,_ in ebuns.pool.tables['model'].rows:
     assert content==('userid_1' if userid==1 else 'a')
-@pytest.mark.xfail # delete stmt doesn't work yet in pgmock
+
 def test_delete():
   ebuns=populate(2,2)
   Model(0,0,'a','[]').delete(ebuns.pool)
   assert 3==len(ebuns.pool.tables['model'].rows)
   assert not Model.select(ebuns.pool,userid=0,id2=0)
+
 @pytest.mark.xfail
 def test_clientmodel():
   "this probably goes away with sync schemas"

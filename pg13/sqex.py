@@ -99,8 +99,10 @@ def eval_where(where_list,composite_row,nix,tables_dict):
 
 def flatten_scalar(whatever):
   "warning: there's a systematic way to do this and I'm doing it blindly. In particular, this will screw up arrays."
-  try: return whatever[0][0]
+  try: flat1=whatever[0]
   except IndexError: return None
+  try: return flat1[0]
+  except TypeError: return flat1
 
 def replace_subqueries(ex,tables):
   for path in sub_slots(ex, lambda x:isinstance(x,sqparse.SelectX)):

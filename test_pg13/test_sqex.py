@@ -35,14 +35,11 @@ def test_sub_stmt():
 
 def test_decompose_select():
   # basics
-  subq,nix,where = sqex.decompose_select(sqparse.parse('select * from t1, t2'))
-  assert (subq,where == [],[]) and nix.table_order==['t1','t2']
+  nix,where = sqex.decompose_select(sqparse.parse('select * from t1, t2'))
+  assert where ==[] and nix.table_order==['t1','t2']
   # where from 'join on'
-  subq,nix,where = sqex.decompose_select(sqparse.parse('select * from t1 join t2 on x=y'))
+  nix,where = sqex.decompose_select(sqparse.parse('select * from t1 join t2 on x=y'))
   assert nix.table_order==['t1','t2'] and isinstance(where[0],sqparse.BinX)
-  # subq index
-  subq,nix,where = sqex.decompose_select(sqparse.parse('select * from t1 where x=(select y from t2 where z=5)'))
-  assert subq==[('where','right')]
 
 def test_dfs():
   from pg13.sqparse import Literal,ArrayLit
