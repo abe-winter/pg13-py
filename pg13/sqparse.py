@@ -16,8 +16,6 @@ class BaseX(object):
   "note: expressions could just be dicts, *but* classes save 'what attrs does this have' experimentation runs. may also help the smater (isinstance-aware) linters."
   def __eq__(self,other): raise NotImplementedError('%s.eq'%(self.__class__.__name__)) # to avoid false negatives
   def __repr__(self): return '%s(???)'%(self.__class__.__name__)
-  def treeall(self,f): return f(self)
-  def treeany(self,f): return f(self)
   def child(self,index):
     "helper for __getitem__/__setitem__"
     if isinstance(index,tuple):
@@ -46,15 +44,11 @@ class Literal(BaseX):
   def __repr__(self): return '%s(%r)'%(self.__class__.__name__,self.val)
   def __eq__(self,other): return type(other) is Literal and self.val==other.val # careful: ArrayLit is an instance of Literal
   def toliteral(self): return self.val
-  def treeall(self,f): return f(self)
-  def treeany(self,f): return f(self)
 class ArrayLit(BaseX):
   def __init__(self,vals): self.vals=list(vals) # list so it's settable by sqex.sub_slots
   def __repr__(self): return 'Literal[Array](%r)'%(self.vals,)
   def __eq__(self,other): return isinstance(other,ArrayLit) and self.vals==other.vals
   def toliteral(self): return self.vals
-  def treeall(self,f): return all(x.treeall(f) for x in self.vals)
-  def treeany(self,f): return any(x.treeany(f) for x in self.vals)
 class SubLit(object): pass
 
 class NameX(BaseX):
@@ -91,40 +85,28 @@ class BinX(BaseX):
   def __init__(self,op,left,right): self.op,self.left,self.right=op,left,right
   def __repr__(self): return 'BinX[%r](%r,%r)'%(self.op,self.left,self.right)
   def __eq__(self,other): return isinstance(other,BinX) and (self.op,self.left,self.right)==(other.op,other.left,other.right)
-  def treeall(self,f): return f(self) and self.left.treeall(f) and self.right.treeall(f)
-  def treeany(self,f): return f(self) or self.left.treeany(f) or self.right.treeany(f)
 class UnX(BaseX):
   "unary operator expression"
   def __init__(self,op,val): self.op,self.val=op,val
   def __repr__(self): return 'UnX[%r](%r)'%(self.op,self.val)
   def __eq__(self,other): return isinstance(other,UnX) and (self.op,self.val)==(other.op,other.val)
-  def treeall(self,f): return f(self) and self.val.treeall(f)
-  def treeany(self,f): return f(self) or self.val.treeany(f)
 class CommaX(BaseX):
   def __init__(self,children): self.children=list(children) # needs to be a list (i.e. mutable) for SubLit substitution (in sqex.sub_slots)
   def __eq__(self,other): return isinstance(other,CommaX) and self.children==other.children
   def __repr__(self): return 'CommaX(%s)'%','.join(map(repr,self.children))
   def __eq__(self,other): return isinstance(other,CommaX) and self.children==other.children
-  def treeall(self,f): return f(self) and all(x.treeall(f) for x in self.children)
-  def treeany(self,f): return f(self) or any(x.treeany(f) for x in self.children)
 class CallX(BaseX):
   def __init__(self,f,args): self.f,self.args=f,args # args will be a CommaX
   def __repr__(self): return 'CallX[%r] %r'%(self.f,self.args)
   def __eq__(self,other): return isinstance(other,CallX) and (self.f,self.args)==(other.f,other.args)
-  def treeall(self,f): return f(self) and self.args.treeall(f)
-  def treeany(self,f): return f(self) or self.args.treeany(f)
 class WhenX(BaseX):
   def __init__(self,when,then): self.when,self.then=when,then
   def __repr__(self): return 'WhenX(%r,%r)'%(self.when,self.then)
   def __eq__(self,other): return isinstance(other,WhenX) and (self.when,self.then)==(other.when,other.then)
-  def treeall(self,f): return f(self) and self.when.treeall(f) and self.then.treeall(f)
-  def treeany(self,f): return f(self) or self.when.treeany(f) or self.then.treeany(f)
 class CaseX(BaseX):
   def __init__(self,cases,elsex): self.cases,self.elsex=cases,elsex
   def __repr__(self): return 'CaseX(%r,%r)'%(self.cases,self.elsex)
   def __eq__(self,other): return isinstance(other,CaseX) and (self.cases,self.elsex)==(other.cases,other.elsex)
-  def treeall(self,f): return f(self) and all(x.treeall(f) for x in self.cases) and self.elsex.treeall(f)
-  def treeany(self,f): return f(self) or any(x.treeany(f) for x in self.cases) or self.elsex.treeany(f)
 class AttrX(BaseX):
   def __init__(self,parent,attr): self.parent,self.attr=parent,attr
   def __repr__(self): return 'AttrX(%r,%r)'%(self.parent,self.attr)
@@ -137,8 +119,6 @@ class SelectX(CommandX):
   def __eq__(self,other):
     return isinstance(other,SelectX) and all(getattr(self,attr)==getattr(other,attr) for attr in self.ATTRS)
   def __repr__(self): return 'SelectX(%r,%r,%r,%r,%r,%r)'%(self.cols,self.tables,self.where,self.offset,self.limit,self.offset)
-  def treeall(self,f): return f(self) and all(getattr(self,a).treeall(f) for a in self.ATTRS)
-  def treeany(self,f): return f(self) or any(getattr(self,a).treeany(f) for a in self.ATTRS)
 
 class ColX(BaseX):
   ATTRS=('name','coltp','isarray','default','pkey','not_null')

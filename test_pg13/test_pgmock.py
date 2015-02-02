@@ -206,6 +206,7 @@ def test_select_order():
   tables['t1'].rows=[[i,0] for i in range(10,0,-1)]
   print sqparse.parse('select * from t1 order by a')
   rows=runsql('select * from t1 order by a')
+  print 'tso',rows
   assert rows==sorted(rows)
 
 def test_join_on():
