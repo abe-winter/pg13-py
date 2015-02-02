@@ -68,6 +68,7 @@ class SpecialField(object):
   def sqltype(self): return 'text'
 
 class PgPool(object):
+  # todo: move this to another file so psycopg2 can be an optional dependency. it sucks to build.
   """
   This is a wrapper for a psycopg2 pool. Most of the Row methods expect one of these as the first argument.
 
