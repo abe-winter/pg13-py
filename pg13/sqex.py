@@ -74,6 +74,7 @@ class NameIndexer:
     else: raise TypeError(type(index))
   def rowget(self,tables_dict,row_list,index):
     "row_list in self.row_order"
+    print 'rowget', self.index_tuple(tables_dict,index,False), row_list
     tmp=row_list
     for i in self.index_tuple(tables_dict,index,False): tmp=tmp[i]
     return tmp
@@ -82,7 +83,6 @@ class NameIndexer:
 
 def decompose_select(selectx):
   "return [(parent,setter) for scalar_subquery], wherex_including_on, NameIndexer. helper for run_select"
-  subqueries = sub_slots(selectx, lambda x:isinstance(x,sqparse.SelectX))
   nix = NameIndexer.ctor_fromlist(selectx.tables)
   where = []
   for fromx in selectx.tables.fromlist:
@@ -90,7 +90,7 @@ def decompose_select(selectx):
       # todo: what happens if on_stmt columns are non-ambiguous in the context of the join tables but ambiguous overall? yuck.
       where.append(fromx.on_stmt)
   if selectx.where: where.append(selectx.where)
-  return subqueries, nix, where
+  return nix, where
 
 def eval_where(where_list,composite_row,nix,tables_dict):
   "join-friendly whereclause evaluator. composite_row is a list or tuple of row lists. where_list is the thing from decompose_select."
@@ -102,24 +102,25 @@ def flatten_scalar(whatever):
   try: return whatever[0][0]
   except IndexError: return None
 
-def run_select(ex,tables):
-  subqueries, nix, where = decompose_select(ex)
-  for path in subqueries:
+def replace_subqueries(ex,tables):
+  for path in sub_slots(ex, lambda x:isinstance(x,sqparse.SelectX)):
     ex[path] = sqparse.Literal(flatten_scalar(run_select(ex[path], tables)))
-  print 'torder',nix.table_order
+  return ex # but it was modified in place, too
+
+def run_select(ex,tables):
+  nix, where = decompose_select(ex)
   composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
-  print 'composite_rows',composite_rows
+  if ex.order: # note: order comes before limit / offset
+    composite_rows.sort(key=lambda c_row:evalex(ex.order,c_row,nix,tables))
   if ex.limit or ex.offset:
     print ex.limit, ex.offset
     raise NotImplementedError('notimp: limit,offset')
   if contains_aggregate(ex.cols):
-    raise NotImplementedError
-    """
-    if not all(map(sqex.contains_aggregate,fields.children)): raise sqparse.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
-    return self.order_rows([sqex.evalex(f,match_rows,self.name,tables_dict) for f in fields.children],order,tables_dict)
-    """
+    if not all(is_aggregate(col) or contains_aggregate(col) for col in ex.cols.children):
+      # todo: this isn't good enough. what about nesting cases like max(min(whatever))
+      raise sqparse.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
+    return evalex(ex.cols,composite_rows,nix,tables)
   else: return [evalex(ex.cols,r,nix,tables) for r in composite_rows]
-  # todo above: take a sum-of-lists approach to joining columns because it also works for *. i.e. sum(([4],[7],[1,2,3]),[])
 
 def starlike(x):
   "weird things happen to cardinality when working with * in comma-lists. this detects when to do that."
@@ -150,18 +151,17 @@ def evalex(x,c_row,nix,tables):
       (ret.extend if starlike(child) else ret.append)(subcall(child))
     return ret
   elif isinstance(x,sqparse.CallX):
-    raise NotImplementedError('not sure how this works yet with new args')
     if is_aggregate(x): # careful: is_aggregate, not contains_aggregate
-      if not isinstance(row,list): raise TypeError('aggregate function expected a list of rows')
+      if not isinstance(c_row,list): raise TypeError('aggregate function expected a list of rows')
       if len(x.args.children)!=1: raise ValueError('aggregate function expected a single value',x.args)
-      arg,=x.args.children
-      vals=[evalex(arg,r,tablename,tables) for r in row]
+      arg,=x.args.children # intentional: error if len!=1
+      vals=[evalex(arg,c_r,nix,tables) for c_r in c_row]
       if not vals: return None
       if x.f.name=='min': return min(vals)
       elif x.f.name=='max': return max(vals)
       else: raise NotImplementedError
     else:
-      args=evalex(x.args,row,tablename,tables)
+      args=subcall(x.args)
       if x.f.name=='coalesce':
         a,b=args # todo: does coalesce take more than 2 args?
         return b if a is None else a
@@ -182,15 +182,15 @@ def evalex(x,c_row,nix,tables):
       if subcall(case.when): return subcall(case.then)
     return subcall(x.elsex)
   elif isinstance(x,(int,basestring,float,type(None))):
-    print 'the * is coming from here; figure it out'
     return x # I think Table.insert is creating this in expand_row
   # todo doc: why tuple and list below?
   elif isinstance(x,tuple): return tuple(map(subcall, x))
   elif isinstance(x,list): return map(subcall, x)
   elif isinstance(x,sqparse.ReturnX):
     ret=subcall(x.expr)
+    print 'ret:',ret,x.expr
     print "warning: not sure what I'm doing here with cardinality tweak on CommaX"
-    return ret if isinstance(x.expr,sqparse.CommaX) else [ret] # todo: update parser so this is always * or a commalist
+    return [ret] if isinstance(x.expr,(sqparse.CommaX,sqparse.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
   else: raise NotImplementedError(type(x),x)
 
 SUBSLOT_ATTRS=[

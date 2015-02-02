@@ -125,6 +125,7 @@ def test_select_coalesce():
 def test_insert_select():
   tables,runsql=prep("create table t1 (a int, b int, c int)")
   runsql("insert into t1 (a,b,c) values (1,2,3)")
+  print sqparse.parse('insert into t1 (a,b,c) values (2,3,(select c from t1 where a=1))')
   runsql("insert into t1 (a,b,c) values (2,3,(select c from t1 where a=1))")
   assert tables['t1'].rows==[[1,2,3],[2,3,3]]
 
@@ -216,15 +217,18 @@ def test_join_on():
   tables['t2'].rows=[[1,3],[2,5]]
   assert [[1,2,1,3]] == runsql('select * from t1 join t2 on a=c')
 
+@pytest.mark.xfail
 def test_implicit_join():
   # select * from t1,t2 where a=c
   raise NotImplementedError
 
+@pytest.mark.xfail
 def test_table_as():
   # select * from t1 as t
   # select * from t1 as t, t2 where t.a=t2.a
   raise NotImplementedError
 
+@pytest.mark.xfail
 def test_join_attr():
   # select t1.* from t1 join t2 on t1.a=t2.a
   raise NotImplementedError

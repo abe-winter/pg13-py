@@ -46,19 +46,13 @@ class Table:
       row[i]=sqex.evalex(elt,row,nix,tables_dict)
     if self.pkey_get(row): raise pg.DupeInsert(row)
     self.rows.append(row)
-    if returning: return [sqex.evalex(returning,row,nix,tables_dict)] # todo: find spec support for wrapping this in a list. todo: use returnrows?
+    if returning: return sqex.evalex(returning,(row,),nix,tables_dict)
   def match(self,where,tables,nix):
     return [r for r in self.rows if not where or threevl.ThreeVL.test(sqex.evalex(where,(r,),nix,tables))]
   def lookup(self,name): return FieldLookup(*next((i,f) for i,f in enumerate(self.fields) if f.name.name==name))
   def returnrows(self,tables,fields,rows):
     raise NotImplementedError('returnrows nix')
     return [sqex.evalex(fields,row,self.name,tables) for row in rows]
-  def order_rows(self,rows,orderx,tables):
-    if orderx:
-      # note: sqparse doesn't know about asc and desc, so don't bother with them here
-      raise NotImplementedError('nix')
-      rows.sort(key=lambda row:sqex.evalex(orderx,row,self.name,tables)) # todo: is this super-slow? or is the key cached
-    return rows
   def select(self,fields,whereclause,tables_dict,order):
     nix = sqex.NameIndexer.ctor_name(self.name.name)
     match_rows=self.match(whereclause,tables_dict,nix)
@@ -72,8 +66,8 @@ class Table:
     if not all(isinstance(x,sqparse.AssignX) for x in setx.children): raise TypeError('not_xassign',map(type,setx))
     match_rows=self.match(where,tables_dict,nix) if where else self.rows
     for row in match_rows:
-      for x in setx.children: row[self.lookup(x.col.name).index]=sqex.evalex(x.expr,row,nix,tables_dict)
-    if returning: return [sqex.evalex(returning,row,nix,tables_dict)] # todo: find spec support for wrapping this in a list. todo: use returnrows?
+      for x in setx.children: row[self.lookup(x.col.name).index]=sqex.evalex(x.expr,(row,),nix,tables_dict)
+    if returning: return sqex.evalex(returning,(row,),nix,tables_dict)
   def delete(self,where,tables_dict):
     # todo: what's the deal with nested selects in delete. does it get evaluated once to a scalar before running the delete?
     # todo: this will crash with empty where clause
@@ -84,6 +78,7 @@ def apply_sql(ex,values,tables_dict):
   "call the stmt in tree with values subbed on the tables in t_d\
   tree is a parsed statement returned by parse_expression. values is the tuple of %s replacements. tables_dict is a dictionary of Table instances."
   sqex.depth_first_sub(ex,values)
+  sqex.replace_subqueries(ex,tables_dict)
   if isinstance(ex,sqparse.SelectX): return sqex.run_select(ex,tables_dict)
   elif isinstance(ex,sqparse.InsertX): return tables_dict[ex.table.name].insert(ex.cols,ex.values.children,ex.ret,tables_dict)
   elif isinstance(ex,sqparse.UpdateX):
