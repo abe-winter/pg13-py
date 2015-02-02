@@ -97,10 +97,15 @@ def eval_where(where_list,composite_row,nix,tables_dict):
   # todo: do I need to use 3vl instead of all() to merge where_list?
   return all(evalex(w,composite_row,nix,tables_dict) for w in where_list)
 
+def flatten_scalar(whatever):
+  "warning: there's a systematic way to do this and I'm doing it blindly. In particular, this will screw up arrays."
+  try: return whatever[0][0]
+  except IndexError: return None
+
 def run_select(ex,tables):
   subqueries, nix, where = decompose_select(ex)
   for path in subqueries:
-    ex[path] = sqparse.Literal(run_select(ex[path], tables)[0][0])
+    ex[path] = sqparse.Literal(flatten_scalar(run_select(ex[path], tables)))
   print 'torder',nix.table_order
   composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
   print 'composite_rows',composite_rows
@@ -116,6 +121,10 @@ def run_select(ex,tables):
   else: return [evalex(ex.cols,r,nix,tables) for r in composite_rows]
   # todo above: take a sum-of-lists approach to joining columns because it also works for *. i.e. sum(([4],[7],[1,2,3]),[])
 
+def starlike(x):
+  "weird things happen to cardinality when working with * in comma-lists. this detects when to do that."
+  return isinstance(x,sqparse.AsterX) or isinstance(x,sqparse.AttrX) and isinstance(x.attr,sqparse.AsterX)
+
 def evalex(x,c_row,nix,tables):
   "c_row is a composite row, i.e. a list/tuple of rows from all the query's tables, ordered by nix.table_order"
   def subcall(x): "helper for recursive calls"; return evalex(x,c_row,nix,tables)
@@ -130,9 +139,16 @@ def evalex(x,c_row,nix,tables):
     elif x.op.op=='not': return threevl.ThreeVL.nein(inner)
     else: raise NotImplementedError('unk_op',x.op)
   elif isinstance(x,sqparse.NameX): return None if x.name=='null' else nix.rowget(tables,c_row,x)
+  elif isinstance(x,sqparse.AsterX):
+    # todo doc: how does this get disassembled by caller?
+    return sum(c_row,[])
   elif isinstance(x,sqparse.ArrayLit): return map(subcall,x.vals)
   elif isinstance(x,(sqparse.Literal,sqparse.ArrayLit)): return x.toliteral()
-  elif isinstance(x,sqparse.CommaX): return map(subcall,x.children)
+  elif isinstance(x,sqparse.CommaX):
+    ret = []
+    for child in x.children:
+      (ret.extend if starlike(child) else ret.append)(subcall(child))
+    return ret
   elif isinstance(x,sqparse.CallX):
     raise NotImplementedError('not sure how this works yet with new args')
     if is_aggregate(x): # careful: is_aggregate, not contains_aggregate
@@ -172,9 +188,8 @@ def evalex(x,c_row,nix,tables):
   elif isinstance(x,tuple): return tuple(map(subcall, x))
   elif isinstance(x,list): return map(subcall, x)
   elif isinstance(x,sqparse.ReturnX):
-    raise NotImplementedError('fix "returning" logic for c_row')
-    if x.expr=='*': return row
     ret=subcall(x.expr)
+    print "warning: not sure what I'm doing here with cardinality tweak on CommaX"
     return ret if isinstance(x.expr,sqparse.CommaX) else [ret] # todo: update parser so this is always * or a commalist
   else: raise NotImplementedError(type(x),x)
 
@@ -197,6 +212,7 @@ SUBSLOT_ATTRS=[
   (sqparse.JoinX, ('a','b','on_stmt')),
   (sqparse.FromTableX, ('name','alias')),
   (sqparse.Literal, ('val',)),
+  (sqparse.AsterX, ()), # this is here to prevent test_subslot_classes from complaining
 ]
 VARLEN_ATTRS=[
   (sqparse.ArrayLit,('vals',)),

@@ -12,7 +12,7 @@ class ThreeVL:
     return self.value==other.value if isinstance(other,ThreeVL) else {True:'t',False:'f'}[other]==self.value
   def __neq__(self,other): return not (self==other)
   def __nonzero__(self):
-    if self.value=='u': raise ValueError("can't cast 3VL 'unknown' to bool")
+    # if self.value=='u': raise ValueError("can't cast 3VL 'unknown' to bool") # I think this is okay at top level
     return self.value=='t'
   @staticmethod
   def test(x):

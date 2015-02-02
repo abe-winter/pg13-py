@@ -213,8 +213,7 @@ def test_join_on():
   runsql('create table t2 (c int, d int)')
   tables['t1'].rows=[[1,2],[3,4]]
   tables['t2'].rows=[[1,3],[2,5]]
-  print runsql('select * from t1 join t2 on a=c')
-  raise NotImplementedError
+  assert [[1,2,1,3]] == runsql('select * from t1 join t2 on a=c')
 
 def test_implicit_join():
   # select * from t1,t2 where a=c
