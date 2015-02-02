@@ -8,10 +8,10 @@ def test_parse_arraylit():
 
 def test_parse_select():
   # this is also testing nesting and various whatever
-  from pg13.sqparse import NameX,CommaX,SelectX,Literal,ArrayLit,BinX,UnX,OpX,CallX,FromListX,FromTableX
+  from pg13.sqparse import NameX,CommaX,SelectX,Literal,ArrayLit,BinX,UnX,OpX,CallX,FromListX,FromTableX,AsterX
   selx=sqparse.parse('select *,coalesce(x+3,0),{4,5},array[1,2],(select i from tbl) from whatever where (z+-1=10) and (y<5.5)')
   assert selx.cols==CommaX((
-    '*',
+    AsterX(),
     CallX(NameX('coalesce'),CommaX((
       BinX(OpX('arith_op','+'),NameX('x'),Literal(3)),
       Literal(0),
@@ -43,7 +43,7 @@ def test_parse_create():
   print sqparse.parse('create table if not exists t1 (a int not null)')
 
 def test_parse_insert():
-  from pg13.sqparse import InsertX,NameX,CommaX,Literal,ReturnX
+  from pg13.sqparse import InsertX,NameX,CommaX,Literal,ReturnX,AsterX
   assert sqparse.parse('insert into t1 (a,b) values (1,2)')==InsertX(
     NameX('t1'), CommaX((NameX('a'),NameX('b'))), CommaX((Literal(1),Literal(2))), None
   )
@@ -51,7 +51,7 @@ def test_parse_insert():
     NameX('t1'), None, CommaX((Literal(1),Literal(2))), None
   )
   assert sqparse.parse('insert into t1 values (1,2) returning *')==InsertX(
-    NameX('t1'), None, CommaX((Literal(1),Literal(2))), ReturnX('*')
+    NameX('t1'), None, CommaX((Literal(1),Literal(2))), ReturnX(AsterX())
   )
   assert sqparse.parse('insert into t1 values (1,2) returning (a,b)')==InsertX(
     NameX('t1'), None, CommaX((Literal(1),Literal(2))), ReturnX(CommaX((NameX('a'),NameX('b'))))
@@ -140,7 +140,7 @@ def test_attr():
   assert sqparse.parse('a.b.c')==AttrX(AttrX(NameX('a'),NameX('b')),NameX('c'))
 
 def test_join_syntax():
-  from pg13.sqparse import JoinX,FromListX,FromTableX,BinX,OpX,NameX,AttrX,CommaX
+  from pg13.sqparse import JoinX,FromListX,FromTableX,BinX,OpX,NameX,AttrX,CommaX,AsterX
   ex=sqparse.parse('select * from t1,t2 where t1.x=t2.y')
   assert all(isinstance(x,sqparse.AttrX) for x in (ex.where.left,ex.where.right))
   assert sqparse.parse('select * from t1 join t2').tables==FromListX([
@@ -152,15 +152,15 @@ def test_join_syntax():
       BinX(OpX('cmp_op','='), NameX('x'), NameX('y'))
   )])
   x = sqparse.parse('select t1.* from t1 join t2 on x=y and z=a')
-  assert x.cols==CommaX([AttrX(NameX('t1'),'*')])
+  assert x.cols==CommaX([AttrX(NameX('t1'),AsterX())])
   assert x.tables==FromListX([JoinX(
       FromTableX('t1',None),
       FromTableX('t2',None),
       BinX(OpX('bool_op','and'),BinX(OpX('cmp_op','='),NameX('x'),NameX('y')),BinX(OpX('cmp_op','='),NameX('z'),NameX('a')))
     )])
   assert sqparse.parse('select t1.*,t2.* from t1 join t2 on x=y').cols==CommaX([
-    AttrX(NameX('t1'),'*'),
-    AttrX(NameX('t2'),'*')
+    AttrX(NameX('t1'),AsterX()),
+    AttrX(NameX('t2'),AsterX())
   ])
   assert sqparse.parse('select * from t1 join t2 on t1.x=t2.y').tables==FromListX([JoinX(
     FromTableX('t1',None),
@@ -182,3 +182,11 @@ def test_xgetset():
   # index set
   x['tables',('fromlist',0)] = 'hello'
   assert x['tables','fromlist'][0]=='hello'
+
+def test_mult_vs_aster():
+  "make sure that asterisk is handled differently from the multiplication operator"
+  from pg13.sqparse import AsterX,BinX,OpX,NameX
+  assert sqparse.parse('select *,a*b from t1').cols.children==[
+    AsterX(),
+    BinX(OpX('arith_op','*'),NameX('a'),NameX('b'))
+  ]

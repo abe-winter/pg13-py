@@ -232,7 +232,7 @@ def test_join_attr():
 # todo: test_name_indexer should be in test_sqex except for reliance on tables_dict. move Table to its own file.
 def test_name_indexer():
   x = sqparse.parse('select * from t1, t2 as alias')
-  ni = sqex.NameIndexer(x.tables)
+  ni = sqex.NameIndexer.ctor_fromlist(x.tables)
   assert ni.table_order==['t1','t2']
   tables,runsql=prep('create table t1 (a int,b int)')
   runsql('create table t2 (a int,c int)')

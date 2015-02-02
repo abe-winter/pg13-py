@@ -61,6 +61,9 @@ class NameX(BaseX):
   def __init__(self,name): self.name=name
   def __repr__(self): return 'NameX(%r)'%self.name
   def __eq__(self,other): return isinstance(other,NameX) and self.name==other.name
+class AsterX(BaseX):
+  def __repr__(self): return 'AsterX()'
+  def __eq__(self,other): return isinstance(other, AsterX)
 class FromTableX(BaseX):
   def __init__(self,name,alias): self.name, self.alias = name, alias
   def __repr__(self): return 'FromTableX(%s,%s)'%(self.name,self.alias)
@@ -211,7 +214,8 @@ class SQLG(lrparsing.Grammar):
     sublit = Token('%s')
   floatlit = T.intlit + '.' + T.intlit # todo: no whitespace
   token = Prio(T.strlit, floatlit, T.intlit, T.name, T.sublit)
-  attr = Prio(THIS, T.name) + '.' + (T.name | kw('*')) # warning: * shouldn't be allowed in calls
+  aster = kw('*')
+  attr = Prio(THIS, T.name) + '.' + (T.name | aster) # warning: * shouldn't be allowed in calls
   call = Prio(attr, T.name) + '(' + Ref('commalist') + ')' # todo: commalist. also, not sure attrs are callable in sql.
   unop = kw('not') | '+' | '-'
   arith_op = Choice(*map(kw,('/','*','+','-')))
@@ -225,7 +229,7 @@ class SQLG(lrparsing.Grammar):
   case = kw('case') + Repeat(whenx,1) + kw('else') + expr + kw('end')
   commalist = List(expr, ',', 1)
   array_ctor = '{' + Ref('commalist') + '}' | kw('array') + '[' + Ref('commalist') + ']'
-  cols_list = List('*' | expr, ',')
+  cols_list = List(aster | expr, ',')
   # todo below: can joins be chained?
   from_table = Prio(T.name, (T.name + kw('as') + T.name))
   joinx = from_table + kw('join') + from_table + Opt(kw('on') + expr)
@@ -242,7 +246,7 @@ class SQLG(lrparsing.Grammar):
   createx = kw('create') + kw('table') + Opt(if_nexists) + T.name + '(' + List(col_spec, ',', 1) + Opt(',' + pkey) + ')'
   
   # insert stmt
-  returning = kw('returning') + ('*' | commalist | expr)
+  returning = kw('returning') + (aster | commalist | expr)
   insertx = kw('insert') + kw('into') + T.name + Opt('(' + namelist + ')') + kw('values') + '(' + commalist + ')' + Opt(returning)
   
   # update stmt
@@ -279,6 +283,7 @@ class SQLG(lrparsing.Grammar):
       elif len(x)==3: op,val=x[-2:]; return un_priority(op,val)
       else: raise NotImplementedError # shouldn't get here
     elif node in (clas.commalist,clas.cols_list,clas.namelist,clas.assignlist): return CommaX(x[1::2])
+    elif node is clas.aster: return AsterX()
     elif node is clas.call: f,_,args,_=x[-4:]; return CallX(f,args)
     elif node is clas.array_ctor: return ArrayLit(x[-2].children)
     elif node is clas.parenx: return x[-2]

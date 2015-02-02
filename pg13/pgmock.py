@@ -37,7 +37,7 @@ class Table:
     "apply defaults to missing cols for a row that's being inserted"
     return [(toliteral(f.default) if v is Missing else v) for f,v in zip(self.fields,row)]
   def insert(self,fields,values,returning,tables_dict):
-    nix = sqex.NameIndexer.ctor_name(self.name)
+    nix = sqex.NameIndexer.ctor_name(self.name.name)
     expanded_row=self.fix_rowtypes(expand_row(self.fields,fields,values) if fields else values)
     row=self.apply_defaults(expanded_row)
     # todo: check ColX.not_null here. figure out what to do about null pkey field
@@ -47,30 +47,38 @@ class Table:
     if self.pkey_get(row): raise pg.DupeInsert(row)
     self.rows.append(row)
     if returning: return [sqex.evalex(returning,row,nix,tables_dict)] # todo: find spec support for wrapping this in a list. todo: use returnrows?
-  def match(self,where,tables): return [r for r in self.rows if not where or threevl.ThreeVL.test(sqex.evalex(where,r,self.name,tables))]
+  def match(self,where,tables,nix):
+    return [r for r in self.rows if not where or threevl.ThreeVL.test(sqex.evalex(where,(r,),nix,tables))]
   def lookup(self,name): return FieldLookup(*next((i,f) for i,f in enumerate(self.fields) if f.name.name==name))
-  def returnrows(self,tables,fields,rows): return [sqex.evalex(fields,row,self.name,tables) for row in rows]
+  def returnrows(self,tables,fields,rows):
+    raise NotImplementedError('returnrows nix')
+    return [sqex.evalex(fields,row,self.name,tables) for row in rows]
   def order_rows(self,rows,orderx,tables):
     if orderx:
       # note: sqparse doesn't know about asc and desc, so don't bother with them here
+      raise NotImplementedError('nix')
       rows.sort(key=lambda row:sqex.evalex(orderx,row,self.name,tables)) # todo: is this super-slow? or is the key cached
     return rows
   def select(self,fields,whereclause,tables_dict,order):
-    match_rows=self.match(whereclause,tables_dict)
+    nix = sqex.NameIndexer.ctor_name(self.name.name)
+    match_rows=self.match(whereclause,tables_dict,nix)
     if list(fields.children)==['*']: return self.order_rows(match_rows,order,tables_dict)
     elif sqex.contains_aggregate(fields):
       if not all(map(sqex.contains_aggregate,fields.children)): raise sqparse.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
-      return self.order_rows([sqex.evalex(f,match_rows,self.name,tables_dict) for f in fields.children],order,tables_dict)
+      return self.order_rows([sqex.evalex(f,match_rows,nix,tables_dict) for f in fields.children],order,tables_dict)
     else: return self.order_rows(self.returnrows(tables_dict,fields,match_rows),order,tables_dict)
   def update(self,setx,where,returning,tables_dict):
+    nix = sqex.NameIndexer.ctor_name(self.name.name)
     if not all(isinstance(x,sqparse.AssignX) for x in setx.children): raise TypeError('not_xassign',map(type,setx))
-    match_rows=self.match(where,tables_dict) if where else self.rows
+    match_rows=self.match(where,tables_dict,nix) if where else self.rows
     for row in match_rows:
-      for x in setx.children: row[self.lookup(x.col.name).index]=sqex.evalex(x.expr,row,self.name,tables_dict)
-    if returning: return [sqex.evalex(returning,row,self.name,tables_dict)] # todo: find spec support for wrapping this in a list. todo: use returnrows?
+      for x in setx.children: row[self.lookup(x.col.name).index]=sqex.evalex(x.expr,row,nix,tables_dict)
+    if returning: return [sqex.evalex(returning,row,nix,tables_dict)] # todo: find spec support for wrapping this in a list. todo: use returnrows?
   def delete(self,where,tables_dict):
     # todo: what's the deal with nested selects in delete. does it get evaluated once to a scalar before running the delete?
-    self.rows=[r for r in self.rows if not sqex.evalex(where,r,self.name,tables_dict)]
+    # todo: this will crash with empty where clause
+    nix = sqex.NameIndexer.ctor_name(self.name.name)
+    self.rows=[r for r in self.rows if not sqex.evalex(where,(r,),nix,tables_dict)]
 
 def apply_sql(ex,values,tables_dict):
   "call the stmt in tree with values subbed on the tables in t_d\

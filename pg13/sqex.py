@@ -12,7 +12,7 @@ def is_aggregate(ex):
   # todo: I think the SQL term for this is 'scalar subquery'. use SQL vocabulary
   # todo doc: explain why it's not necessary to do this check on the whereclause
   return isinstance(ex,sqparse.CallX) and ex.f in (sqparse.NameX('min'),sqparse.NameX('max'))
-def contains_aggregate(ex): return ex.treeany(is_aggregate)
+def contains_aggregate(ex): return bool(sub_slots(ex,is_aggregate))
 
 def evalop(op,left,right):
   "this takes evaluated left and right (i.e. values not expressions)"
@@ -95,13 +95,12 @@ def decompose_select(selectx):
 def eval_where(where_list,composite_row,nix,tables_dict):
   "join-friendly whereclause evaluator. composite_row is a list or tuple of row lists. where_list is the thing from decompose_select."
   # todo: do I need to use 3vl instead of all() to merge where_list?
-  return all(evalex(w,c_row,nix,tables_dict) for w in where_list)
+  return all(evalex(w,composite_row,nix,tables_dict) for w in where_list)
 
 def run_select(ex,tables):
   subqueries, nix, where = decompose_select(ex)
   for path in subqueries:
-    print 'subq path',path
-    raise NotImplementedError('replace subquery with value')
+    ex[path] = sqparse.Literal(run_select(ex[path], tables)[0][0])
   print 'torder',nix.table_order
   composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
   print 'composite_rows',composite_rows
@@ -166,7 +165,9 @@ def evalex(x,c_row,nix,tables):
     for case in x.cases:
       if subcall(case.when): return subcall(case.then)
     return subcall(x.elsex)
-  elif isinstance(x,(int,basestring,float,type(None))): return x # I think Table.insert is creating this in expand_row
+  elif isinstance(x,(int,basestring,float,type(None))):
+    print 'the * is coming from here; figure it out'
+    return x # I think Table.insert is creating this in expand_row
   # todo doc: why tuple and list below?
   elif isinstance(x,tuple): return tuple(map(subcall, x))
   elif isinstance(x,list): return map(subcall, x)
