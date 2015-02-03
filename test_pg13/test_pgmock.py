@@ -210,31 +210,36 @@ def test_select_order():
   print 'tso',rows
   assert rows==sorted(rows)
 
-def test_join_on():
+def setup_join_test():
   tables,runsql=prep('create table t1 (a int,b int)')
   runsql('create table t2 (c int, d int)')
   tables['t1'].rows=[[1,2],[3,4]]
   tables['t2'].rows=[[1,3],[2,5]]
+  return tables,runsql
+
+def test_join_on():
+  tables,runsql = setup_join_test()
   assert [[1,2,1,3]] == runsql('select * from t1 join t2 on a=c')
 
-@pytest.mark.xfail
 def test_implicit_join():
-  # select * from t1,t2 where a=c
-  raise NotImplementedError
+  tables,runsql = setup_join_test()
+  # todo: make sure real SQL behaves this way
+  assert [[1,2,1,3]]==runsql('select * from t1,t2 where a=c')
 
-@pytest.mark.xfail
 def test_table_as():
-  # select * from t1 as t
-  # select * from t1 as t, t2 where t.a=t2.a
-  raise NotImplementedError
+  tables,runsql = setup_join_test()
+  assert [[1,2],[3,4]]==runsql('select * from t1 as t')
+  # todo below: make sure this is what real SQL does. or more generally, run all tests against postgres as well as pgmock.
+  assert [[1,2,1,3]]==runsql('select * from t1 as t,t2 where t.a=t2.c')
 
-@pytest.mark.xfail
 def test_join_attr():
-  # select t1.* from t1 join t2 on t1.a=t2.a
-  raise NotImplementedError
+  tables,runsql = setup_join_test()
+  with pytest.raises(pgmock.BadFieldName): runsql('select t1.* from t1 join t2 on t1.a=t2.a') # todo: this deserves its own test
+  assert [[1,2]]==runsql('select t1.* from t1 join t2 on t1.a=t2.c')
 
 # todo: test_name_indexer should be in test_sqex except for reliance on tables_dict. move Table to its own file.
 def test_name_indexer():
+  from pg13.sqparse import NameX,AttrX,AsterX
   x = sqparse.parse('select * from t1, t2 as alias')
   ni = sqex.NameIndexer.ctor_fromlist(x.tables)
   assert ni.table_order==['t1','t2']
@@ -244,13 +249,13 @@ def test_name_indexer():
   assert (0,1)==ni.index_tuple(tables,sqparse.NameX('b'),False) # make sure NameX handling works
   assert (1,1)==ni.index_tuple(tables,'c',False)
   with pytest.raises(sqex.ColumnNameError): ni.index_tuple(tables,'a',False)
-  assert (0, 0) == ni.index_tuple(tables,sqparse.AttrX('t1','a'),False)
-  assert (1, 0) == ni.index_tuple(tables,sqparse.AttrX('alias','a'),False)
-  assert (1,) == ni.index_tuple(tables,sqparse.AttrX('alias','*'),False)
-  assert (0,) == ni.index_tuple(tables,sqparse.AttrX('t1','*'),False)
-  assert (1,) == ni.index_tuple(tables,sqparse.AttrX('t2','*'),False)
-  with pytest.raises(sqex.TableNameError): ni.index_tuple(tables,sqparse.AttrX('bad_alias','e'),False)
-  with pytest.raises(ValueError): ni.index_tuple(tables,sqparse.AttrX('t2','*'),True)
+  assert (0, 0) == ni.index_tuple(tables,AttrX(NameX('t1'),'a'),False)
+  assert (1, 0) == ni.index_tuple(tables,AttrX(NameX('alias'),'a'),False)
+  assert (1,) == ni.index_tuple(tables,AttrX(NameX('alias'),AsterX()),False)
+  assert (0,) == ni.index_tuple(tables,AttrX(NameX('t1'),AsterX()),False)
+  assert (1,) == ni.index_tuple(tables,AttrX(NameX('t2'),AsterX()),False)
+  with pytest.raises(sqex.TableNameError): ni.index_tuple(tables,sqparse.AttrX(NameX('bad_alias'),'e'),False)
+  with pytest.raises(ValueError): ni.index_tuple(tables,sqparse.AttrX(NameX('t2'),AsterX()),True)
 
 def test_nested_select():
   "nested select has cardinality issues; add cases as they come up"

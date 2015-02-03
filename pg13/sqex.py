@@ -64,17 +64,18 @@ class NameIndexer:
       tname, = candidates
       return self.table_order.index(tname), tables_dict[tname].lookup(index).index
     if isinstance(index,sqparse.AttrX):
-      if not index.parent in self.aliases: raise TableNameError('table_notin_x',index.parent)
-      tindex = self.table_order.index(self.aliases[index.parent])
-      if index.attr=='*':
+      if index.parent.name not in self.aliases: raise TableNameError('table_notin_x',index.parent)
+      tname = self.aliases[index.parent.name]
+      tindex = self.table_order.index(tname)
+      if isinstance(index.attr,sqparse.AsterX):
         if is_set: raise ValueError('cant_set_asterisk') # todo: better error class
         else: return (tindex,)
-      else: return (tindex,tables_dict[self.aliases[index.parent]].lookup(index.attr).index)
+      else: return (tindex,tables_dict[tname].lookup(index.attr).index)
       # todo: stronger typing here. make sure both fields of the AttrX are always strings.
     else: raise TypeError(type(index))
   def rowget(self,tables_dict,row_list,index):
     "row_list in self.row_order"
-    print 'rowget', self.index_tuple(tables_dict,index,False), row_list
+    # print 'rowget', self.index_tuple(tables_dict,index,False), row_list
     tmp=row_list
     for i in self.index_tuple(tables_dict,index,False): tmp=tmp[i]
     return tmp
@@ -105,6 +106,8 @@ def flatten_scalar(whatever):
   except TypeError: return flat1
 
 def replace_subqueries(ex,tables):
+  # http://www.postgresql.org/docs/9.1/static/sql-expressions.html#SQL-SYNTAX-SCALAR-SUBQUERIES
+  # see here for subquery conditions that *do* use multi-rows. ug. http://www.postgresql.org/docs/9.1/static/functions-subquery.html
   for path in sub_slots(ex, lambda x:isinstance(x,sqparse.SelectX)):
     ex[path] = sqparse.Literal(flatten_scalar(run_select(ex[path], tables)))
   return ex # but it was modified in place, too
@@ -168,17 +171,8 @@ def evalex(x,c_row,nix,tables):
         a,b=args # todo: does coalesce take more than 2 args?
         return b if a is None else a
       else: raise NotImplementedError('unk_function',x.f.name)
-  elif isinstance(x,sqparse.SelectX):
-    raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
-    # http://www.postgresql.org/docs/9.1/static/sql-expressions.html#SQL-SYNTAX-SCALAR-SUBQUERIES
-    # see here for subquery conditions that *do* use multi-rows. ug. http://www.postgresql.org/docs/9.1/static/functions-subquery.html
-    if len(x.cols.children)!=1: raise sqparse.SQLSyntaxError('scalar_subquery_requires_1col',len(x.cols.children))
-    inner_rows=run_select(x,tables)
-    if not inner_rows: return None
-    if not isinstance(inner_rows[0],list): return inner_rows[0] # this happens with aggregate functions. todo: spec-compliance.
-    (val,),=inner_rows # todo: raise an explicit error if len(inner_rows)!=1
-    print 'inner select returning',val
-    return val
+  elif isinstance(x,sqparse.SelectX): raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
+  elif isinstance(x,sqparse.AttrX):return nix.rowget(tables,c_row,x)
   elif isinstance(x,sqparse.CaseX):
     for case in x.cases:
       if subcall(case.when): return subcall(case.then)

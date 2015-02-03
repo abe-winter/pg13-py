@@ -6,6 +6,7 @@ from . import pg,threevl,sqparse,sqex
 # errors
 class PgExecError(sqparse.PgMockError): "base class for errors during table execution"
 class MissingPKeyError(PgExecError): pass
+class BadFieldName(PgExecError): pass
 
 class Missing: "for distinguishing missing columns vs passed-in null"
 
@@ -49,7 +50,10 @@ class Table:
     if returning: return sqex.evalex(returning,(row,),nix,tables_dict)
   def match(self,where,tables,nix):
     return [r for r in self.rows if not where or threevl.ThreeVL.test(sqex.evalex(where,(r,),nix,tables))]
-  def lookup(self,name): return FieldLookup(*next((i,f) for i,f in enumerate(self.fields) if f.name.name==name))
+  def lookup(self,name):
+    if isinstance(name,sqparse.NameX): name = name.name # this is horrible; be consistent
+    try: return FieldLookup(*next((i,f) for i,f in enumerate(self.fields) if f.name.name==name))
+    except StopIteration: raise BadFieldName(name)
   def returnrows(self,tables,fields,rows):
     raise NotImplementedError('returnrows nix')
     return [sqex.evalex(fields,row,self.name,tables) for row in rows]
