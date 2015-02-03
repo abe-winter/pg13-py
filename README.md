@@ -19,6 +19,8 @@ pg13 takes a different approach:
 * parallelization is safe (at least with respect to data)
 * performance: about 100 tests per second on my laptop
 
+Drop me a line if you're using this. `@gmail: awinter.public` (hint: turn it around)
+
 ## examples
 
 Note: everything below is happening in-python and in-memory. Each instance (table dictionary) is completely isolated so your tests can run in parallel or whatever, you don't need a live DB on your system. Interacting with a live database looks exactly the same as below except for creating the pool and the pool.tables lines.
