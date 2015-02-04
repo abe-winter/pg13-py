@@ -3,12 +3,12 @@
 **install** with `pip install pg13`  
 **docs** at http://pg13.readthedocs.org/en/latest/
 
-pg13 is a SQL evaluator for python designed for testing. Normally when you want to test an application with database dependencies, you have three equally bad options:
+pg13 is a SQL ORM for python designed with first-class support for mocking & test. Normally when you want to test an application with database dependencies, you have three dangerous options:
 
 1. **artisanal mocking**: standard mocking frameworks make you specify the output of every DB call
- * bad because it's extra work, maintenance nightmare, and you're feeding the test the right answer
+ * bad because it's extra work, tough to maintain, and you're feeding the test the right answer
 2. **local db**: have a running copy of the database
- * bad because your tests are less portable and may have hidden inter-test data dependencies
+ * bad because your tests gain an external dependency (the DB) and may gain hidden inter-test data dependencies
 3. **everything but**: test everything but the DB interaction
  * bad because you're not testing a big part of your app
 
@@ -17,7 +17,7 @@ pg13 takes a different approach:
 * every test can create and populate its own lightweight database
 * tests are deterministic (at least with respect to database reuse)
 * parallelization is safe (at least with respect to data)
-* performance: about 100 tests per second on my laptop
+* performance: about 100 tests per second on my laptop. the only thing we do faster than a real DB is instantiate a table, but that adds up.
 
 Drop me a line if you're using this. `@gmail: awinter.public` (hint: turn it around)
 
@@ -60,9 +60,9 @@ assert pool.select('select userid,id2 from model where userid=2-1')==[[1,2],[1,3
 
 Very very new. Don't use it to run your nuclear facility. Probably don't use the mocking engine as a live database.
 
-SQL is a standards-based system. No implementations replicate the standard exactly. This one also doesn't.
+SQL is a standard, and many implementations don't replicate the standard exactly. This one also doesn't.
 
-Run `pip install . && py.test` in the root dir to see if pg13 will work on your system.
+Run `pip install . && py.test` in the root dir to see if pg13 will work on your system. Hint: you can probably survive without the psycopg2 dependency.
 
 Supported SQL features:
 * select, insert, update, create table, delete
