@@ -11,7 +11,7 @@ setuptools.setup(
   version=get_version(os.path.join(os.path.dirname(__file__),'pg13/__init__.py')),
   description='sql models with built-in mocking framework',
   classifiers=[],
-  keywords=['orm','postgres','mock','database','model'],
+  keywords=['sql','mocking','orm','database','testing'],
   author='Abe Winter',
   author_email='abe-winter@users.noreply.github.com',
   url='https://github.com/abe-winter/pg13-py',
