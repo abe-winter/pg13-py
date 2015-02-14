@@ -3,7 +3,7 @@
 # todo: don't allow JSONFIELDS to overlap with primary key? think about it. >> is this obsolete with SpecialField?
 # todo: add profiling hooks
 
-import sys,psycopg2,psycopg2.extras,logging,psycopg2.pool,contextlib,ujson,functools,collections
+import sys,contextlib,ujson,functools,collections
 
 def sel(cols,table,where=None):
   'simple query generator'
@@ -88,7 +88,7 @@ class PgPool(object):
   def select(self,qstring,vals=()): raise NotImplementedError
   def commit(self,qstring,vals=()): raise NotImplementedError
   def commitreturn(self,qstring,vals=()): raise NotImplementedError
-  def close(self): self.pool.closeall() raise NotImplementedError
+  def close(self): raise NotImplementedError
   @contextlib.contextmanager
   def __call__(self): raise NotImplementedError
 

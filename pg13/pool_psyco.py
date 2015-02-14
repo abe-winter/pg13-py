@@ -2,7 +2,7 @@
 this *doesn't* get imported by default because we don't want to have to install a zillion backends (most users only care about one).
 """
 
-import psycopg2
+import psycopg2.pool
 from . import pg
 
 class PgPoolPsyco(pg.PgPool):
