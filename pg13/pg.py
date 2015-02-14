@@ -70,10 +70,11 @@ class SpecialField(object):
 class PgPool(object):
   # todo: move this to another file so psycopg2 can be an optional dependency. it sucks to build.
   """
-  This is a wrapper for a psycopg2 pool. Most of the Row methods expect one of these as the first argument.
+  This is the base class for pool wrappers. Most of the Row methods expect one of these as the first argument.
 
   Here's an example of how to construct one to connect to your database::
 
+    from pg13 import pool_psyco
     def mkpool():
       dets=dict(
         host='127.0.0.1',
@@ -81,31 +82,15 @@ class PgPool(object):
         user='username',
         password='topsecret',
       )
-      return pg.PgPool(' '.join("%s='%s'"%(k,v) for k,v in dets.items()))
+      return pool_psyco.PgPoolPsyco(' '.join("%s='%s'"%(k,v) for k,v in dets.items()))
   """
-  def __init__(self,dbargs):
-    # http://stackoverflow.com/questions/12650048/how-can-i-pool-connections-using-psycopg-and-gevent
-    self.pool = psycopg2.pool.ThreadedConnectionPool(5,10,dbargs) # I think that this is safe combined with psycogreen patching
-  def select(self,qstring,vals=()):
-    with self() as con,con.cursor() as cur:
-      cur.execute(qstring,vals)
-      for row in cur: yield row # yield stmt has to be in same function as with block to hijack it. todo(awinter): experiment and figure out what that meant.
-  def commit(self,qstring,vals=()):
-    with self() as con,con.cursor() as cur:
-      return cur.execute(qstring,vals)
-  def commitreturn(self,qstring,vals=()):
-    "commit and return result. This is intended for sql UPDATE ... RETURNING"
-    with self() as con,con.cursor() as cur:
-      cur.execute(qstring,vals)
-      return cur.fetchone()
-  def close(self): self.pool.closeall()
+  def __init__(self,dbargs): raise NotImplementedError
+  def select(self,qstring,vals=()): raise NotImplementedError
+  def commit(self,qstring,vals=()): raise NotImplementedError
+  def commitreturn(self,qstring,vals=()): raise NotImplementedError
+  def close(self): self.pool.closeall() raise NotImplementedError
   @contextlib.contextmanager
-  def __call__(self):
-    con = self.pool.getconn()
-    try: yield con
-    except: raise
-    else: con.commit()
-    finally: self.pool.putconn(con)
+  def __call__(self): raise NotImplementedError
 
 def transform_specialfield((sf,v)): "helper"; return sf.ser(v) if isinstance(sf,SpecialField) else v
 
