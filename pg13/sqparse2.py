@@ -45,7 +45,7 @@ class Literal(BaseX):
   def __repr__(self): return '%s(%r)'%(self.__class__.__name__,self.val)
   def __eq__(self,other): return type(other) is Literal and self.val==other.val # careful: ArrayLit is an instance of Literal
   def toliteral(self): return self.val
-class ArrayLit(BaseX):
+class ArrayLit(BaseX): # todo: this isn't always a literal. what if there's a select stmt inside? yikes.
   def __init__(self,vals): self.vals=list(vals) # list so it's settable by sqex.sub_slots
   def __repr__(self): return 'Literal[Array](%r)'%(self.vals,)
   def __eq__(self,other): return isinstance(other,ArrayLit) and self.vals==other.vals
@@ -73,14 +73,16 @@ class FromListX(BaseX):
   def __repr__(self): return 'FromListX(%r)'%self.fromlist
   def __eq__(self,other): return isinstance(other,FromListX) and self.fromlist==other.fromlist
 class OpX(BaseX):
-  PRIORITY=('bool_op','cmp_op','arith_op') # todo: make this bare operators instead of type
-  def __init__(self,optype,op): self.optype,self.op=optype,op
-  def __repr__(self): return 'OpX(%r)'%self.op # optype not necessary because op maps canonically to optype
+  PRIORITY=('or','and','>','<','@>','||','!=','=','is not','is','in','*','/','+','-')
+  def __init__(self,op):
+    self.op=op
+    if op not in self.PRIORITY: raise SQLSyntaxError('unk_op',op)
+  def __repr__(self): return 'OpX(%r)'%self.op
   def __lt__(self,other):
     "this is for order of operations"
     if not isinstance(other,OpX): raise TypeError
-    return self.PRIORITY.index(self.optype) < self.PRIORITY.index(other.optype)
-  def __eq__(self,other): return isinstance(other,OpX) and (self.optype,self.op)==(other.optype,other.op)
+    return self.PRIORITY.index(self.op) < self.PRIORITY.index(other.op)
+  def __eq__(self,other): return isinstance(other,OpX) and self.op==other.op
 class BinX(BaseX):
   "binary operator expression"
   def __init__(self,op,left,right): self.op,self.left,self.right=op,left,right
@@ -184,19 +186,76 @@ def tup_remove(tup,val):
     return tup[:i]+tup[i+1:]
   else: return tup
 
-# todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
-t_STRLIT = "'((?<=\\\\)'|[^'])+'"
-t_INTLIT = '\d+'
-t_NAME = '[A-Za-z]\w*'
-t_OPERATOR = '\!\=|\|\||@>|[\/\+\-\*\=<>]'
-t_SUBLIT = '%s'
-t_BRACE = '[\(\)\[\]]'
-t_SEP = '[,\.]'
-t_ignore = ' '
-def t_error(t): raise SQLSyntaxError(t) # I think t is LexToken(error,unparsed_tail)
+class SqlGrammar:
+  # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
+  t_STRLIT = "'((?<=\\\\)'|[^'])+'"
+  t_INTLIT = '\d+'
+  t_NAME = '[A-Za-z]\w*'
+  t_SUBLIT = '%s'
+  t_ARITH = '\|\||\/|\+|\-'
+  t_CMP = '\!=|@>|<|>'
+  t_BOOL = 'and|or|in|not|is'
+  t_KWARRAY = 'array|ARRAY'
+  literals = ('[',']','(',')','{','}',',','.','*','=','-')
+  t_ignore = ' '
+  @staticmethod
+  def t_error(t): raise SQLSyntaxError(t) # I think t is LexToken(error,unparsed_tail)
+  tokens = (
+    # general
+    'STRLIT','INTLIT','NAME','SUBLIT',
+    # operators
+    'ARITH','CMP','BOOL',
+    # keywords
+    'KWARRAY',
+  )
+  precedence = (
+    # ('left','DOT'),
+  )
+  def p_x_name(self,t): "expression : NAME"; t[0] = NameX(t[1])
+  def p_float(self,t): "float : INTLIT '.' INTLIT"; t[0] = Literal(float('%s.%s'%(t[1],t[3])))
+  def p_int(self,t): "int : INTLIT"; t[0] = Literal(int(t[1]))
+  def p_strlit(self,t): "strlit : STRLIT"; print t[1]; raise NotImplementedError
+  def p_unop(self,t):
+    "unop : '-'"
+    t[0] = OpX(t[1])
+  def p_binop(self,t):
+    """binop : ARITH
+             | CMP
+             | BOOL
+    """
+    t[0] = OpX(t[1])
+  def p_x_boolx(self,t):
+    """expression : expression binop expression
+                  | unop expression
+    """
+    if len(t)==4: t[0] = BinX(t[2],t[1],t[3])
+    elif len(t)==3: t[0] = UnX(t[1],t[2])
+    else: raise NotImplementedError
+  def p_x_literal(self,t):
+    """expression : int
+                  | float
+                  | strlit
+    """
+    t[0] = t[1]
+  def p_x_commalist(self,t):
+    """commalist : commalist ',' expression
+                 | expression
+    """
+    if len(t) == 2: t[0] = CommaX([t[1]])
+    elif len(t) == 4: t[0] = CommaX(t[1].children+[t[3]])
+    else: raise NotImplementedError('unk_len',len(t))
+  def p_array(self,t):
+    """expression : '{' commalist '}'
+                  | KWARRAY '[' commalist ']'
+    """
+    if len(t)==4: t[0] = ArrayLit(t[2].children)
+    elif len(t)==5: t[0] = ArrayLit(t[3].children)
+    else: raise NotImplementedError('unk_len',len(t))
+  def p_error(self,t):
+    print 'error',t
+    raise NotImplementedError
 
-tokens = ('STRLIT','INTLIT','NAME','OPERATOR','SUBLIT','BRACE','SEP')
-LEXER = ply.lex.lex()
+LEXER = ply.lex.lex(module=SqlGrammar())
 def lex(string):
   safe_lexer = LEXER.clone() # reentrant? I can't tell, I hate implicit globals. do a threading test
   safe_lexer.input(string)
@@ -206,6 +265,10 @@ def lex(string):
     if t: a.append(t)
     else: break
   return a
+
+YACC = ply.yacc.yacc(module=SqlGrammar(),debug=0,write_tables=0)
+def yacc(string):
+  return YACC.parse(string, lexer=LEXER.clone())
 
 class SQLG(lrparsing.Grammar):
   class T(lrparsing.TokenRegistry):
