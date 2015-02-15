@@ -191,6 +191,7 @@ def test_case():
   tables,runsql=prep('create table t1 (a int,b int)')
   tables['t1'].rows=[[0,1],[1,2],[2,3]]
   assert [[2],[6],[9]]==runsql('select case when a=0 then 2*b else 3*b end from t1')
+  raise NotImplementedError('test case without else (returns null)')
 
 def test_array_ops():
   tables,runsql=prep('create table t1 (a int,b int[])')

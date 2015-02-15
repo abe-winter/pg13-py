@@ -186,35 +186,38 @@ def tup_remove(tup,val):
     return tup[:i]+tup[i+1:]
   else: return tup
 
+def ulkw(kw): "uppercase/lowercase keyword"; return '%s|%s'%(kw.lower(),kw.upper())
+
+KEYWORDS = {w:'kw_'+w for w in 'array case when then else end'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
   t_STRLIT = "'((?<=\\\\)'|[^'])+'"
   t_INTLIT = '\d+'
-  t_NAME = '[A-Za-z]\w*'
   t_SUBLIT = '%s'
   t_ARITH = '\|\||\/|\+|\-'
   t_CMP = '\!=|@>|<|>'
   t_BOOL = 'and|or|in|not|is'
-  t_KWARRAY = 'array|ARRAY'
+  def t_NAME(self,t):
+    '[A-Za-z]\w*'
+    # warning: this allows stuff like SeLeCt with mixed case. who cares.
+    t.type = KEYWORDS[t.value.lower()] if t.value.lower() in KEYWORDS else 'BOOL' if t.value.lower() in ('is','not') else 'NAME'
+    return t
   literals = ('[',']','(',')','{','}',',','.','*','=','-')
   t_ignore = ' '
-  @staticmethod
-  def t_error(t): raise SQLSyntaxError(t) # I think t is LexToken(error,unparsed_tail)
+  def t_error(self,t): raise SQLSyntaxError(t) # I think t is LexToken(error,unparsed_tail)
   tokens = (
     # general
     'STRLIT','INTLIT','NAME','SUBLIT',
     # operators
     'ARITH','CMP','BOOL',
-    # keywords
-    'KWARRAY',
-  )
+  ) + tuple(KEYWORDS.values())
   precedence = (
     # ('left','DOT'),
   )
-  def p_x_name(self,t): "expression : NAME"; t[0] = NameX(t[1])
-  def p_float(self,t): "float : INTLIT '.' INTLIT"; t[0] = Literal(float('%s.%s'%(t[1],t[3])))
-  def p_int(self,t): "int : INTLIT"; t[0] = Literal(int(t[1]))
-  def p_strlit(self,t): "strlit : STRLIT"; print t[1]; raise NotImplementedError
+  def p_name(self,t): "expression : NAME"; t[0] = NameX(t[1])
+  def p_float(self,t): "expression : INTLIT '.' INTLIT"; t[0] = Literal(float('%s.%s'%(t[1],t[3])))
+  def p_int(self,t): "expression : INTLIT"; t[0] = Literal(int(t[1]))
+  def p_strlit(self,t): "expression : STRLIT"; print t[1]; raise NotImplementedError
   def p_unop(self,t):
     "unop : '-'"
     t[0] = OpX(t[1])
@@ -226,17 +229,12 @@ class SqlGrammar:
     t[0] = OpX(t[1])
   def p_x_boolx(self,t):
     """expression : expression binop expression
+                  | expression '=' expression
                   | unop expression
     """
-    if len(t)==4: t[0] = BinX(t[2],t[1],t[3])
+    if len(t)==4: t[0] = BinX(OpX(t[2]) if t[2]=='=' else t[2],t[1],t[3])
     elif len(t)==3: t[0] = UnX(t[1],t[2])
     else: raise NotImplementedError
-  def p_x_literal(self,t):
-    """expression : int
-                  | float
-                  | strlit
-    """
-    t[0] = t[1]
   def p_x_commalist(self,t):
     """commalist : commalist ',' expression
                  | expression
@@ -246,11 +244,39 @@ class SqlGrammar:
     else: raise NotImplementedError('unk_len',len(t))
   def p_array(self,t):
     """expression : '{' commalist '}'
-                  | KWARRAY '[' commalist ']'
+                  | kw_array '[' commalist ']'
     """
     if len(t)==4: t[0] = ArrayLit(t[2].children)
     elif len(t)==5: t[0] = ArrayLit(t[3].children)
     else: raise NotImplementedError('unk_len',len(t))
+  def p_whenlist(self,t):
+    """whenlist : whenlist kw_when expression kw_then expression
+                | kw_when expression kw_then expression
+    """
+    if len(t)==5: t[0] = [WhenX(t[2],t[4])]
+    elif len(t)==6: t[0] = t[1] + [WhenX(t[3],t[5])]
+    else: raise NotImplementedError('unk_len',len(t))
+  def p_case(self,t):
+    """expression : kw_case whenlist kw_else expression kw_end
+                  | kw_case whenlist kw_end
+    """
+    if len(t)==4: t[0] = CaseX(t[2],None)
+    elif len(t)==6: t[0] = CaseX(t[2],t[4])
+    else: raise NotImplementedError('unk_len',len(t))
+  def p_call(self,t):
+    "expression : NAME '(' commalist ')'"
+    raise NotImplementedError
+  def _p_attr(self,t):
+    "expression : NAME '.' NAME"
+    raise NotImplementedError
+  """
+expr = Prio(Ref('case'), boolx, call, attr, token, parenx, Ref('array_ctor'))
+whenx = kw('when') + expr + kw('then') + expr
+case = kw('case') + Repeat(whenx,1) + kw('else') + expr + kw('end')
+attr = Prio(THIS, T.name) + '.' + (T.name | aster) # warning: * shouldn't be allowed in calls
+call = Prio(attr, T.name) + '(' + Ref('commalist') + ')' # todo: commalist. also, not sure attrs are callable in sql.
+"""
+
   def p_error(self,t):
     print 'error',t
     raise NotImplementedError

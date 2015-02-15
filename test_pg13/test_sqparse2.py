@@ -22,14 +22,15 @@ def shortlex(string): return [(tok.type,tok.value) for tok in sqparse2.lex(strin
 def test_lex_select():
   assert shortlex('select * from t1 where a=b') == [('NAME','select'), ('*','*'), ('NAME','from'), ('NAME','t1'), ('NAME','where'), ('NAME','a'), ('=','='), ('NAME','b')]
 def test_lex_array():
-  assert shortlex('array[1,2,3]')==[('KWARRAY','array'), ('[','['), ('INTLIT','1'), (',',','), ('INTLIT','2'), (',',','), ('INTLIT','3'), (']',']')]
+  assert shortlex('array[1,2,3]')==[('kw_array','array'), ('[','['), ('INTLIT','1'), (',',','), ('INTLIT','2'), (',',','), ('INTLIT','3'), (']',']')]
 def test_lex_strlit():
   assert shortlex("'abc def \\'ghi'") == [('STRLIT',"'abc def \\'ghi'")]
 def test_lex_float():
   assert shortlex('1.2') == [('INTLIT','1'), ('.','.'), ('INTLIT','2')]
 def test_lex_long_toks():
-  assert shortlex('a is not b')==[('NAME','a'),('BOOL','is'),('BOOL','not'),('NAME','b')]
+  assert shortlex('a is not b')==[('NAME','a'),('BOOL','is'),('BOOL','not'),('NAME','b')] # todo: this is wrong
   assert shortlex('a != b')[1]==('CMP','!=')
+  assert shortlex('a = b')[1]==('=','=')
 
 @pytest.mark.xfail
 def test_reentrant_lexing():
@@ -44,6 +45,21 @@ def test_parse_array():
   arr = ArrayLit([Literal(1),Literal(2),Literal(3)])
   assert arr==sqparse2.yacc('{1,2,3}')
   assert arr==sqparse2.yacc('array[1,2,3]')
+def test_parse_case():
+  from pg13.sqparse2 import CaseX,WhenX,Literal,BinX,OpX,NameX
+  assert sqparse2.yacc('case when 1 then 10 else 20 end')==CaseX(
+    [WhenX(Literal(1),Literal(10))],
+    Literal(20)
+  )
+  print sqparse2.yacc('case when 1 then 10 when x=5 then 11 else 5 end')
+  assert sqparse2.yacc('case when 1 then 10 when x=5 then 11 else 5 end')==CaseX(
+    [WhenX(Literal(1),Literal(10)), WhenX(BinX(OpX('='),NameX('x'),Literal(5)),Literal(11))],
+    Literal(5)
+  )
+  assert sqparse2.yacc('case when 1 then 10 end')==CaseX(
+    [WhenX(Literal(1),Literal(10))],
+    None
+  )
 
 @pytest.mark.xfail
 def test_operator_order():
