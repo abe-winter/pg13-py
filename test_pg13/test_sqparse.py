@@ -57,16 +57,16 @@ def test_parse_create():
 def test_parse_insert():
   from pg13.sqparse2 import InsertX,NameX,CommaX,Literal,ReturnX,AsterX
   assert sqparse2.parse('insert into t1 (a,b) values (1,2)')==InsertX(
-    NameX('t1'), CommaX((NameX('a'),NameX('b'))), CommaX((Literal(1),Literal(2))), None
+    't1', ['a','b'], CommaX((Literal(1),Literal(2))), None
   )
   assert sqparse2.parse('insert into t1 values (1,2)')==InsertX(
-    NameX('t1'), None, CommaX((Literal(1),Literal(2))), None
+    't1', None, CommaX((Literal(1),Literal(2))), None
   )
   assert sqparse2.parse('insert into t1 values (1,2) returning *')==InsertX(
-    NameX('t1'), None, CommaX((Literal(1),Literal(2))), ReturnX(AsterX())
+    't1', None, CommaX((Literal(1),Literal(2))), ReturnX(AsterX())
   )
   assert sqparse2.parse('insert into t1 values (1,2) returning (a,b)')==InsertX(
-    NameX('t1'), None, CommaX((Literal(1),Literal(2))), ReturnX(CommaX((NameX('a'),NameX('b'))))
+    't1', None, CommaX((Literal(1),Literal(2))), ReturnX(CommaX((NameX('a'),NameX('b'))))
   )
 
 def test_parse_update():

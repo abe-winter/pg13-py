@@ -190,7 +190,7 @@ def tup_remove(tup,val):
 
 def ulkw(kw): "uppercase/lowercase keyword"; return '%s|%s'%(kw.lower(),kw.upper())
 
-KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table'.split()}
+KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
   t_STRLIT = "'((?<=\\\\)'|[^'])+'"
@@ -324,6 +324,13 @@ class SqlGrammar:
   def p_createx(self,t):
     "expression : kw_create kw_table nexists NAME '(' create_list pkey_stmt ')'"
     t[0] = CreateX(t[3],t[4],t[6],t[7])
+  def p_returnx(self,t):
+    "opt_returnx : kw_returning expression \n | kw_returning '(' commalist ')' \n | "
+    t[0] = ReturnX(t[3] if len(t)==5 else t[2]) if len(t)>2 else None
+  def p_optparennamelist(self,t): "opt_paren_namelist : '(' namelist ')' \n | "; t[0] = t[2] if len(t)>1 else None
+  def p_insertx(self,t):
+    "expression : kw_insert kw_into NAME opt_paren_namelist kw_values '(' commalist ')' opt_returnx"
+    t[0] = InsertX(t[3],t[4],t[7],t[9])
 
   def p_error(self,t):
     print 'error',t
