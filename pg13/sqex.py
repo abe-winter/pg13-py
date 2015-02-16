@@ -1,7 +1,7 @@
 "expression evaluation helpers for pgmock. has duck-dependencies on pgmock's Table class, needs redesign."
 
 import functools,itertools
-from . import sqparse,threevl
+from . import sqparse2,threevl
 
 # todo: derive errors below from something pg13-specific
 class ColumnNameError(StandardError): "name not in any tables or name matches too many tables"
@@ -11,7 +11,7 @@ def is_aggregate(ex):
   "is the expression something that runs on a list of rows rather than a single row"
   # todo: I think the SQL term for this is 'scalar subquery'. use SQL vocabulary
   # todo doc: explain why it's not necessary to do this check on the whereclause
-  return isinstance(ex,sqparse.CallX) and ex.f in (sqparse.NameX('min'),sqparse.NameX('max'))
+  return isinstance(ex,sqparse2.CallX) and ex.f in ('min','max')
 def contains_aggregate(ex): return bool(sub_slots(ex,is_aggregate))
 
 def evalop(op,left,right):
@@ -44,8 +44,8 @@ class NameIndexer:
   def ctor_fromlist(clas,fromlistx):
     aliases={}
     for from_item in fromlistx.fromlist:
-      if isinstance(from_item,sqparse.FromTableX): clas.update_aliases(aliases,from_item)
-      elif isinstance(from_item,sqparse.JoinX):
+      if isinstance(from_item,sqparse2.FromTableX): clas.update_aliases(aliases,from_item)
+      elif isinstance(from_item,sqparse2.JoinX):
         clas.update_aliases(aliases,from_item.a)
         clas.update_aliases(aliases,from_item.b)
       else: raise TypeError(type(from_item))
@@ -56,18 +56,18 @@ class NameIndexer:
   def __init__(self,aliases,table_order): self.aliases,self.table_order = aliases,table_order
   def index_tuple(self,tables_dict,index,is_set):
     "helper for rowget/rowset"
-    if isinstance(index,sqparse.NameX): index = index.name
+    if isinstance(index,sqparse2.NameX): index = index.name
     # careful below: intentionally if, not elif
     if isinstance(index,basestring):
-      candidates = [t for t in self.table_order if any(f.name.name==index for f in tables_dict[t].fields)]
+      candidates = [t for t in self.table_order if any(f.name==index for f in tables_dict[t].fields)]
       if len(candidates)!=1: raise ColumnNameError(("ambiguous_column" if candidates else "no_such_column"),index)
       tname, = candidates
       return self.table_order.index(tname), tables_dict[tname].lookup(index).index
-    if isinstance(index,sqparse.AttrX):
+    if isinstance(index,sqparse2.AttrX):
       if index.parent.name not in self.aliases: raise TableNameError('table_notin_x',index.parent)
       tname = self.aliases[index.parent.name]
       tindex = self.table_order.index(tname)
-      if isinstance(index.attr,sqparse.AsterX):
+      if isinstance(index.attr,sqparse2.AsterX):
         if is_set: raise ValueError('cant_set_asterisk') # todo: better error class
         else: return (tindex,)
       else: return (tindex,tables_dict[tname].lookup(index.attr).index)
@@ -87,7 +87,7 @@ def decompose_select(selectx):
   nix = NameIndexer.ctor_fromlist(selectx.tables)
   where = []
   for fromx in selectx.tables.fromlist:
-    if isinstance(fromx,sqparse.JoinX) and fromx.on_stmt is not None:
+    if isinstance(fromx,sqparse2.JoinX) and fromx.on_stmt is not None:
       # todo: what happens if on_stmt columns are non-ambiguous in the context of the join tables but ambiguous overall? yuck.
       where.append(fromx.on_stmt)
   if selectx.where: where.append(selectx.where)
@@ -108,8 +108,8 @@ def flatten_scalar(whatever):
 def replace_subqueries(ex,tables):
   # http://www.postgresql.org/docs/9.1/static/sql-expressions.html#SQL-SYNTAX-SCALAR-SUBQUERIES
   # see here for subquery conditions that *do* use multi-rows. ug. http://www.postgresql.org/docs/9.1/static/functions-subquery.html
-  for path in sub_slots(ex, lambda x:isinstance(x,sqparse.SelectX)):
-    ex[path] = sqparse.Literal(flatten_scalar(run_select(ex[path], tables)))
+  for path in sub_slots(ex, lambda x:isinstance(x,sqparse2.SelectX)):
+    ex[path] = sqparse2.Literal(flatten_scalar(run_select(ex[path], tables)))
   return ex # but it was modified in place, too
 
 def run_select(ex,tables):
@@ -120,42 +120,48 @@ def run_select(ex,tables):
   if ex.limit or ex.offset:
     print ex.limit, ex.offset
     raise NotImplementedError('notimp: limit,offset')
+  print 'agg',ex.cols,contains_aggregate(ex.cols)
   if contains_aggregate(ex.cols):
     if not all(is_aggregate(col) or contains_aggregate(col) for col in ex.cols.children):
       # todo: this isn't good enough. what about nesting cases like max(min(whatever))
-      raise sqparse.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
+      raise sqparse2.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
     return evalex(ex.cols,composite_rows,nix,tables)
-  else: return [evalex(ex.cols,r,nix,tables) for r in composite_rows]
+  else:
+    print 'cols',ex.cols.children
+    return [evalex(ex.cols,r,nix,tables) for r in composite_rows]
 
 def starlike(x):
   "weird things happen to cardinality when working with * in comma-lists. this detects when to do that."
-  return isinstance(x,sqparse.AsterX) or isinstance(x,sqparse.AttrX) and isinstance(x.attr,sqparse.AsterX)
+  return isinstance(x,sqparse2.AsterX) or isinstance(x,sqparse2.AttrX) and isinstance(x.attr,sqparse2.AsterX)
 
 def evalex(x,c_row,nix,tables):
   "c_row is a composite row, i.e. a list/tuple of rows from all the query's tables, ordered by nix.table_order"
   def subcall(x): "helper for recursive calls"; return evalex(x,c_row,nix,tables)
   if not isinstance(nix, NameIndexer): raise NotImplementedError # todo: remove this once Table meths are all up-to-date
-  if isinstance(x,sqparse.BinX):
+  if isinstance(x,sqparse2.BinX):
     l,r=map(subcall,(x.left,x.right))
+    print 'binx',l,r
     return evalop(x.op.op,l,r)
-  elif isinstance(x,sqparse.UnX):
+  elif isinstance(x,sqparse2.UnX):
     inner=subcall(x.val)
     if x.op.op=='+': return inner
     elif x.op.op=='-': return -inner
     elif x.op.op=='not': return threevl.ThreeVL.nein(inner)
     else: raise NotImplementedError('unk_op',x.op)
-  elif isinstance(x,sqparse.NameX): return None if x.name=='null' else nix.rowget(tables,c_row,x)
-  elif isinstance(x,sqparse.AsterX):
+  elif isinstance(x,sqparse2.NameX): return None if x.name=='null' else nix.rowget(tables,c_row,x)
+  elif isinstance(x,sqparse2.AsterX):
     # todo doc: how does this get disassembled by caller?
     return sum(c_row,[])
-  elif isinstance(x,sqparse.ArrayLit): return map(subcall,x.vals)
-  elif isinstance(x,(sqparse.Literal,sqparse.ArrayLit)): return x.toliteral()
-  elif isinstance(x,sqparse.CommaX):
+  elif isinstance(x,sqparse2.ArrayLit): return map(subcall,x.vals)
+  elif isinstance(x,(sqparse2.Literal,sqparse2.ArrayLit)): return x.toliteral()
+  elif isinstance(x,sqparse2.CommaX):
     ret = []
     for child in x.children:
+      print 'comma child',child
       (ret.extend if starlike(child) else ret.append)(subcall(child))
     return ret
-  elif isinstance(x,sqparse.CallX):
+  elif isinstance(x,sqparse2.CallX):
+    print 'callx',x
     if is_aggregate(x): # careful: is_aggregate, not contains_aggregate
       if not isinstance(c_row,list): raise TypeError('aggregate function expected a list of rows')
       if len(x.args.children)!=1: raise ValueError('aggregate function expected a single value',x.args)
@@ -169,11 +175,12 @@ def evalex(x,c_row,nix,tables):
       args=subcall(x.args)
       if x.f.name=='coalesce':
         a,b=args # todo: does coalesce take more than 2 args?
+        print 'coalesce',a,b
         return b if a is None else a
       else: raise NotImplementedError('unk_function',x.f.name)
-  elif isinstance(x,sqparse.SelectX): raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
-  elif isinstance(x,sqparse.AttrX):return nix.rowget(tables,c_row,x)
-  elif isinstance(x,sqparse.CaseX):
+  elif isinstance(x,sqparse2.SelectX): raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
+  elif isinstance(x,sqparse2.AttrX):return nix.rowget(tables,c_row,x)
+  elif isinstance(x,sqparse2.CaseX):
     for case in x.cases:
       if subcall(case.when): return subcall(case.then)
     return subcall(x.elsex)
@@ -182,40 +189,41 @@ def evalex(x,c_row,nix,tables):
   # todo doc: why tuple and list below?
   elif isinstance(x,tuple): return tuple(map(subcall, x))
   elif isinstance(x,list): return map(subcall, x)
-  elif isinstance(x,sqparse.ReturnX):
+  elif isinstance(x,sqparse2.ReturnX):
     ret=subcall(x.expr)
     print 'ret:',ret,x.expr
     print "warning: not sure what I'm doing here with cardinality tweak on CommaX"
-    return [ret] if isinstance(x.expr,(sqparse.CommaX,sqparse.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
+    return [ret] if isinstance(x.expr,(sqparse2.CommaX,sqparse2.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
   else: raise NotImplementedError(type(x),x)
 
+# todo: turn BaseX into case classes and read this from them. too error-prone to update 2 places
 SUBSLOT_ATTRS=[
-  (sqparse.BinX, ('left','right')),
-  (sqparse.AssignX, ('expr',)), # todo: can the assign-to name be subbed?
-  (sqparse.UnX, ('val',)),
-  (sqparse.CallX, ('args',)), # this is a CommaX; it will never be a SubLit, so it will always descend down. todo: can function name be subbed?
-  (sqparse.ReturnX, ('expr',)),
-  (sqparse.InsertX, ('table','cols','values','ret')),
-  (sqparse.CreateX, ('name','cols','pkey')),
-  (sqparse.UpdateX, ('tables','assigns','where','ret')),
-  (sqparse.SelectX, ('cols','tables','where','order','limit','offset')),
-  (sqparse.CaseX, ('elsex',)),
-  (sqparse.WhenX, ('when','then')),
-  (sqparse.NameX, ('name',)),
-  (sqparse.AttrX, ('parent','attr')),
-  (sqparse.OpX, ('optype','op')),
-  (sqparse.DeleteX, ('table','where')),
-  (sqparse.JoinX, ('a','b','on_stmt')),
-  (sqparse.FromTableX, ('name','alias')),
-  (sqparse.Literal, ('val',)),
-  (sqparse.AsterX, ()), # this is here to prevent test_subslot_classes from complaining
+  (sqparse2.BinX, ('left','right')),
+  (sqparse2.AssignX, ('expr',)), # todo: can the assign-to name be subbed?
+  (sqparse2.UnX, ('val',)),
+  (sqparse2.CallX, ('args',)), # this is a CommaX; it will never be a SubLit, so it will always descend down. todo: can function name be subbed?
+  (sqparse2.ReturnX, ('expr',)),
+  (sqparse2.InsertX, ('table','cols','values','ret')),
+  (sqparse2.CreateX, ('name','cols','pkey')),
+  (sqparse2.UpdateX, ('tables','assigns','where','ret')),
+  (sqparse2.SelectX, ('cols','tables','where','order','limit','offset')),
+  (sqparse2.CaseX, ('elsex',)),
+  (sqparse2.WhenX, ('when','then')),
+  (sqparse2.NameX, ('name',)),
+  (sqparse2.AttrX, ('parent','attr')),
+  (sqparse2.OpX, ('optype','op')),
+  (sqparse2.DeleteX, ('table','where')),
+  (sqparse2.JoinX, ('a','b','on_stmt')),
+  (sqparse2.FromTableX, ('name','alias')),
+  (sqparse2.Literal, ('val',)),
+  (sqparse2.AsterX, ()), # this is here to prevent test_subslot_classes from complaining
 ]
 VARLEN_ATTRS=[
-  (sqparse.ArrayLit,('vals',)),
-  (sqparse.CommaX,('children',)),
-  (sqparse.CaseX, ('cases',)),
-  (sqparse.FromListX,('fromlist',)),
-  (sqparse.ArrayLit, ('vals',)),
+  (sqparse2.ArrayLit,('vals',)),
+  (sqparse2.CommaX,('children',)),
+  (sqparse2.CaseX, ('cases',)),
+  (sqparse2.FromListX,('fromlist',)),
+  (sqparse2.ArrayLit, ('vals',)),
 ]
 def sub_slots(x,match_fn,path=(),arr=None):
   "recursive. for each match found, add a tree-index tuple to arr"
@@ -239,10 +247,10 @@ def sub_slots(x,match_fn,path=(),arr=None):
 
 def depth_first_sub(expr,values):
   "this *modifies in place* the passed-in expression, recursively replacing SubLit with literals"
-  arr=sub_slots(expr,lambda elt:elt is sqparse.SubLit)
+  arr=sub_slots(expr,lambda elt:elt is sqparse2.SubLit)
   if len(arr)!=len(values): raise ValueError('len',len(arr),len(values))
   for path,val in zip(arr,values):
-    if isinstance(val,(basestring,int,float)): expr[path] = sqparse.Literal(val)
-    elif isinstance(val,(list,tuple)): expr[path] = sqparse.ArrayLit(val)
+    if isinstance(val,(basestring,int,float)): expr[path] = sqparse2.Literal(val)
+    elif isinstance(val,(list,tuple)): expr[path] = sqparse2.ArrayLit(val)
     else: raise TypeError('unk_sub_type',type(val),val)
   return expr

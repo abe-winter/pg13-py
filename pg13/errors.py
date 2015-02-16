@@ -1,0 +1,1 @@
+class PgPoolError(StandardError): pass

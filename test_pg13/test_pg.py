@@ -1,7 +1,7 @@
 "pg.Row tests using pgmock"
 
 import pytest,collections,ujson
-from pg13 import pg,pgmock,sqparse,misc
+from pg13 import pg,pgmock,misc
 
 class Model(pg.Row):
   FIELDS = [('userid','int'),('id2','int'),('content','text'),('arr',pg.SpecialField(list))]
@@ -23,7 +23,7 @@ def test_create_indexes(): raise NotImplementedError # ignoring; no support for 
 def test_create_table():
   ebuns=prepmock(Model)
   assert 4==len(ebuns.pool.tables['model'].fields)
-  assert [sqparse.NameX('userid'),sqparse.NameX('id2')]==ebuns.pool.tables['model'].pkey
+  assert ['userid','id2']==ebuns.pool.tables['model'].pkey
   with pytest.raises(ValueError) as e: Model.create_table(ebuns.pool)
   assert e.value.args==('table_exists','model')
 def test_get(): assert 'a'==Model(0,1,'a','[]')['content']

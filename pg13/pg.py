@@ -4,6 +4,7 @@
 # todo: add profiling hooks
 
 import sys,contextlib,ujson,functools,collections
+from . import errors
 
 def sel(cols,table,where=None):
   'simple query generator'
@@ -68,7 +69,6 @@ class SpecialField(object):
   def sqltype(self): return 'text'
 
 class PgPool(object):
-  # todo: move this to another file so psycopg2 can be an optional dependency. it sucks to build.
   """
   This is the base class for pool wrappers. Most of the Row methods expect one of these as the first argument.
 
@@ -286,7 +286,7 @@ class Row(object):
     vals=clas.serialize_row([f[0] for f in clas.FIELDS],vals)
     query = "insert into %s values (%s)"%(clas.TABLE,','.join(['%s']*len(vals)))
     try: pool_or_cursor.commit(query,vals) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(query,vals)
-    except psycopg2.IntegrityError as e:
+    except errors.PgPoolError as e:
       # todo: make sure IntegrityError is always dupe-key
       raise DupeInsert(clas.TABLE,e) # note: pgmock raises DupeInsert directly, so catching this works in caller. (but args are different)
     return clas(*vals)

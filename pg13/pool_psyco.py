@@ -2,8 +2,8 @@
 this *doesn't* get imported by default because we don't want to have to install a zillion backends (most users only care about one).
 """
 
-import psycopg2.pool
-from . import pg
+import psycopg2.pool,psycopg2
+from . import pg,errors
 
 class PgPoolPsyco(pg.PgPool):
   "see pg.PgPool class for tutorial"
@@ -27,6 +27,7 @@ class PgPoolPsyco(pg.PgPool):
   def __call__(self):
     con = self.pool.getconn()
     try: yield con
+    except psycopg2.IntegrityError as e: raise errors.PgPoolError(e)
     except: raise
     else: con.commit()
     finally: self.pool.putconn(con)

@@ -12,7 +12,7 @@ def test_parse_select():
   selx=sqparse2.parse('select *,coalesce(x+3,0),{4,5},array[1,2],(select i from tbl) from whatever where (z+-1=10) and (y<5.5)')
   assert selx.cols==CommaX((
     AsterX(),
-    CallX(NameX('coalesce'),[
+    CallX('coalesce',[
       BinX(OpX('+'),NameX('x'),Literal(3)),
       Literal(0),
     ]),
@@ -50,6 +50,7 @@ def test_parse_create():
     ], PKeyX(['a','b'])
   )
   ex=sqparse2.parse('create table t1 (a int default 7, b int default null, d int primary key)')
+  print ex.cols[0].default, ex.cols[1].default, ex.cols[2].pkey
   assert ex.cols[0].default==Literal(7) and ex.cols[1].default==NullX() and ex.cols[2].pkey
   assert sqparse2.parse('create table t1 (a int not null)').cols[0].not_null
   print sqparse2.parse('create table if not exists t1 (a int not null)')
