@@ -35,11 +35,22 @@ def test_parse_select():
 
 def test_parse_create():
   # todo: real tests here instead of repr comparison
-  from pg13.sqparse2 import Literal,NameX
-  assert repr(sqparse2.parse('create table tbl (a int, b int, c text[])'))=="CreateX[NameX('tbl'),None](ColX[int,False]('a',default=None,pkey=False,not_null=False),ColX[int,False]('b',default=None,pkey=False,not_null=False),ColX[text,True]('c',default=None,pkey=False,not_null=False))"
-  assert repr(sqparse2.parse('create table tbl (a int, b int, primary key (a,b))'))=="CreateX[NameX('tbl'),PKeyX(a,b)](ColX[int,False]('a',default=None,pkey=False,not_null=False),ColX[int,False]('b',default=None,pkey=False,not_null=False))"
+  from pg13.sqparse2 import Literal,NameX,CreateX,ColX,PKeyX,NullX
+  assert sqparse2.parse('create table tbl (a int, b int, c text[])')==CreateX(
+    False, 'tbl', [
+      ColX('a','int',False,False,None,False),
+      ColX('b','int',False,False,None,False),
+      ColX('c','text',True,False,None,False),
+    ], None
+  )
+  assert sqparse2.parse('create table tbl (a int, b int, primary key (a,b))')==CreateX(
+    False, 'tbl', [
+      ColX('a','int',False,False,None,False),
+      ColX('b','int',False,False,None,False),
+    ], PKeyX(['a','b'])
+  )
   ex=sqparse2.parse('create table t1 (a int default 7, b int default null, d int primary key)')
-  assert ex.cols[0].default==Literal(7) and ex.cols[1].default==NameX('null') and ex.cols[2].pkey
+  assert ex.cols[0].default==Literal(7) and ex.cols[1].default==NullX() and ex.cols[2].pkey
   assert sqparse2.parse('create table t1 (a int not null)').cols[0].not_null
   print sqparse2.parse('create table if not exists t1 (a int not null)')
 

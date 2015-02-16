@@ -57,6 +57,9 @@ class NameX(BaseX):
 class AsterX(BaseX):
   def __repr__(self): return 'AsterX()'
   def __eq__(self,other): return isinstance(other, AsterX)
+class NullX(BaseX):
+  def __repr__(self): return 'NullX()'
+  def __eq__(self,other): return isinstance(other,NullX)
 class FromTableX(BaseX):
   def __init__(self,name,alias): self.name, self.alias = name, alias
   def __repr__(self): return 'FromTableX(%r,%r)'%(self.name,self.alias)
@@ -123,17 +126,18 @@ class SelectX(CommandX):
 
 class ColX(BaseX):
   ATTRS=('name','coltp','isarray','default','pkey','not_null')
-  def __init__(self,name,coltp,isarray,default,pkey,not_null):
+  def __init__(self,name,coltp,isarray,not_null,default,pkey):
     self.name,self.coltp,self.isarray,self.default,self.pkey,self.not_null=name,coltp,isarray,default,pkey,not_null
-  def __repr__(self): return 'ColX[%s,%r](%r,default=%r,pkey=%r,not_null=%r)'%(self.coltp.name,self.isarray,self.name.name,self.default,self.pkey,self.not_null)
+  def __repr__(self): return 'ColX(%r,%r,%r,not_null=%r,default=%r,pkey=%r)'%(self.name,self.coltp,self.isarray,self.not_null,self.default,self.pkey)
   def __eq__(self,other): return isinstance(other,ColX) and all(getattr(self,a)==getattr(other,a) for a in self.ATTRS)
 class PKeyX(BaseX):
   def __init__(self,fields): self.fields=fields
-  def __repr__(self): return 'PKeyX(%s)'%','.join(f.name for f in self.fields)
+  def __repr__(self): return 'PKeyX(%r)'%(self.fields,)
   def __eq__(self,other): return isinstance(other,PKeyX) and self.fields==other.fields
 class CreateX(CommandX):
-  def __init__(self,name,cols,pkey): self.name,self.cols,self.pkey=name,cols,pkey
-  def __repr__(self): return 'CreateX[%r,%r](%s)'%(self.name,self.pkey,','.join(map(repr,self.cols)))
+  def __init__(self,nexists,name,cols,pkey): self.nexists,self.name,self.cols,self.pkey=nexists,name,cols,pkey
+  def __repr__(self): return 'CreateX(%r,%r,%r,%s)'%(self.nexists,self.name,self.cols,self.pkey)
+  def __eq__(self,other): return isinstance(other,CreateX) and (self.nexists,self.name,self.cols,self.pkey)==(other.nexists,other.name,other.cols,other.pkey)
 
 class ReturnX(BaseX):
   def __init__(self,expr): self.expr=expr
@@ -186,7 +190,7 @@ def tup_remove(tup,val):
 
 def ulkw(kw): "uppercase/lowercase keyword"; return '%s|%s'%(kw.lower(),kw.upper())
 
-KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in'.split()}
+KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
   t_STRLIT = "'((?<=\\\\)'|[^'])+'"
@@ -216,23 +220,18 @@ class SqlGrammar:
   def p_int(self,t): "expression : INTLIT"; t[0] = Literal(int(t[1]))
   def p_strlit(self,t): "expression : STRLIT"; t[0] = Literal(t[1][1:-1])
   def p_asterx(self,t): "expression : '*'"; t[0] = AsterX()
-  def p_empty(self,t): "empty :" # explicit empty rule
+  def p_null(self,t): "expression : kw_null"; t[0] = NullX()
   def p_unop(self,t): "unop : '-' \n | kw_not"; t[0] = OpX(t[1])
   def p_isnot(self,t): "isnot : kw_is kw_not"; t[0] = 'is not'
   def p_boolop(self,t): "boolop : kw_and \n | kw_or \n | kw_in"; t[0] = t[1]
   def p_binop(self,t):
-    """binop : ARITH
-             | CMP
-             | boolop
-             | isnot
-             | '='
-             | '-'
-    """
+    "binop : ARITH \n | CMP \n | boolop \n | isnot \n | '=' \n | '-'"
     t[0] = OpX(t[1])
   def p_x_boolx(self,t):
     """expression : unop expression
                   | expression binop expression
     """
+    # todo: ply exposes precedence with %prec, use it.
     if len(t)==4: t[0] = bin_priority(t[2],t[1],t[3])
     elif len(t)==3: t[0] = un_priority(t[1],t[2])
     else: raise NotImplementedError('unk_len',len(t))
@@ -295,14 +294,36 @@ class SqlGrammar:
     if len(t)==2: t[0] = [t[1]]
     elif len(t)==4: t[0] = t[1] + [t[3]]
     else: raise NotImplementedError('unk_len', len(t))
-  def p_fromlist(self,t): "fromlist : kw_from fromitem_list \n | empty"; t[0] = FromListX(t[2] if len(t) == 3 else [])
-  def p_wherex(self,t): "wherex : kw_where expression \n | empty"; t[0] = t[2] if len(t) == 3 else None
-  def p_order(self,t): "order : kw_order kw_by expression \n | empty"; t[0] = t[3] if len(t) == 4 else None
-  def p_limit(self,t): "limit : kw_limit expression \n | empty"; t[0] = t[2] if len(t) == 3 else None
-  def p_offset(self,t): "offset : kw_offset expression \n | empty"; t[0] = t[2] if len(t) == 3 else None
+  def p_fromlist(self,t): "fromlist : kw_from fromitem_list \n | "; t[0] = FromListX(t[2] if len(t) == 3 else [])
+  def p_wherex(self,t): "wherex : kw_where expression \n | "; t[0] = t[2] if len(t) == 3 else None
+  def p_order(self,t): "order : kw_order kw_by expression \n | "; t[0] = t[3] if len(t) == 4 else None
+  def p_limit(self,t): "limit : kw_limit expression \n | "; t[0] = t[2] if len(t) == 3 else None
+  def p_offset(self,t): "offset : kw_offset expression \n | "; t[0] = t[2] if len(t) == 3 else None
   def p_selectx(self,t):
     "expression : kw_select commalist fromlist wherex order limit offset"
     t[0] = SelectX(*t[2:])
+  def p_isarray(self,t): "is_array : '[' ']' \n | "; t[0] = len(t) > 1
+  def p_isnotnull(self,t): "is_notnull : kw_not kw_null \n | "; t[0] = len(t) > 1
+  def p_default(self,t): "default : kw_default expression \n | "; t[0] = t[2] if len(t) > 1 else None
+  def p_ispkey(self,t): "is_pkey : kw_primary kw_key \n | "; t[0] = len(t) > 1
+  def p_colspec(self,t):
+    "col_spec : NAME NAME is_array is_notnull default is_pkey"
+    t[0] = ColX(*t[1:])
+  def p_createlist(self,t):
+    "create_list : create_list ',' col_spec \n | col_spec"
+    if len(t)==2: t[0] = [t[1]]
+    elif len(t)==4: t[0] = t[1] + [t[3]]
+    else: raise NotImplementedError('unk_len',len(t))
+  def p_namelist(self,t):
+    "namelist : namelist ',' NAME \n | NAME"
+    if len(t)==2: t[0] = [t[1]]
+    elif len(t)==4: t[0] = t[1] + [t[3]]
+    else: raise NotImplementedError('unk_len',len(t))
+  def p_pkey(self,t): "pkey_stmt : ',' kw_primary kw_key '(' namelist ')' \n | "; t[0] = PKeyX(t[5]) if len(t) > 1 else None
+  def p_nexists(self,t): "nexists : kw_if kw_not kw_exists \n | "; t[0] = len(t) > 1
+  def p_createx(self,t):
+    "expression : kw_create kw_table nexists NAME '(' create_list pkey_stmt ')'"
+    t[0] = CreateX(t[3],t[4],t[6],t[7])
 
   def p_error(self,t):
     print 'error',t
