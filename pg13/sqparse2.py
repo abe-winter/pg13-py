@@ -161,9 +161,9 @@ class IndexX(CommandX):
   def __repr__(self): return 'IndexX()'
 
 class DeleteX(CommandX):
-  def __init__(self,table,where): self.table,self.where=table,where
-  def __repr__(self): return 'DeleteX(%r,%r)'%(self.table,self.where)
-  def __eq__(self,other): return isinstance(other,DeleteX) and (self.table,self.where)==(other.table,other.where)
+  def __init__(self,table,where,returnx): self.table,self.where,self.returnx=table,where,returnx
+  def __repr__(self): return 'DeleteX(%r,%r,%r)'%(self.table,self.where,self.returnx)
+  def __eq__(self,other): return isinstance(other,DeleteX) and (self.table,self.where,self.returnx)==(other.table,other.where,other.returnx)
 
 def bin_priority(op,left,right):
   "I don't know how to handle order of operations in the LR grammar, so here it is"
@@ -345,9 +345,8 @@ class SqlGrammar:
     "expression : kw_update namelist kw_set assignlist wherex opt_returnx"
     t[0] = UpdateX(t[2],t[4],t[5],t[6])
   def p_deletex(self,t):
-    "expression : kw_delete"
-    # deletex = kw('delete') + kw('from') + T.name + kw('where') + expr
-    raise NotImplementedError
+    "expression : kw_delete kw_from NAME wherex opt_returnx"
+    t[0] = DeleteX(t[3],t[4],t[5])
 
   def p_error(self,t): raise SQLSyntaxError(t)
 
@@ -366,4 +365,5 @@ def lex(string):
 YACC = ply.yacc.yacc(module=SqlGrammar(),debug=0,write_tables=0)
 def parse(string):
   "return a BaseX tree for the string"
+  if string.strip().lower().startswith('create index'): return IndexX(string)
   return YACC.parse(string, lexer=LEXER.clone())

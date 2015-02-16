@@ -143,13 +143,16 @@ def test_parse_index():
 def test_parse_delete():
   from pg13.sqparse2 import NameX,OpX,BinX,Literal
   assert sqparse2.parse('delete from t1 where a=3')==sqparse2.DeleteX(
-    NameX('t1'),
-    BinX(OpX('cmp_op','='), NameX('a'), Literal(3))
+    't1',
+    BinX(OpX('='), NameX('a'), Literal(3)),
+    None
   )
 
 def test_attr():
   from pg13.sqparse2 import AttrX,NameX
-  assert sqparse2.parse('a.b.c')==AttrX(AttrX(NameX('a'),NameX('b')),NameX('c'))
+  assert sqparse2.parse('a.b')==AttrX(NameX('a'),NameX('b'))
+  assert sqparse2.parse('a.*')==AttrX(NameX('a'),sqparse2.AsterX())
+  with pytest.raises(sqparse2.SQLSyntaxError): sqparse2.parse('a.b.c')
 
 def test_join_syntax():
   from pg13.sqparse2 import JoinX,FromListX,FromTableX,BinX,OpX,NameX,AttrX,CommaX,AsterX
