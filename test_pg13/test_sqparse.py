@@ -164,14 +164,14 @@ def test_join_syntax():
   assert sqparse2.parse('select * from t1 join t2 on x=y').tables==FromListX([JoinX(
       FromTableX('t1',None),
       FromTableX('t2',None),
-      BinX(OpX('cmp_op','='), NameX('x'), NameX('y'))
+      BinX(OpX('='), NameX('x'), NameX('y'))
   )])
   x = sqparse2.parse('select t1.* from t1 join t2 on x=y and z=a')
   assert x.cols==CommaX([AttrX(NameX('t1'),AsterX())])
   assert x.tables==FromListX([JoinX(
       FromTableX('t1',None),
       FromTableX('t2',None),
-      BinX(OpX('bool_op','and'),BinX(OpX('cmp_op','='),NameX('x'),NameX('y')),BinX(OpX('cmp_op','='),NameX('z'),NameX('a')))
+      BinX(OpX('and'),BinX(OpX('='),NameX('x'),NameX('y')),BinX(OpX('='),NameX('z'),NameX('a')))
     )])
   assert sqparse2.parse('select t1.*,t2.* from t1 join t2 on x=y').cols==CommaX([
     AttrX(NameX('t1'),AsterX()),
@@ -180,7 +180,7 @@ def test_join_syntax():
   assert sqparse2.parse('select * from t1 join t2 on t1.x=t2.y').tables==FromListX([JoinX(
     FromTableX('t1',None),
     FromTableX('t2',None),
-    BinX(OpX('cmp_op','='),AttrX(NameX('t1'),NameX('x')),AttrX(NameX('t2'),NameX('y')))
+    BinX(OpX('='),AttrX(NameX('t1'),NameX('x')),AttrX(NameX('t2'),NameX('y')))
   )])
 
 def test_xgetset():
@@ -203,5 +203,5 @@ def test_mult_vs_aster():
   from pg13.sqparse2 import AsterX,BinX,OpX,NameX
   assert sqparse2.parse('select *,a*b from t1').cols.children==[
     AsterX(),
-    BinX(OpX('arith_op','*'),NameX('a'),NameX('b'))
+    BinX(OpX('*'),NameX('a'),NameX('b'))
   ]

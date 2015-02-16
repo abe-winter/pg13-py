@@ -226,7 +226,7 @@ class SqlGrammar:
   def p_isnot(self,t): "isnot : kw_is kw_not"; t[0] = 'is not'
   def p_boolop(self,t): "boolop : kw_and \n | kw_or \n | kw_in"; t[0] = t[1]
   def p_binop(self,t):
-    "binop : ARITH \n | CMP \n | boolop \n | isnot \n | '=' \n | '-'"
+    "binop : ARITH \n | CMP \n | boolop \n | isnot \n | '=' \n | '-' \n | '*'"
     t[0] = OpX(t[1])
   def p_x_boolx(self,t):
     """expression : unop expression
@@ -287,7 +287,9 @@ class SqlGrammar:
     """joinx : fromtable kw_join fromtable
              | fromtable kw_join fromtable kw_on expression
     """
-    raise NotImplementedError('joinx')
+    if len(t)==4: t[0] = JoinX(t[1],t[3],None)
+    elif len(t)==6: t[0] = JoinX(t[1],t[3],t[5])
+    else: raise NotImplementedError('unk_len',len(t))
   def p_fromitem(self,t): "fromitem : fromtable \n | joinx"; t[0] = t[1]
   def p_fromitem_list(self,t):
     """fromitem_list : fromitem_list ',' fromitem
