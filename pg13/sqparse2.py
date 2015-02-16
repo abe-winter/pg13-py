@@ -276,8 +276,9 @@ class SqlGrammar:
     "expression : kw_create kw_table nexists NAME '(' create_list pkey_stmt ')'"
     t[0] = CreateX(t[3],t[4],t[6],t[7])
   def p_returnx(self,t):
-    "opt_returnx : kw_returning expression \n | kw_returning '(' commalist ')' \n | "
-    t[0] = ReturnX(t[3] if len(t)==5 else t[2]) if len(t)>2 else None
+    "opt_returnx : kw_returning commalist \n | "
+    # note: this gets weird because '(' commalist ')' is an expression but we need bare commalist to support non-paren returns
+    t[0] = None if len(t)==1 else ReturnX(t[2].children[0] if len(t[2].children)==1 else t[2])
   def p_optparennamelist(self,t): "opt_paren_namelist : '(' namelist ')' \n | "; t[0] = t[2] if len(t)>1 else None
   def p_insertx(self,t):
     "expression : kw_insert kw_into NAME opt_paren_namelist kw_values '(' commalist ')' opt_returnx"

@@ -67,10 +67,10 @@ class Table:
     else: return self.order_rows(self.returnrows(tables_dict,fields,match_rows),order,tables_dict)
   def update(self,setx,where,returning,tables_dict):
     nix = sqex.NameIndexer.ctor_name(self.name)
-    if not all(isinstance(x,sqparse2.AssignX) for x in setx.children): raise TypeError('not_xassign',map(type,setx))
+    if not all(isinstance(x,sqparse2.AssignX) for x in setx): raise TypeError('not_xassign',map(type,setx))
     match_rows=self.match(where,tables_dict,nix) if where else self.rows
     for row in match_rows:
-      for x in setx.children: row[self.lookup(x.col.name).index]=sqex.evalex(x.expr,(row,),nix,tables_dict)
+      for x in setx: row[self.lookup(x.col).index]=sqex.evalex(x.expr,(row,),nix,tables_dict)
     if returning: return sqex.evalex(returning,(row,),nix,tables_dict)
   def delete(self,where,tables_dict):
     # todo: what's the deal with nested selects in delete. does it get evaluated once to a scalar before running the delete?
@@ -86,14 +86,14 @@ def apply_sql(ex,values,tables_dict):
   if isinstance(ex,sqparse2.SelectX): return sqex.run_select(ex,tables_dict)
   elif isinstance(ex,sqparse2.InsertX): return tables_dict[ex.table].insert(ex.cols,ex.values,ex.ret,tables_dict)
   elif isinstance(ex,sqparse2.UpdateX):
-    if len(ex.tables.children)!=1: raise NotImplementedError('multi-table update')
-    return tables_dict[ex.tables.children[0].name].update(ex.assigns,ex.where,ex.ret,tables_dict)
+    if len(ex.tables)!=1: raise NotImplementedError('multi-table update')
+    return tables_dict[ex.tables[0]].update(ex.assigns,ex.where,ex.ret,tables_dict)
   elif isinstance(ex,sqparse2.CreateX):
     if ex.name in tables_dict: raise ValueError('table_exists',ex.name)
     if any(c.pkey for c in ex.cols): raise NotImplementedError('inline pkey')
     tables_dict[ex.name]=Table(ex.name,ex.cols,ex.pkey.fields if ex.pkey else [])
   elif isinstance(ex,sqparse2.IndexX): pass
-  elif isinstance(ex,sqparse2.DeleteX): return tables_dict[ex.table.name].delete(ex.where,tables_dict)
+  elif isinstance(ex,sqparse2.DeleteX): return tables_dict[ex.table].delete(ex.where,tables_dict)
   else: raise TypeError(type(ex))
 
 class ConnectionMock:

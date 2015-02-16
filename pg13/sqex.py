@@ -148,7 +148,7 @@ def evalex(x,c_row,nix,tables):
     elif x.op.op=='-': return -inner
     elif x.op.op=='not': return threevl.ThreeVL.nein(inner)
     else: raise NotImplementedError('unk_op',x.op)
-  elif isinstance(x,sqparse2.NameX): return None if x.name=='null' else nix.rowget(tables,c_row,x)
+  elif isinstance(x,sqparse2.NameX): return nix.rowget(tables,c_row,x)
   elif isinstance(x,sqparse2.AsterX):
     # todo doc: how does this get disassembled by caller?
     return sum(c_row,[])
@@ -168,14 +168,13 @@ def evalex(x,c_row,nix,tables):
       arg,=x.args.children # intentional: error if len!=1
       vals=[evalex(arg,c_r,nix,tables) for c_r in c_row]
       if not vals: return None
-      if x.f.name=='min': return min(vals)
-      elif x.f.name=='max': return max(vals)
+      if x.f=='min': return min(vals)
+      elif x.f=='max': return max(vals)
       else: raise NotImplementedError
     else:
       args=subcall(x.args)
-      if x.f.name=='coalesce':
+      if x.f=='coalesce':
         a,b=args # todo: does coalesce take more than 2 args?
-        print 'coalesce',a,b
         return b if a is None else a
       else: raise NotImplementedError('unk_function',x.f.name)
   elif isinstance(x,sqparse2.SelectX): raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
@@ -189,6 +188,7 @@ def evalex(x,c_row,nix,tables):
   # todo doc: why tuple and list below?
   elif isinstance(x,tuple): return tuple(map(subcall, x))
   elif isinstance(x,list): return map(subcall, x)
+  elif isinstance(x,sqparse2.NullX): return None
   elif isinstance(x,sqparse2.ReturnX):
     ret=subcall(x.expr)
     print 'ret:',ret,x.expr

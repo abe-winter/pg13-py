@@ -1,10 +1,9 @@
 import pytest
-from pg13 import pgmock,sqparse,pg,sqex
+from pg13 import pgmock,sqparse2,pg,sqex
 
 @pytest.mark.xfail
 def test_construct_delete():
-  raise NotImplementedError('implement delete in sqparse')
-  from pg13.sqparse import NameVar,Keyword,Literal
+  from pg13.sqparse2 import NameVar,Keyword,Literal
   from pg13.sqex import XProc
   from pg13.pgmock import XDelete
   assert pgmock.parse_expression('delete from t1 where n=123')==XDelete(
@@ -15,8 +14,7 @@ def test_construct_delete():
 
 @pytest.mark.xfail
 def test_construct_create():
-  raise NotImplementedError('port defaults to sqparse')
-  from pg13.sqparse import Literal,NameVar
+  from pg13.sqparse2 import Literal,NameVar
   from pg13.sqex import XColumn,XComma
   from pg13.pgmock import XCreate
   assert pgmock.parse_expression('create table t1 (a int,b text default "-",c int,primary key (a,b))')==XCreate(
@@ -32,8 +30,8 @@ def test_construct_create():
 def prep(create_stmt):
   "helper for table setup"
   tables={}
-  pgmock.apply_sql(sqparse.parse(create_stmt),(),tables)
-  def runsql(stmt,vals=()): return pgmock.apply_sql(sqparse.parse(stmt),vals,tables)
+  pgmock.apply_sql(sqparse2.parse(create_stmt),(),tables)
+  def runsql(stmt,vals=()): return pgmock.apply_sql(sqparse2.parse(stmt),vals,tables)
   return tables,runsql
 
 def test_default_null_vs_notprovided():
@@ -125,7 +123,7 @@ def test_select_coalesce():
 def test_insert_select():
   tables,runsql=prep("create table t1 (a int, b int, c int)")
   runsql("insert into t1 (a,b,c) values (1,2,3)")
-  print sqparse.parse('insert into t1 (a,b,c) values (2,3,(select c from t1 where a=1))')
+  print sqparse2.parse('insert into t1 (a,b,c) values (2,3,(select c from t1 where a=1))')
   runsql("insert into t1 (a,b,c) values (2,3,(select c from t1 where a=1))")
   assert tables['t1'].rows==[[1,2,3],[2,3,3]]
 
@@ -145,9 +143,10 @@ def test_update():
 def test_update_returning():
   tables,runsql=prep('create table t1(a int,b int,c int)')
   runsql('insert into t1 values(1,2,3)')
-  assert [[3]]==runsql('update t1 set b=5 where a<5 returning c') # todo: make sure list of rows is the right return type
   assert [[1,3]]==runsql('update t1 set b=5 where a<5 returning a,c')
   assert [[1,3]]==runsql('update t1 set b=5 where a<5 returning (a,c)')
+  
+  assert [[3]]==runsql('update t1 set b=5 where a<5 returning c') # todo: make sure list of rows is the right return type
 
 def test_in_operator():
   tables,runsql=prep("create table t1 (a int, b int, c int)")
@@ -168,7 +167,7 @@ def test_not():
   "todo: double-check operator precedence of not vs ="
   tables,runsql=prep("create table t1 (a int,b int)")
   tables['t1'].rows=[[0,0],[1,1]]
-  print sqparse.parse("select * from t1 where not a=0")
+  print sqparse2.parse("select * from t1 where not a=0")
   assert [[1,1]]==runsql("select * from t1 where not a=0")
 
 def test_null_handling():
@@ -206,7 +205,7 @@ def test_select_order():
   # todo: asc/desc, test more complicated expressions
   tables,runsql=prep('create table t1 (a int,b int)')
   tables['t1'].rows=[[i,0] for i in range(10,0,-1)]
-  print sqparse.parse('select * from t1 order by a')
+  print sqparse2.parse('select * from t1 order by a')
   rows=runsql('select * from t1 order by a')
   print 'tso',rows
   assert rows==sorted(rows)
@@ -240,14 +239,14 @@ def test_join_attr():
 
 # todo: test_name_indexer should be in test_sqex except for reliance on tables_dict. move Table to its own file.
 def test_name_indexer():
-  from pg13.sqparse import NameX,AttrX,AsterX
-  x = sqparse.parse('select * from t1, t2 as alias')
+  from pg13.sqparse2 import NameX,AttrX,AsterX
+  x = sqparse2.parse('select * from t1, t2 as alias')
   ni = sqex.NameIndexer.ctor_fromlist(x.tables)
   assert ni.table_order==['t1','t2']
   tables,runsql=prep('create table t1 (a int,b int)')
   runsql('create table t2 (a int,c int)')
   assert (0,1)==ni.index_tuple(tables,'b',False)
-  assert (0,1)==ni.index_tuple(tables,sqparse.NameX('b'),False) # make sure NameX handling works
+  assert (0,1)==ni.index_tuple(tables,sqparse2.NameX('b'),False) # make sure NameX handling works
   assert (1,1)==ni.index_tuple(tables,'c',False)
   with pytest.raises(sqex.ColumnNameError): ni.index_tuple(tables,'a',False)
   assert (0, 0) == ni.index_tuple(tables,AttrX(NameX('t1'),'a'),False)
@@ -255,8 +254,8 @@ def test_name_indexer():
   assert (1,) == ni.index_tuple(tables,AttrX(NameX('alias'),AsterX()),False)
   assert (0,) == ni.index_tuple(tables,AttrX(NameX('t1'),AsterX()),False)
   assert (1,) == ni.index_tuple(tables,AttrX(NameX('t2'),AsterX()),False)
-  with pytest.raises(sqex.TableNameError): ni.index_tuple(tables,sqparse.AttrX(NameX('bad_alias'),'e'),False)
-  with pytest.raises(ValueError): ni.index_tuple(tables,sqparse.AttrX(NameX('t2'),AsterX()),True)
+  with pytest.raises(sqex.TableNameError): ni.index_tuple(tables,sqparse2.AttrX(NameX('bad_alias'),'e'),False)
+  with pytest.raises(ValueError): ni.index_tuple(tables,sqparse2.AttrX(NameX('t2'),AsterX()),True)
 
 def test_nested_select():
   "nested select has cardinality issues; add cases as they come up"
