@@ -17,7 +17,7 @@ pg13 takes a different approach:
 * every test can create and populate its own lightweight database
 * tests are deterministic (at least with respect to database reuse)
 * parallelization is safe (at least with respect to data)
-* performance: about 100 tests per second on my laptop. the only thing we do faster than a real DB is instantiate a table, but that adds up.
+* performance: 200+ tests per second on my laptop
 
 Drop me a line if you're using this. `@gmail: awinter.public` (hint: turn it around)
 
