@@ -175,7 +175,7 @@ class SqlGrammar:
   def p_isnot(self,t): "isnot : kw_is kw_not"; t[0] = 'is not'
   def p_boolop(self,t): "boolop : kw_and \n | kw_or \n | kw_in"; t[0] = t[1]
   def p_binop(self,t):
-    "binop : ARITH \n | CMP \n | boolop \n | isnot \n | '=' \n | '-' \n | '*'"
+    "binop : ARITH \n | CMP \n | boolop \n | isnot \n | '=' \n | '-' \n | '*' \n | kw_is"
     t[0] = OpX(t[1])
   def p_x_boolx(self,t):
     """expression : unop expression

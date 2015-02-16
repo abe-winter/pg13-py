@@ -120,15 +120,12 @@ def run_select(ex,tables):
   if ex.limit or ex.offset:
     print ex.limit, ex.offset
     raise NotImplementedError('notimp: limit,offset')
-  print 'agg',ex.cols,contains_aggregate(ex.cols)
   if contains_aggregate(ex.cols):
     if not all(is_aggregate(col) or contains_aggregate(col) for col in ex.cols.children):
       # todo: this isn't good enough. what about nesting cases like max(min(whatever))
       raise sqparse2.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
     return evalex(ex.cols,composite_rows,nix,tables)
-  else:
-    print 'cols',ex.cols.children
-    return [evalex(ex.cols,r,nix,tables) for r in composite_rows]
+  else: return [evalex(ex.cols,r,nix,tables) for r in composite_rows]
 
 def starlike(x):
   "weird things happen to cardinality when working with * in comma-lists. this detects when to do that."
@@ -140,7 +137,6 @@ def evalex(x,c_row,nix,tables):
   if not isinstance(nix, NameIndexer): raise NotImplementedError # todo: remove this once Table meths are all up-to-date
   if isinstance(x,sqparse2.BinX):
     l,r=map(subcall,(x.left,x.right))
-    print 'binx',l,r
     return evalop(x.op.op,l,r)
   elif isinstance(x,sqparse2.UnX):
     inner=subcall(x.val)
@@ -157,7 +153,6 @@ def evalex(x,c_row,nix,tables):
   elif isinstance(x,sqparse2.CommaX):
     ret = []
     for child in x.children:
-      print 'comma child',child
       (ret.extend if starlike(child) else ret.append)(subcall(child))
     return ret
   elif isinstance(x,sqparse2.CallX):
