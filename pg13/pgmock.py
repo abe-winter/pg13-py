@@ -84,7 +84,7 @@ def apply_sql(ex,values,tables_dict):
   sqex.depth_first_sub(ex,values)
   sqex.replace_subqueries(ex,tables_dict)
   if isinstance(ex,sqparse2.SelectX): return sqex.run_select(ex,tables_dict)
-  elif isinstance(ex,sqparse2.InsertX): return tables_dict[ex.table].insert(ex.cols,ex.values.children,ex.ret,tables_dict)
+  elif isinstance(ex,sqparse2.InsertX): return tables_dict[ex.table].insert(ex.cols,ex.values,ex.ret,tables_dict)
   elif isinstance(ex,sqparse2.UpdateX):
     if len(ex.tables.children)!=1: raise NotImplementedError('multi-table update')
     return tables_dict[ex.tables.children[0].name].update(ex.assigns,ex.where,ex.ret,tables_dict)

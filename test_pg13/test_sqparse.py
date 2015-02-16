@@ -8,20 +8,20 @@ def test_parse_arraylit():
 
 def test_parse_select():
   # this is also testing nesting and various whatever
-  from pg13.sqparse2 import NameX,CommaX,SelectX,Literal,ArrayLit,BinX,UnX,OpX,CallX,FromListX,FromTableX,AsterX
+  from pg13.sqparse2 import NameX,CommaX,SelectX,Literal,ArrayLit,BinX,UnX,OpX,CallX,FromTableX,AsterX
   selx=sqparse2.parse('select *,coalesce(x+3,0),{4,5},array[1,2],(select i from tbl) from whatever where (z+-1=10) and (y<5.5)')
   assert selx.cols==CommaX((
     AsterX(),
-    CallX('coalesce',[
+    CallX('coalesce',CommaX([
       BinX(OpX('+'),NameX('x'),Literal(3)),
       Literal(0),
-    ]),
+    ])),
     ArrayLit((Literal(4),Literal(5))),
     ArrayLit((Literal(1),Literal(2))),
-    SelectX(CommaX([NameX('i')]),FromListX([FromTableX('tbl',None)]),None,None,None,None),
+    SelectX(CommaX([NameX('i')]),[FromTableX('tbl',None)],None,None,None,None),
   ))
   # nested select in comma
-  assert selx.tables==FromListX([FromTableX('whatever',None)])
+  assert selx.tables==[FromTableX('whatever',None)]
   assert selx.where==BinX(
     OpX('and'),
     BinX(
@@ -58,16 +58,16 @@ def test_parse_create():
 def test_parse_insert():
   from pg13.sqparse2 import InsertX,NameX,CommaX,Literal,ReturnX,AsterX
   assert sqparse2.parse('insert into t1 (a,b) values (1,2)')==InsertX(
-    't1', ['a','b'], CommaX((Literal(1),Literal(2))), None
+    't1', ['a','b'], [Literal(1),Literal(2)], None
   )
   assert sqparse2.parse('insert into t1 values (1,2)')==InsertX(
-    't1', None, CommaX((Literal(1),Literal(2))), None
+    't1', None, [Literal(1),Literal(2)], None
   )
   assert sqparse2.parse('insert into t1 values (1,2) returning *')==InsertX(
-    't1', None, CommaX((Literal(1),Literal(2))), ReturnX(AsterX())
+    't1', None, [Literal(1),Literal(2)], ReturnX(AsterX())
   )
   assert sqparse2.parse('insert into t1 values (1,2) returning (a,b)')==InsertX(
-    't1', None, CommaX((Literal(1),Literal(2))), ReturnX(CommaX((NameX('a'),NameX('b'))))
+    't1', None, [Literal(1),Literal(2)], ReturnX(CommaX((NameX('a'),NameX('b'))))
   )
 
 def test_parse_update():
@@ -156,33 +156,33 @@ def test_attr():
   with pytest.raises(sqparse2.SQLSyntaxError): sqparse2.parse('a.b.c')
 
 def test_join_syntax():
-  from pg13.sqparse2 import JoinX,FromListX,FromTableX,BinX,OpX,NameX,AttrX,CommaX,AsterX
+  from pg13.sqparse2 import JoinX,FromTableX,BinX,OpX,NameX,AttrX,CommaX,AsterX
   ex=sqparse2.parse('select * from t1,t2 where t1.x=t2.y')
   assert all(isinstance(x,sqparse2.AttrX) for x in (ex.where.left,ex.where.right))
-  assert sqparse2.parse('select * from t1 join t2').tables==FromListX([
+  assert sqparse2.parse('select * from t1 join t2').tables==[
     JoinX(FromTableX('t1',None),FromTableX('t2',None),None)
-  ])
-  assert sqparse2.parse('select * from t1 join t2 on x=y').tables==FromListX([JoinX(
-      FromTableX('t1',None),
-      FromTableX('t2',None),
-      BinX(OpX('='), NameX('x'), NameX('y'))
-  )])
+  ]
+  assert sqparse2.parse('select * from t1 join t2 on x=y').tables==[JoinX(
+    FromTableX('t1',None),
+    FromTableX('t2',None),
+    BinX(OpX('='), NameX('x'), NameX('y'))
+  )]
   x = sqparse2.parse('select t1.* from t1 join t2 on x=y and z=a')
   assert x.cols==CommaX([AttrX(NameX('t1'),AsterX())])
-  assert x.tables==FromListX([JoinX(
-      FromTableX('t1',None),
-      FromTableX('t2',None),
-      BinX(OpX('and'),BinX(OpX('='),NameX('x'),NameX('y')),BinX(OpX('='),NameX('z'),NameX('a')))
-    )])
+  assert x.tables==[JoinX(
+    FromTableX('t1',None),
+    FromTableX('t2',None),
+    BinX(OpX('and'),BinX(OpX('='),NameX('x'),NameX('y')),BinX(OpX('='),NameX('z'),NameX('a')))
+  )]
   assert sqparse2.parse('select t1.*,t2.* from t1 join t2 on x=y').cols==CommaX([
     AttrX(NameX('t1'),AsterX()),
     AttrX(NameX('t2'),AsterX())
   ])
-  assert sqparse2.parse('select * from t1 join t2 on t1.x=t2.y').tables==FromListX([JoinX(
+  assert sqparse2.parse('select * from t1 join t2 on t1.x=t2.y').tables==[JoinX(
     FromTableX('t1',None),
     FromTableX('t2',None),
     BinX(OpX('='),AttrX(NameX('t1'),NameX('x')),AttrX(NameX('t2'),NameX('y')))
-  )])
+  )]
 
 def test_xgetset():
   "tree-aware getitem/setitem for expressions"
@@ -194,10 +194,11 @@ def test_xgetset():
   x['where','left','attr'] = 'hello'
   assert x['where','left']==AttrX(NameX('t1'),'hello')
   # index get
-  assert x['tables',('fromlist',0)]==FromTableX('t1',None)
+  assert x[('tables',0),]==FromTableX('t1',None)
   # index set
-  x['tables',('fromlist',0)] = 'hello'
-  assert x['tables','fromlist'][0]=='hello'
+  x[('tables',0),] = 'hello'
+  assert x.tables[0] == 'hello'
+  assert x[('tables',0),] == 'hello'
 
 def test_mult_vs_aster():
   "make sure that asterisk is handled differently from the multiplication operator"

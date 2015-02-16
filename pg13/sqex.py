@@ -43,7 +43,7 @@ class NameIndexer:
   @classmethod
   def ctor_fromlist(clas,fromlistx):
     aliases={}
-    for from_item in fromlistx.fromlist:
+    for from_item in fromlistx:
       if isinstance(from_item,sqparse2.FromTableX): clas.update_aliases(aliases,from_item)
       elif isinstance(from_item,sqparse2.JoinX):
         clas.update_aliases(aliases,from_item.a)
@@ -86,7 +86,7 @@ def decompose_select(selectx):
   "return [(parent,setter) for scalar_subquery], wherex_including_on, NameIndexer. helper for run_select"
   nix = NameIndexer.ctor_fromlist(selectx.tables)
   where = []
-  for fromx in selectx.tables.fromlist:
+  for fromx in selectx.tables:
     if isinstance(fromx,sqparse2.JoinX) and fromx.on_stmt is not None:
       # todo: what happens if on_stmt columns are non-ambiguous in the context of the join tables but ambiguous overall? yuck.
       where.append(fromx.on_stmt)
@@ -196,53 +196,22 @@ def evalex(x,c_row,nix,tables):
     return [ret] if isinstance(x.expr,(sqparse2.CommaX,sqparse2.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
   else: raise NotImplementedError(type(x),x)
 
-# todo: turn BaseX into case classes and read this from them. too error-prone to update 2 places
-SUBSLOT_ATTRS=[
-  (sqparse2.BinX, ('left','right')),
-  (sqparse2.AssignX, ('expr',)), # todo: can the assign-to name be subbed?
-  (sqparse2.UnX, ('val',)),
-  (sqparse2.CallX, ('args',)), # this is a CommaX; it will never be a SubLit, so it will always descend down. todo: can function name be subbed?
-  (sqparse2.ReturnX, ('expr',)),
-  (sqparse2.InsertX, ('table','cols','values','ret')),
-  (sqparse2.CreateX, ('name','cols','pkey')),
-  (sqparse2.UpdateX, ('tables','assigns','where','ret')),
-  (sqparse2.SelectX, ('cols','tables','where','order','limit','offset')),
-  (sqparse2.CaseX, ('elsex',)),
-  (sqparse2.WhenX, ('when','then')),
-  (sqparse2.NameX, ('name',)),
-  (sqparse2.AttrX, ('parent','attr')),
-  (sqparse2.OpX, ('optype','op')),
-  (sqparse2.DeleteX, ('table','where')),
-  (sqparse2.JoinX, ('a','b','on_stmt')),
-  (sqparse2.FromTableX, ('name','alias')),
-  (sqparse2.Literal, ('val',)),
-  (sqparse2.AsterX, ()), # this is here to prevent test_subslot_classes from complaining
-]
-VARLEN_ATTRS=[
-  (sqparse2.ArrayLit,('vals',)),
-  (sqparse2.CommaX,('children',)),
-  (sqparse2.CaseX, ('cases',)),
-  (sqparse2.FromListX,('fromlist',)),
-  (sqparse2.ArrayLit, ('vals',)),
-]
 def sub_slots(x,match_fn,path=(),arr=None):
   "recursive. for each match found, add a tree-index tuple to arr"
   if arr is None: arr=[]
-  for clas,attrs in VARLEN_ATTRS:
-    if isinstance(x,clas):
-      for attr in attrs:
-        for i,elt in enumerate(getattr(x,attr)):
+  if isinstance(x,sqparse2.BaseX):
+    for attr in x.ATTRS:
+      if attr in x.VARLEN:
+        val = getattr(x,attr)
+        for i,elt in enumerate(val or ()):
           nextpath = path + ((attr,i),)
           if match_fn(elt): arr.append(nextpath)
           sub_slots(elt,match_fn,nextpath,arr)
-      break # note: don't optimize this out. CaseX has subslot and varlen attrs
-  for clas,attrs in SUBSLOT_ATTRS:
-    if isinstance(x,clas):
-      for attr in attrs:
+      else:
         nextpath = path + (attr,)
-        if match_fn(getattr(x,attr)): arr.append(nextpath)
-        sub_slots(getattr(x,attr),match_fn,nextpath,arr)
-      break
+        val = getattr(x,attr)
+        if match_fn(val): arr.append(nextpath)
+        sub_slots(val,match_fn,nextpath,arr)
   return arr
 
 def depth_first_sub(expr,values):

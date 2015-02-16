@@ -67,11 +67,11 @@ def test_parse_attr():
   assert sqparse2.parse('hello.abc')==AttrX(NameX('hello'),NameX('abc'))
   assert sqparse2.parse('hello.*')==AttrX(NameX('hello'),AsterX())
 def test_parse_call():
-  from pg13.sqparse2 import CallX,Literal,NameX
-  assert sqparse2.parse('call(1,2,3)')==CallX('call',[Literal(1), Literal(2), Literal(3)])
+  from pg13.sqparse2 import CallX,Literal,NameX,CommaX
+  assert sqparse2.parse('call(1,2,3)')==CallX('call',CommaX([Literal(1), Literal(2), Literal(3)]))
 def test_parse_select():
-  from pg13.sqparse2 import SelectX,CommaX,AsterX,FromListX,FromTableX,BinX,OpX,NameX
-  assert sqparse2.parse('select * from t1 where a=b')==SelectX(CommaX([AsterX()]),FromListX([FromTableX('t1',None)]),BinX(OpX('='),NameX('a'),NameX('b')),None,None,None)
+  from pg13.sqparse2 import SelectX,CommaX,AsterX,FromTableX,BinX,OpX,NameX
+  assert sqparse2.parse('select * from t1 where a=b')==SelectX(CommaX([AsterX()]),[FromTableX('t1',None)],BinX(OpX('='),NameX('a'),NameX('b')),None,None,None)
 
 @pytest.mark.xfail
 def test_operator_order():

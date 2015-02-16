@@ -60,10 +60,6 @@ class AsterX(BaseX): pass
 class NullX(BaseX): pass
 class FromTableX(BaseX): ATTRS = ('name','alias')
 class JoinX(BaseX): ATTRS = ('a','b','on_stmt')
-class FromListX(BaseX):
-  "fromlist is a list of FromTableX | JoinX"
-  ATTRS = ('fromlist',)
-  VARLEN = ('fromlist',)
 class OpX(BaseX):
   PRIORITY=('or','and','not','>','<','@>','||','!=','=','is not','is','in','*','/','+','-') # not is tight because it's unary when solo
   ATTRS = ('op',)
@@ -84,9 +80,7 @@ class CommaX(BaseX):
   ATTRS = ('children',)
   VARLEN = ('children',)
   def __init__(self,children): self.children=list(children) # needs to be a list (i.e. mutable) for SubLit substitution (in sqex.sub_slots)
-class CallX(BaseX):
-  ATTRS = ('f','args')
-  VARLEN = ('args',)
+class CallX(BaseX): ATTRS = ('f','args') # args is not VARLEN; it's a commax because it's passed to evalex I think
 class WhenX(BaseX): ATTRS = ('when','then')
 class CaseX(BaseX):
   ATTRS = ('cases','elsex')
@@ -96,7 +90,7 @@ class AttrX(BaseX): ATTRS = ('parent','attr')
 class CommandX(BaseX): "base class for top-level commands. probably won't ever be used."
 class SelectX(CommandX):
   ATTRS = ('cols','tables','where','order','limit','offset')
-  VARLEN = ('cols','tables')
+  VARLEN = ('tables',)
 
 class ColX(BaseX): ATTRS = ('name','coltp','isarray','not_null','default','pkey')
 class PKeyX(BaseX):
@@ -221,7 +215,7 @@ class SqlGrammar:
     else: raise NotImplementedError('unk_len',len(t))
   def p_call(self,t):
     "expression : NAME '(' commalist ')'"
-    t[0] = CallX(t[1], t[3].children)
+    t[0] = CallX(t[1], t[3])
   def p_attr(self,t):
     """attr : NAME '.' NAME
                   | NAME '.' '*'
@@ -253,7 +247,7 @@ class SqlGrammar:
     if len(t)==2: t[0] = [t[1]]
     elif len(t)==4: t[0] = t[1] + [t[3]]
     else: raise NotImplementedError('unk_len', len(t))
-  def p_fromlist(self,t): "fromlist : kw_from fromitem_list \n | "; t[0] = FromListX(t[2] if len(t) == 3 else [])
+  def p_fromlist(self,t): "fromlist : kw_from fromitem_list \n | "; t[0] = t[2] if len(t) == 3 else []
   def p_wherex(self,t): "wherex : kw_where expression \n | "; t[0] = t[2] if len(t) == 3 else None
   def p_order(self,t): "order : kw_order kw_by expression \n | "; t[0] = t[3] if len(t) == 4 else None
   def p_limit(self,t): "limit : kw_limit expression \n | "; t[0] = t[2] if len(t) == 3 else None
@@ -287,7 +281,7 @@ class SqlGrammar:
   def p_optparennamelist(self,t): "opt_paren_namelist : '(' namelist ')' \n | "; t[0] = t[2] if len(t)>1 else None
   def p_insertx(self,t):
     "expression : kw_insert kw_into NAME opt_paren_namelist kw_values '(' commalist ')' opt_returnx"
-    t[0] = InsertX(t[3],t[4],t[7],t[9])
+    t[0] = InsertX(t[3],t[4],t[7].children,t[9])
   def p_assign(self,t):
     "assign : NAME '=' expression \n | attr '=' expression"
     t[0] = AssignX(t[1],t[3])
