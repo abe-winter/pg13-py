@@ -1,32 +1,6 @@
 import pytest
 from pg13 import pgmock,sqparse2,pg,sqex
 
-@pytest.mark.xfail
-def test_construct_delete():
-  from pg13.sqparse2 import NameVar,Keyword,Literal
-  from pg13.sqex import XProc
-  from pg13.pgmock import XDelete
-  assert pgmock.parse_expression('delete from t1 where n=123')==XDelete(
-    NameVar('t1'),
-    XProc('=',[NameVar('n'),Literal('int',[123])]),
-    [],
-  )
-
-@pytest.mark.xfail
-def test_construct_create():
-  from pg13.sqparse2 import Literal,NameVar
-  from pg13.sqex import XColumn,XComma
-  from pg13.pgmock import XCreate
-  assert pgmock.parse_expression('create table t1 (a int,b text default "-",c int,primary key (a,b))')==XCreate(
-    NameVar('t1'),
-    [
-      XColumn(NameVar('a'),NameVar('int'),None,False),
-      XColumn(NameVar('b'),NameVar('text'),Literal('"',['-']),False),
-      XColumn(NameVar('c'),NameVar('int'),None,False),
-    ],
-    [NameVar('a'),NameVar('b')],
-  )
-
 def prep(create_stmt):
   "helper for table setup"
   tables={}
