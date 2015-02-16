@@ -13,8 +13,15 @@ class SQLSyntaxError(PgMockError): "base class for errors during parsing. beware
 
 class BaseX(object):
   "note: expressions could just be dicts, *but* classes save 'what attrs does this have' experimentation runs. may also help the smater (isinstance-aware) linters."
-  def __eq__(self,other): raise NotImplementedError('%s.eq'%(self.__class__.__name__)) # to avoid false negatives
-  def __repr__(self): return '%s(???)'%(self.__class__.__name__)
+  ATTRS=()
+  VARLEN=()
+  def __init__(self,*args):
+    if len(args)!=len(self.ATTRS): raise TypeError('wrong_n_args',len(args),len(self.ATTRS))
+    for attr,arg in zip(self.ATTRS,args): setattr(self,attr,arg)
+  def __eq__(self,other):
+    return type(self) is type(other) and all(getattr(self,attr)==getattr(other,attr) for attr in self.ATTRS)
+  def __repr__(self):
+    return '%s(%s)'%(self.__class__.__name__,','.join(map(repr,(getattr(self,attr) for attr in self.ATTRS))))
   def child(self,index):
     "helper for __getitem__/__setitem__"
     if isinstance(index,tuple):
@@ -39,131 +46,79 @@ class BaseX(object):
     else: self.child(i[0])[i[1:]] = x
 
 class Literal(BaseX):
-  def __init__(self,val): self.val=val
-  def __repr__(self): return '%s(%r)'%(self.__class__.__name__,self.val)
-  def __eq__(self,other): return type(other) is Literal and self.val==other.val # careful: ArrayLit is an instance of Literal
-  def toliteral(self): return self.val
+  ATTRS = ('val',)
+  def toliteral(self): return self.val # is this still used?
 class ArrayLit(BaseX): # todo: this isn't always a literal. what if there's a select stmt inside? yikes.
-  def __init__(self,vals): self.vals=list(vals) # list so it's settable by sqex.sub_slots
-  def __repr__(self): return 'Literal[Array](%r)'%(self.vals,)
-  def __eq__(self,other): return isinstance(other,ArrayLit) and self.vals==other.vals
-  def toliteral(self): return self.vals
+  ATTRS = ('vals',)
+  VARLEN = ('vals',)
+  def __init__(self,vals): self.vals = list(vals)
+  def toliteral(self): return self.vals # todo: get rid?
 class SubLit(object): pass
 
-class NameX(BaseX):
-  def __init__(self,name): self.name=name
-  def __repr__(self): return 'NameX(%r)'%self.name
-  def __eq__(self,other): return isinstance(other,NameX) and self.name==other.name
-class AsterX(BaseX):
-  def __repr__(self): return 'AsterX()'
-  def __eq__(self,other): return isinstance(other, AsterX)
-class NullX(BaseX):
-  def __repr__(self): return 'NullX()'
-  def __eq__(self,other): return isinstance(other,NullX)
-class FromTableX(BaseX):
-  def __init__(self,name,alias): self.name, self.alias = name, alias
-  def __repr__(self): return 'FromTableX(%r,%r)'%(self.name,self.alias)
-  def __eq__(self,other): return isinstance(other,FromTableX) and (self.name,self.alias)==(other.name,other.alias)
-class JoinX(BaseX):
-  def __init__(self,a,b,on_stmt): self.a,self.b,self.on_stmt=a,b,on_stmt
-  def __repr__(self): return 'JoinX(%r,%r,%r)'%(self.a,self.b,self.on_stmt)
-  def __eq__(self,other): return isinstance(other,JoinX) and (self.a,self.b,self.on_stmt)==(other.a,other.b,other.on_stmt)
+class NameX(BaseX): ATTRS = ('name',)
+class AsterX(BaseX): pass
+class NullX(BaseX): pass
+class FromTableX(BaseX): ATTRS = ('name','alias')
+class JoinX(BaseX): ATTRS = ('a','b','on_stmt')
 class FromListX(BaseX):
   "fromlist is a list of FromTableX | JoinX"
-  def __init__(self,fromlist): self.fromlist=list(fromlist)
-  def __repr__(self): return 'FromListX(%r)'%self.fromlist
-  def __eq__(self,other): return isinstance(other,FromListX) and self.fromlist==other.fromlist
+  ATTRS = ('fromlist',)
+  VARLEN = ('fromlist',)
 class OpX(BaseX):
   PRIORITY=('or','and','not','>','<','@>','||','!=','=','is not','is','in','*','/','+','-') # not is tight because it's unary when solo
+  ATTRS = ('op',)
   def __init__(self,op):
     self.op=op
     if op not in self.PRIORITY: raise SQLSyntaxError('unk_op',op)
-  def __repr__(self): return 'OpX(%r)'%self.op
   def __lt__(self,other):
     "this is for order of operations"
     if not isinstance(other,OpX): raise TypeError
     return self.PRIORITY.index(self.op) < self.PRIORITY.index(other.op)
-  def __eq__(self,other): return isinstance(other,OpX) and self.op==other.op
 class BinX(BaseX):
   "binary operator expression"
-  def __init__(self,op,left,right): self.op,self.left,self.right=op,left,right
-  def __repr__(self): return 'BinX(%r,%r,%r)'%(self.op,self.left,self.right)
-  def __eq__(self,other): return isinstance(other,BinX) and (self.op,self.left,self.right)==(other.op,other.left,other.right)
+  ATTRS = ('op','left','right')
 class UnX(BaseX):
   "unary operator expression"
-  def __init__(self,op,val): self.op,self.val=op,val
-  def __repr__(self): return 'UnX(%r,%r)'%(self.op,self.val)
-  def __eq__(self,other): return isinstance(other,UnX) and (self.op,self.val)==(other.op,other.val)
+  ATTRS = ('op','val')
 class CommaX(BaseX):
+  ATTRS = ('children',)
+  VARLEN = ('children',)
   def __init__(self,children): self.children=list(children) # needs to be a list (i.e. mutable) for SubLit substitution (in sqex.sub_slots)
-  def __eq__(self,other): return isinstance(other,CommaX) and self.children==other.children
-  def __repr__(self): return 'CommaX(%r)'%(self.children,)
-  def __eq__(self,other): return isinstance(other,CommaX) and self.children==other.children
 class CallX(BaseX):
-  def __init__(self,f,args): self.f,self.args=f,args # args will be a CommaX
-  def __repr__(self): return 'CallX[%r] %r'%(self.f,self.args)
-  def __eq__(self,other): return isinstance(other,CallX) and (self.f,self.args)==(other.f,other.args)
-class WhenX(BaseX):
-  def __init__(self,when,then): self.when,self.then=when,then
-  def __repr__(self): return 'WhenX(%r,%r)'%(self.when,self.then)
-  def __eq__(self,other): return isinstance(other,WhenX) and (self.when,self.then)==(other.when,other.then)
+  ATTRS = ('f','args')
+  VARLEN = ('args',)
+class WhenX(BaseX): ATTRS = ('when','then')
 class CaseX(BaseX):
-  def __init__(self,cases,elsex): self.cases,self.elsex=cases,elsex
-  def __repr__(self): return 'CaseX(%r,%r)'%(self.cases,self.elsex)
-  def __eq__(self,other): return isinstance(other,CaseX) and (self.cases,self.elsex)==(other.cases,other.elsex)
-class AttrX(BaseX):
-  def __init__(self,parent,attr): self.parent,self.attr=parent,attr
-  def __repr__(self): return 'AttrX(%r,%r)'%(self.parent,self.attr)
-  def __eq__(self,other): return isinstance(other,AttrX) and (self.parent,self.attr)==(other.parent,other.attr)
+  ATTRS = ('cases','elsex')
+  VARLEN = ('cases',)
+class AttrX(BaseX): ATTRS = ('parent','attr')
 
 class CommandX(BaseX): "base class for top-level commands. probably won't ever be used."
 class SelectX(CommandX):
-  ATTRS=('cols','tables','where','order','limit','offset')
-  def __init__(self,cols,tables,where,order,limit,offset): self.cols,self.tables,self.where,self.order,self.limit,self.offset=cols,tables,where,order,limit,offset
-  def __eq__(self,other):
-    return isinstance(other,SelectX) and all(getattr(self,attr)==getattr(other,attr) for attr in self.ATTRS)
-  def __repr__(self): return 'SelectX(%r,%r,%r,%r,%r,%r)'%(self.cols,self.tables,self.where,self.offset,self.limit,self.offset)
+  ATTRS = ('cols','tables','where','order','limit','offset')
+  VARLEN = ('cols','tables')
 
-class ColX(BaseX):
-  ATTRS=('name','coltp','isarray','default','pkey','not_null')
-  def __init__(self,name,coltp,isarray,not_null,default,pkey):
-    self.name,self.coltp,self.isarray,self.default,self.pkey,self.not_null=name,coltp,isarray,default,pkey,not_null
-  def __repr__(self): return 'ColX(%r,%r,%r,not_null=%r,default=%r,pkey=%r)'%(self.name,self.coltp,self.isarray,self.not_null,self.default,self.pkey)
-  def __eq__(self,other): return isinstance(other,ColX) and all(getattr(self,a)==getattr(other,a) for a in self.ATTRS)
+class ColX(BaseX): ATTRS = ('name','coltp','isarray','not_null','default','pkey')
 class PKeyX(BaseX):
-  def __init__(self,fields): self.fields=fields
-  def __repr__(self): return 'PKeyX(%r)'%(self.fields,)
-  def __eq__(self,other): return isinstance(other,PKeyX) and self.fields==other.fields
+  ATTRS = ('fields',)
+  VARLEN = ('fields',)
 class CreateX(CommandX):
-  def __init__(self,nexists,name,cols,pkey): self.nexists,self.name,self.cols,self.pkey=nexists,name,cols,pkey
-  def __repr__(self): return 'CreateX(%r,%r,%r,%s)'%(self.nexists,self.name,self.cols,self.pkey)
-  def __eq__(self,other): return isinstance(other,CreateX) and (self.nexists,self.name,self.cols,self.pkey)==(other.nexists,other.name,other.cols,other.pkey)
+  ATTRS = ('nexists','name','cols','pkey')
+  VARLEN = ('cols',)
 
-class ReturnX(BaseX):
-  def __init__(self,expr): self.expr=expr
-  def __repr__(self): return 'ReturnX(%r)'%self.expr
-  def __eq__(self,other): return isinstance(other,ReturnX) and self.expr==other.expr
+class ReturnX(BaseX): ATTRS = ('expr',)
 class InsertX(CommandX):
-  def __init__(self,table,cols,values,ret): self.table,self.cols,self.values,self.ret=table,cols,values,ret
-  def __repr__(self): return 'InsertX[%r](%r,%r,%r)'%(self.table,self.cols,self.values,self.ret)
-  def __eq__(self,other): return isinstance(other,InsertX) and all(getattr(self,k)==getattr(other,k) for k in ('table','cols','values','ret'))
+  ATTRS = ('table','cols','values','ret')
+  VARLEN = ('cols','values')
 
-class AssignX(BaseX):
-  def __init__(self,col,expr): self.col,self.expr=col,expr
-  def __repr__(self): return 'AssignX(%r,%r)'%(self.col,self.expr)
-  def __eq__(self,other): return isinstance(other,AssignX) and (self.col,self.expr)==(other.col,other.expr)
+class AssignX(BaseX): ATTRS = ('col','expr')
 class UpdateX(CommandX):
-  def __init__(self,tables,assigns,where,ret): self.tables,self.assigns,self.where,self.ret=tables,assigns,where,ret
-  def __repr__(self): return 'UpdateX(%r,%r,%r,%r)'%(self.tables,self.assigns,self.where,self.ret)
+  ATTRS = ('tables','assigns','where','ret')
+  VARLEN = ('tables','assigns')
 
-class IndexX(CommandX):
-  def __init__(self,string): self.string=string
-  def __repr__(self): return 'IndexX()'
+class IndexX(CommandX): ATTRS = ('string',)
 
-class DeleteX(CommandX):
-  def __init__(self,table,where,returnx): self.table,self.where,self.returnx=table,where,returnx
-  def __repr__(self): return 'DeleteX(%r,%r,%r)'%(self.table,self.where,self.returnx)
-  def __eq__(self,other): return isinstance(other,DeleteX) and (self.table,self.where,self.returnx)==(other.table,other.where,other.returnx)
+class DeleteX(CommandX): ATTRS = ('table','where','returnx')
 
 def bin_priority(op,left,right):
   "I don't know how to handle order of operations in the LR grammar, so here it is"
@@ -266,7 +221,7 @@ class SqlGrammar:
     else: raise NotImplementedError('unk_len',len(t))
   def p_call(self,t):
     "expression : NAME '(' commalist ')'"
-    t[0] = CallX(NameX(t[1]), t[3].children)
+    t[0] = CallX(t[1], t[3].children)
   def p_attr(self,t):
     """attr : NAME '.' NAME
                   | NAME '.' '*'
@@ -310,9 +265,7 @@ class SqlGrammar:
   def p_isnotnull(self,t): "is_notnull : kw_not kw_null \n | "; t[0] = len(t) > 1
   def p_default(self,t): "default : kw_default expression \n | "; t[0] = t[2] if len(t) > 1 else None
   def p_ispkey(self,t): "is_pkey : kw_primary kw_key \n | "; t[0] = len(t) > 1
-  def p_colspec(self,t):
-    "col_spec : NAME NAME is_array is_notnull default is_pkey"
-    t[0] = ColX(*t[1:])
+  def p_colspec(self,t): "col_spec : NAME NAME is_array is_notnull default is_pkey"; t[0] = ColX(*t[1:])
   def p_createlist(self,t):
     "create_list : create_list ',' col_spec \n | col_spec"
     if len(t)==2: t[0] = [t[1]]
@@ -367,5 +320,6 @@ def lex(string):
 YACC = ply.yacc.yacc(module=SqlGrammar(),debug=0,write_tables=0)
 def parse(string):
   "return a BaseX tree for the string"
+  print string
   if string.strip().lower().startswith('create index'): return IndexX(string)
   return YACC.parse(string, lexer=LEXER.clone())
