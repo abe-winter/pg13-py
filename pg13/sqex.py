@@ -151,6 +151,7 @@ def evalex(x,c_row,nix,tables):
   elif isinstance(x,sqparse2.ArrayLit): return map(subcall,x.vals)
   elif isinstance(x,(sqparse2.Literal,sqparse2.ArrayLit)): return x.toliteral()
   elif isinstance(x,sqparse2.CommaX):
+    # todo: think about getting rid of CommaX everywhere; it complicates syntax tree navigation.
     ret = []
     for child in x.children:
       (ret.extend if starlike(child) else ret.append)(subcall(child))
@@ -185,6 +186,7 @@ def evalex(x,c_row,nix,tables):
   elif isinstance(x,list): return map(subcall, x)
   elif isinstance(x,sqparse2.NullX): return None
   elif isinstance(x,sqparse2.ReturnX):
+    # todo: I think ReturnX is *always* CommaX now; revisit this
     ret=subcall(x.expr)
     print 'ret:',ret,x.expr
     print "warning: not sure what I'm doing here with cardinality tweak on CommaX"
@@ -192,7 +194,10 @@ def evalex(x,c_row,nix,tables):
   else: raise NotImplementedError(type(x),x)
 
 def sub_slots(x,match_fn,path=(),arr=None):
-  "recursive. for each match found, add a tree-index tuple to arr"
+  """given a BaseX in x, explore its ATTRS (doing the right thing for VARLEN).
+  return arr with all attrs matching match_fn.
+  recursive. for each match found, add a tree-index tuple to arr
+  """
   if arr is None: arr=[]
   if isinstance(x,sqparse2.BaseX):
     for attr in x.ATTRS:
@@ -210,7 +215,7 @@ def sub_slots(x,match_fn,path=(),arr=None):
   return arr
 
 def depth_first_sub(expr,values):
-  "this *modifies in place* the passed-in expression, recursively replacing SubLit with literals"
+  "replace SubLit with literals in expr. (expr is mutated)."
   arr=sub_slots(expr,lambda elt:elt is sqparse2.SubLit)
   if len(arr)!=len(values): raise ValueError('len',len(arr),len(values))
   for path,val in zip(arr,values):

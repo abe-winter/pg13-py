@@ -12,7 +12,7 @@ class PgMockError(StandardError): pass
 class SQLSyntaxError(PgMockError): "base class for errors during parsing. beware: this gets called during table execution for things a real parser would have caught"
 
 class BaseX(object):
-  "note: expressions could just be dicts, *but* classes save 'what attrs does this have' experimentation runs. may also help the smater (isinstance-aware) linters."
+  "base class for expressions"
   ATTRS=()
   VARLEN=()
   def __init__(self,*args):
@@ -61,7 +61,7 @@ class NullX(BaseX): pass
 class FromTableX(BaseX): ATTRS = ('name','alias')
 class JoinX(BaseX): ATTRS = ('a','b','on_stmt')
 class OpX(BaseX):
-  PRIORITY=('or','and','not','>','<','@>','||','!=','=','is not','is','in','*','/','+','-') # not is tight because it's unary when solo
+  PRIORITY=('or','and','not','>','<','@>','||','!=','=','is not','is','in','*','/','+','-')
   ATTRS = ('op',)
   def __init__(self,op):
     self.op=op
@@ -70,12 +70,8 @@ class OpX(BaseX):
     "this is for order of operations"
     if not isinstance(other,OpX): raise TypeError
     return self.PRIORITY.index(self.op) < self.PRIORITY.index(other.op)
-class BinX(BaseX):
-  "binary operator expression"
-  ATTRS = ('op','left','right')
-class UnX(BaseX):
-  "unary operator expression"
-  ATTRS = ('op','val')
+class BinX(BaseX): ATTRS = ('op','left','right')
+class UnX(BaseX): ATTRS = ('op','val')
 class CommaX(BaseX):
   ATTRS = ('children',)
   VARLEN = ('children',)
@@ -136,8 +132,6 @@ def tup_remove(tup,val):
     i=tup.index(val)
     return tup[:i]+tup[i+1:]
   else: return tup
-
-def ulkw(kw): "uppercase/lowercase keyword"; return '%s|%s'%(kw.lower(),kw.upper())
 
 KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete'.split()}
 class SqlGrammar:
