@@ -28,7 +28,9 @@ def test_lex_strlit():
 def test_lex_float():
   assert shortlex('1.2') == [('INTLIT','1'), ('.','.'), ('INTLIT','2')]
 def test_lex_long_toks():
-  assert shortlex('a is not b')==[('NAME','a'),('BOOL','is'),('BOOL','not'),('NAME','b')] # todo: this is wrong
+  from pg13.sqparse2 import NameX,OpX,BinX
+  assert shortlex('a is not b')==[('NAME','a'),('kw_is','is'),('kw_not','not'),('NAME','b')]
+  assert sqparse2.parse('a is not b')==BinX(OpX('is not'),NameX('a'),NameX('b'))
   assert shortlex('a != b')[1]==('CMP','!=')
   assert shortlex('a = b')[1]==('=','=')
 

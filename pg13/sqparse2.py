@@ -71,7 +71,7 @@ class FromListX(BaseX):
   def __repr__(self): return 'FromListX(%r)'%self.fromlist
   def __eq__(self,other): return isinstance(other,FromListX) and self.fromlist==other.fromlist
 class OpX(BaseX):
-  PRIORITY=('or','and','>','<','@>','||','!=','=','is not','is','in','*','/','+','-')
+  PRIORITY=('or','and','>','<','@>','||','!=','=','is not','is','in','*','/','+','-','not') # not is tight because it's unary when solo
   def __init__(self,op):
     self.op=op
     if op not in self.PRIORITY: raise SQLSyntaxError('unk_op',op)
@@ -186,15 +186,14 @@ def tup_remove(tup,val):
 
 def ulkw(kw): "uppercase/lowercase keyword"; return '%s|%s'%(kw.lower(),kw.upper())
 
-KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select'.split()}
+KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
   t_STRLIT = "'((?<=\\\\)'|[^'])+'"
   t_INTLIT = '\d+'
   t_SUBLIT = '%s'
-  t_ARITH = '\|\||\/|\+|\-'
+  t_ARITH = '\|\||\/|\+'
   t_CMP = '\!=|@>|<|>'
-  t_BOOL = 'and|or|in|not|is'
   def t_NAME(self,t):
     '[A-Za-z]\w*'
     # warning: this allows stuff like SeLeCt with mixed case. who cares.
@@ -207,7 +206,7 @@ class SqlGrammar:
     # general
     'STRLIT','INTLIT','NAME','SUBLIT',
     # operators
-    'ARITH','CMP','BOOL',
+    'ARITH','CMP',
   ) + tuple(KEYWORDS.values())
   precedence = (
     # ('left','DOT'),
@@ -215,26 +214,28 @@ class SqlGrammar:
   def p_name(self,t): "expression : NAME"; t[0] = NameX(t[1])
   def p_float(self,t): "expression : INTLIT '.' INTLIT"; t[0] = Literal(float('%s.%s'%(t[1],t[3])))
   def p_int(self,t): "expression : INTLIT"; t[0] = Literal(int(t[1]))
-  def p_strlit(self,t): "expression : STRLIT"; print t[1]; raise NotImplementedError
+  def p_strlit(self,t): "expression : STRLIT"; t[0] = Literal(t[1][1:-1])
   def p_asterx(self,t): "expression : '*'"; t[0] = AsterX()
   def p_empty(self,t): "empty :" # explicit empty rule
-  def p_unop(self,t):
-    "unop : '-'"
-    t[0] = OpX(t[1])
+  def p_unop(self,t): "unop : '-' \n | kw_not"; t[0] = OpX(t[1])
+  def p_isnot(self,t): "isnot : kw_is kw_not"; t[0] = 'is not'
+  def p_boolop(self,t): "boolop : kw_and \n | kw_or \n | kw_in"; t[0] = t[1]
   def p_binop(self,t):
     """binop : ARITH
              | CMP
-             | BOOL
+             | boolop
+             | isnot
+             | '='
+             | '-'
     """
     t[0] = OpX(t[1])
   def p_x_boolx(self,t):
-    """expression : expression binop expression
-                  | expression '=' expression
-                  | unop expression
+    """expression : unop expression
+                  | expression binop expression
     """
-    if len(t)==4: t[0] = BinX(OpX(t[2]) if t[2]=='=' else t[2],t[1],t[3])
-    elif len(t)==3: t[0] = UnX(t[1],t[2])
-    else: raise NotImplementedError
+    if len(t)==4: t[0] = bin_priority(t[2],t[1],t[3])
+    elif len(t)==3: t[0] = un_priority(t[1],t[2])
+    else: raise NotImplementedError('unk_len',len(t))
   def p_x_commalist(self,t):
     """commalist : commalist ',' expression
                  | expression
@@ -272,7 +273,7 @@ class SqlGrammar:
     """
     t[0] = AttrX(NameX(t[1]), AsterX() if t[3]=='*' else NameX(t[3]))
   def p_paren(self,t):
-    "expression : '(' commalist ')'"
+    "expression : '(' expression ')' \n | '(' commalist ')'" # todo doc: think about this
     t[0] = t[2]
   def p_fromtable(self,t):
     """fromtable : NAME
