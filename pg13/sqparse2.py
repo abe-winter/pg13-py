@@ -74,7 +74,7 @@ class FromListX(BaseX):
   def __repr__(self): return 'FromListX(%r)'%self.fromlist
   def __eq__(self,other): return isinstance(other,FromListX) and self.fromlist==other.fromlist
 class OpX(BaseX):
-  PRIORITY=('or','and','>','<','@>','||','!=','=','is not','is','in','*','/','+','-','not') # not is tight because it's unary when solo
+  PRIORITY=('or','and','not','>','<','@>','||','!=','=','is not','is','in','*','/','+','-') # not is tight because it's unary when solo
   def __init__(self,op):
     self.op=op
     if op not in self.PRIORITY: raise SQLSyntaxError('unk_op',op)
@@ -92,7 +92,7 @@ class BinX(BaseX):
 class UnX(BaseX):
   "unary operator expression"
   def __init__(self,op,val): self.op,self.val=op,val
-  def __repr__(self): return 'UnX[%r](%r)'%(self.op,self.val)
+  def __repr__(self): return 'UnX(%r,%r)'%(self.op,self.val)
   def __eq__(self,other): return isinstance(other,UnX) and (self.op,self.val)==(other.op,other.val)
 class CommaX(BaseX):
   def __init__(self,children): self.children=list(children) # needs to be a list (i.e. mutable) for SubLit substitution (in sqex.sub_slots)
@@ -190,7 +190,7 @@ def tup_remove(tup,val):
 
 def ulkw(kw): "uppercase/lowercase keyword"; return '%s|%s'%(kw.lower(),kw.upper())
 
-KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning'.split()}
+KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
   t_STRLIT = "'((?<=\\\\)'|[^'])+'"
@@ -218,9 +218,10 @@ class SqlGrammar:
   def p_name(self,t): "expression : NAME"; t[0] = NameX(t[1])
   def p_float(self,t): "expression : INTLIT '.' INTLIT"; t[0] = Literal(float('%s.%s'%(t[1],t[3])))
   def p_int(self,t): "expression : INTLIT"; t[0] = Literal(int(t[1]))
-  def p_strlit(self,t): "expression : STRLIT"; t[0] = Literal(t[1][1:-1])
+  def p_strlit(self,t): "expression : STRLIT"; t[0] = Literal(t[1][1:-1].replace("\\'","'")) # warning: this is not safe
   def p_asterx(self,t): "expression : '*'"; t[0] = AsterX()
   def p_null(self,t): "expression : kw_null"; t[0] = NullX()
+  def p_sublit(self,t): "expression : SUBLIT"; t[0] = SubLit
   def p_unop(self,t): "unop : '-' \n | kw_not"; t[0] = OpX(t[1])
   def p_isnot(self,t): "isnot : kw_is kw_not"; t[0] = 'is not'
   def p_boolop(self,t): "boolop : kw_and \n | kw_or \n | kw_in"; t[0] = t[1]
@@ -267,10 +268,11 @@ class SqlGrammar:
     "expression : NAME '(' commalist ')'"
     t[0] = CallX(NameX(t[1]), t[3].children)
   def p_attr(self,t):
-    """expression : NAME '.' NAME
+    """attr : NAME '.' NAME
                   | NAME '.' '*'
     """
     t[0] = AttrX(NameX(t[1]), AsterX() if t[3]=='*' else NameX(t[3]))
+  def p_attrx(self,t): "expression : attr"; t[0] = t[1]
   def p_paren(self,t):
     "expression : '(' expression ')' \n | '(' commalist ')'" # todo doc: think about this
     t[0] = t[2]
@@ -331,10 +333,23 @@ class SqlGrammar:
   def p_insertx(self,t):
     "expression : kw_insert kw_into NAME opt_paren_namelist kw_values '(' commalist ')' opt_returnx"
     t[0] = InsertX(t[3],t[4],t[7],t[9])
-
-  def p_error(self,t):
-    print 'error',t
+  def p_assign(self,t):
+    "assign : NAME '=' expression \n | attr '=' expression"
+    t[0] = AssignX(t[1],t[3])
+  def p_assignlist(self,t):
+    "assignlist : assignlist ',' assign \n | assign"
+    if len(t)==4: t[0] = t[1] + [t[3]]
+    elif len(t)==2: t[0] = [t[1]]
+    else: raise NotImplementedError('unk_len', len(t))
+  def p_updatex(self,t):
+    "expression : kw_update namelist kw_set assignlist wherex opt_returnx"
+    t[0] = UpdateX(t[2],t[4],t[5],t[6])
+  def p_deletex(self,t):
+    "expression : kw_delete"
+    # deletex = kw('delete') + kw('from') + T.name + kw('where') + expr
     raise NotImplementedError
+
+  def p_error(self,t): raise SQLSyntaxError(t)
 
 LEXER = ply.lex.lex(module=SqlGrammar())
 def lex(string):

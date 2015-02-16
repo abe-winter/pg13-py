@@ -72,15 +72,15 @@ def test_parse_insert():
 def test_parse_update():
   from pg13.sqparse2 import NameX,AssignX,BinX,OpX,Literal,ReturnX,CommaX
   x=sqparse2.parse('update t1 set a=5,d=x+9 where 35 > 50 returning (a,b+1)')
-  assert x.tables.children==[NameX('t1')]
-  assert x.assigns.children==[
-    AssignX(NameX('a'),Literal(5)),
-    AssignX(NameX('d'),BinX(OpX('arith_op','+'),NameX('x'),Literal(9))),
+  assert x.tables==['t1']
+  assert x.assigns==[
+    AssignX('a',Literal(5)),
+    AssignX('d',BinX(OpX('+'),NameX('x'),Literal(9))),
   ]
-  assert x.where==BinX(OpX('cmp_op','>'),Literal(35),Literal(50))
+  assert x.where==BinX(OpX('>'),Literal(35),Literal(50))
   assert x.ret==ReturnX(CommaX((
     NameX('a'),
-    BinX(OpX('arith_op','+'),NameX('b'),Literal(1)),
+    BinX(OpX('+'),NameX('b'),Literal(1)),
   )))
 
 def test_strlit():
@@ -91,8 +91,8 @@ def test_strlit():
 def test_boolx():
   "small-scale test of boolx parsing"
   from pg13.sqparse2 import Literal,NameX,OpX,BinX,UnX
-  assert BinX(OpX('bool_op','and'),BinX(OpX('cmp_op','<'),NameX('a'),Literal(5)),BinX(OpX('cmp_op','='),NameX('z'),Literal(3)))==sqparse2.parse('a<5 and z=3')
-  assert BinX(OpX('cmp_op','<'),NameX('a'),UnX(OpX('arith_op','-'),Literal(5)))==sqparse2.parse('a<-5')
+  assert BinX(OpX('and'),BinX(OpX('<'),NameX('a'),Literal(5)),BinX(OpX('='),NameX('z'),Literal(3)))==sqparse2.parse('a<5 and z=3')
+  assert BinX(OpX('<'),NameX('a'),UnX(OpX('-'),Literal(5)))==sqparse2.parse('a<-5')
 
 def is_balanced(binx):
   "helper for test_precedence"
