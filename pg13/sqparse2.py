@@ -5,8 +5,6 @@
 # differences vs real SQL:
 # 1. sql probably allows 'table' as a table name. I think I'm stricter about keywords (and I don't allow quoting columns)
 
-import lrparsing
-from lrparsing import Token,THIS,Opt,Prio,Ref,List,Repeat,Choice # I hate import pollution but lrparsing.* 5 times a line makes the grammar unreadable
 import ply.lex, ply.yacc
 
 # errors
@@ -61,7 +59,7 @@ class AsterX(BaseX):
   def __eq__(self,other): return isinstance(other, AsterX)
 class FromTableX(BaseX):
   def __init__(self,name,alias): self.name, self.alias = name, alias
-  def __repr__(self): return 'FromTableX(%s,%s)'%(self.name,self.alias)
+  def __repr__(self): return 'FromTableX(%r,%r)'%(self.name,self.alias)
   def __eq__(self,other): return isinstance(other,FromTableX) and (self.name,self.alias)==(other.name,other.alias)
 class JoinX(BaseX):
   def __init__(self,a,b,on_stmt): self.a,self.b,self.on_stmt=a,b,on_stmt
@@ -86,7 +84,7 @@ class OpX(BaseX):
 class BinX(BaseX):
   "binary operator expression"
   def __init__(self,op,left,right): self.op,self.left,self.right=op,left,right
-  def __repr__(self): return 'BinX[%r](%r,%r)'%(self.op,self.left,self.right)
+  def __repr__(self): return 'BinX(%r,%r,%r)'%(self.op,self.left,self.right)
   def __eq__(self,other): return isinstance(other,BinX) and (self.op,self.left,self.right)==(other.op,other.left,other.right)
 class UnX(BaseX):
   "unary operator expression"
@@ -96,7 +94,7 @@ class UnX(BaseX):
 class CommaX(BaseX):
   def __init__(self,children): self.children=list(children) # needs to be a list (i.e. mutable) for SubLit substitution (in sqex.sub_slots)
   def __eq__(self,other): return isinstance(other,CommaX) and self.children==other.children
-  def __repr__(self): return 'CommaX(%s)'%','.join(map(repr,self.children))
+  def __repr__(self): return 'CommaX(%r)'%(self.children,)
   def __eq__(self,other): return isinstance(other,CommaX) and self.children==other.children
 class CallX(BaseX):
   def __init__(self,f,args): self.f,self.args=f,args # args will be a CommaX
@@ -188,7 +186,7 @@ def tup_remove(tup,val):
 
 def ulkw(kw): "uppercase/lowercase keyword"; return '%s|%s'%(kw.lower(),kw.upper())
 
-KEYWORDS = {w:'kw_'+w for w in 'array case when then else end'.split()}
+KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
   t_STRLIT = "'((?<=\\\\)'|[^'])+'"
@@ -218,6 +216,8 @@ class SqlGrammar:
   def p_float(self,t): "expression : INTLIT '.' INTLIT"; t[0] = Literal(float('%s.%s'%(t[1],t[3])))
   def p_int(self,t): "expression : INTLIT"; t[0] = Literal(int(t[1]))
   def p_strlit(self,t): "expression : STRLIT"; print t[1]; raise NotImplementedError
+  def p_asterx(self,t): "expression : '*'"; t[0] = AsterX()
+  def p_empty(self,t): "empty :" # explicit empty rule
   def p_unop(self,t):
     "unop : '-'"
     t[0] = OpX(t[1])
@@ -265,17 +265,43 @@ class SqlGrammar:
     else: raise NotImplementedError('unk_len',len(t))
   def p_call(self,t):
     "expression : NAME '(' commalist ')'"
-    raise NotImplementedError
-  def _p_attr(self,t):
-    "expression : NAME '.' NAME"
-    raise NotImplementedError
-  """
-expr = Prio(Ref('case'), boolx, call, attr, token, parenx, Ref('array_ctor'))
-whenx = kw('when') + expr + kw('then') + expr
-case = kw('case') + Repeat(whenx,1) + kw('else') + expr + kw('end')
-attr = Prio(THIS, T.name) + '.' + (T.name | aster) # warning: * shouldn't be allowed in calls
-call = Prio(attr, T.name) + '(' + Ref('commalist') + ')' # todo: commalist. also, not sure attrs are callable in sql.
-"""
+    t[0] = CallX(NameX(t[1]), t[3].children)
+  def p_attr(self,t):
+    """expression : NAME '.' NAME
+                  | NAME '.' '*'
+    """
+    t[0] = AttrX(NameX(t[1]), AsterX() if t[3]=='*' else NameX(t[3]))
+  def p_paren(self,t):
+    "expression : '(' commalist ')'"
+    t[0] = t[2]
+  def p_fromtable(self,t):
+    """fromtable : NAME
+                 | NAME kw_as NAME
+    """
+    # elif node is clas.from_table: return FromTableX(x[1].name, None if len(x)==2 else x[3].name)
+    if len(t) not in (2,4): raise NotImplementedError('unk_len',len(t))
+    t[0] = FromTableX(t[1],t[3] if len(t) == 4 else None)
+  def p_joinx(self,t):
+    """joinx : fromtable kw_join fromtable
+             | fromtable kw_join fromtable kw_on expression
+    """
+    raise NotImplementedError('joinx')
+  def p_fromitem(self,t): "fromitem : fromtable \n | joinx"; t[0] = t[1]
+  def p_fromitem_list(self,t):
+    """fromitem_list : fromitem_list ',' fromitem
+                     | fromitem
+    """
+    if len(t)==2: t[0] = [t[1]]
+    elif len(t)==4: t[0] = t[1] + [t[3]]
+    else: raise NotImplementedError('unk_len', len(t))
+  def p_fromlist(self,t): "fromlist : kw_from fromitem_list \n | empty"; t[0] = FromListX(t[2] if len(t) == 3 else [])
+  def p_wherex(self,t): "wherex : kw_where expression \n | empty"; t[0] = t[2] if len(t) == 3 else None
+  def p_order(self,t): "order : kw_order kw_by expression \n | empty"; t[0] = t[3] if len(t) == 4 else None
+  def p_limit(self,t): "limit : kw_limit expression \n | empty"; t[0] = t[2] if len(t) == 3 else None
+  def p_offset(self,t): "offset : kw_offset expression \n | empty"; t[0] = t[2] if len(t) == 3 else None
+  def p_selectx(self,t):
+    "expression : kw_select commalist fromlist wherex order limit offset"
+    t[0] = SelectX(*t[2:])
 
   def p_error(self,t):
     print 'error',t
@@ -283,6 +309,7 @@ call = Prio(attr, T.name) + '(' + Ref('commalist') + ')' # todo: commalist. also
 
 LEXER = ply.lex.lex(module=SqlGrammar())
 def lex(string):
+  "this is only used by tests"
   safe_lexer = LEXER.clone() # reentrant? I can't tell, I hate implicit globals. do a threading test
   safe_lexer.input(string)
   a = []
@@ -293,138 +320,6 @@ def lex(string):
   return a
 
 YACC = ply.yacc.yacc(module=SqlGrammar(),debug=0,write_tables=0)
-def yacc(string):
+def parse(string):
+  "return a BaseX tree for the string"
   return YACC.parse(string, lexer=LEXER.clone())
-
-class SQLG(lrparsing.Grammar):
-  class T(lrparsing.TokenRegistry):
-    strlit = Token(re="'((?<=\\\\)'|[^'])+'")
-    intlit = Token(re='\d+')
-    name = Token(re='[A-Za-z]\w*')
-    operator = Token(re='\!\=|\|\||@>|[\/\+\-\*\=<>]')
-    sublit = Token('%s')
-  floatlit = T.intlit + '.' + T.intlit # todo: no whitespace
-  token = Prio(T.strlit, floatlit, T.intlit, T.name, T.sublit)
-  aster = kw('*')
-  attr = Prio(THIS, T.name) + '.' + (T.name | aster) # warning: * shouldn't be allowed in calls
-  call = Prio(attr, T.name) + '(' + Ref('commalist') + ')' # todo: commalist. also, not sure attrs are callable in sql.
-  unop = kw('not') | '+' | '-'
-  arith_op = Choice(*map(kw,('/','*','+','-')))
-  cmp_op = kw('>') | kw('<') | kw('@>') | kw('||') | Prio(kw('!='), kw('='), kw('is') + kw('not'), kw('is')) | kw('in')
-  bool_op = kw('or') | kw('and')
-  binop = Prio(cmp_op, bool_op, arith_op)
-  boolx =  Ref('expr') + binop + Ref('expr') | unop + Ref('expr')
-  parenx = '(' + Prio(Ref('selectx'), Ref('expr'), Ref('commalist')) + ')'
-  expr = Prio(Ref('case'), boolx, call, attr, token, parenx, Ref('array_ctor'))
-  whenx = kw('when') + expr + kw('then') + expr
-  case = kw('case') + Repeat(whenx,1) + kw('else') + expr + kw('end')
-  commalist = List(expr, ',', 1)
-  array_ctor = '{' + Ref('commalist') + '}' | kw('array') + '[' + Ref('commalist') + ']'
-  cols_list = List(aster | expr, ',')
-  # todo below: can joins be chained?
-  from_table = Prio(T.name, (T.name + kw('as') + T.name))
-  joinx = from_table + kw('join') + from_table + Opt(kw('on') + expr)
-  from_list = List(from_table | joinx, ',')
-  selectx = kw('select') + cols_list + kw('from') + from_list + Opt(kw('where') + expr) + Opt(kw('order') + kw('by') + expr) + Opt(kw('limit') + expr) + Opt(kw('offset') + expr)
-  
-  # create stmt
-  # note below: I'm not supporting 'not null' because lrparsing gets confused by out-of-context 'not'. todo: fix.
-  not_null = kw('not') + T.name
-  col_spec = T.name + T.name + Opt('[]') + Opt(not_null) + Opt(kw('default') + expr) + Opt(kw('primary') + kw('key'))
-  namelist = List(T.name, ',', 1)
-  pkey = kw('primary') + kw('key') + '(' + namelist + ')' # todo: are parens required?
-  if_nexists = kw('if') + kw('not') + kw('exists')
-  createx = kw('create') + kw('table') + Opt(if_nexists) + T.name + '(' + List(col_spec, ',', 1) + Opt(',' + pkey) + ')'
-  
-  # insert stmt
-  returning = kw('returning') + (aster | commalist | expr)
-  insertx = kw('insert') + kw('into') + T.name + Opt('(' + namelist + ')') + kw('values') + '(' + commalist + ')' + Opt(returning)
-  
-  # update stmt
-  assign = (T.name | attr) + kw('=') + expr
-  assignlist = List(assign, ',', 1)
-  updatex = kw('update') + namelist + kw('set') + assignlist + Opt('where' + expr) + Opt(returning)
-
-  deletex = kw('delete') + kw('from') + T.name + kw('where') + expr
-
-  # todo: deletex = 
-  START = selectx | createx | insertx | updatex | deletex | expr # note: expr doesn't need to be here except that it's useful to run and verify smaller strings
-
-  @classmethod
-  def tovalue(clas,x):
-    "not as useless as it looks"
-    node,value=x[:2]
-    if isinstance(node,Token):
-      if node is clas.T.name: return NameX(value)
-      elif node is clas.T.intlit: return Literal(int(value))
-      elif node is clas.T.strlit: return Literal(value[1:-1].replace("\\'","'")) # strip the quotes and replace escapes
-      elif node is clas.T.sublit: return SubLit
-      else: return value # todo: what ends up here?
-    elif node in (clas.token,clas.expr,clas.binop): return value
-    elif node is clas.unop: # todo: clean this up and make else case well-defined
-      return OpX('bool_op',value) if value=='not' else OpX('arith_op',value)
-    elif node in (clas.arith_op,clas.cmp_op,clas.bool_op):
-      if len(x)==3:
-        if x[1:]!=('is','not'): raise NotImplementedError('expected "is not"',x[1:])
-        value='is not'
-      return OpX(node.name,value)
-    elif node is clas.floatlit: return Literal(float('%i.%i'%(x[-3].val,x[-1].val)))
-    elif node is clas.boolx:
-      if len(x)==4: left,op,right=x[-3:]; return bin_priority(op,left,right)
-      elif len(x)==3: op,val=x[-2:]; return un_priority(op,val)
-      else: raise NotImplementedError # shouldn't get here
-    elif node in (clas.commalist,clas.cols_list,clas.namelist,clas.assignlist): return CommaX(x[1::2])
-    elif node is clas.aster: return AsterX()
-    elif node is clas.call: f,_,args,_=x[-4:]; return CallX(f,args)
-    elif node is clas.array_ctor: return ArrayLit(x[-2].children)
-    elif node is clas.parenx: return x[-2]
-    elif node is clas.whenx: return WhenX(x[2],x[4])
-    elif node is clas.case: return CaseX(x[2:-3],x[-2])
-    elif node is clas.from_table: return FromTableX(x[1].name, None if len(x)==2 else x[3].name)
-    elif node is clas.joinx: return JoinX(x[1],x[3],(x[5] if len(x)==6 else None))
-    elif node is clas.from_list: return FromListX(x[1::2])
-    elif node is clas.selectx:
-      x=tup_remove(x,'by') # ugly
-      return SelectX(*keywordify(('select','from','where','order','limit','offset'), x[1::2], x[2::2]))
-    elif node is clas.col_spec:
-      name,tp=x[1:3]
-      isarray=len(x)>3 and x[3]=='[]'
-      default=x[x.index('default')+1] if 'default' in x else None # careful: this isn't saying None is the default value (though I think it might be anyway). 'default null' comes through as string 'null'
-      not_null='not null' in x
-      ispkey=x[-2:]==('primary','key')
-      return ColX(name,tp,isarray,default,ispkey,not_null)
-    elif node is clas.pkey: return PKeyX(x[-2].children)
-    elif node is clas.returning:
-      if len(x)==5: return ReturnX(x[-2])
-      elif len(x)==3: return ReturnX(x[-1])
-      else: raise NotImplementedError # shouldn't get here
-    elif node is clas.not_null: return 'not null'
-    elif node is clas.if_nexists: return 'if_nexists'
-    elif node is clas.createx:
-      x=tup_remove(x,'if_nexists')
-      name=x[3]; cols=x[5:-1:2]; pkey=None
-      if isinstance(cols[-1], PKeyX): cols,pkey=cols[:-1],cols[-1]
-      return CreateX(name, cols, pkey)
-    elif node is clas.insertx:
-      # 'insert', 'into', NameX('t1'), '(', NameX('a'), ',', NameX('b'), ')', 'values', '(', CommaX(1,2), ')'))
-      table=x[3]; cols=None; i_values=x.index('values')+1; values_end=x.index(')',i_values)
-      if x[4]!='values': cols=x[5]
-      vals = x[i_values+1]
-      returning = returning=x[-1] if isinstance(x[-1], ReturnX) else None
-      return InsertX(table,cols,vals,returning)
-    elif node is clas.assign: return AssignX(*x[1::2])
-    elif node is clas.attr: return AttrX(x[1],x[3])
-    elif node is clas.updatex:
-      ret=x[-1] if isinstance(x[-1],ReturnX) else None
-      return UpdateX(*(list(keywordify(('update','set','where'),x[1::2],x[2::2])) + [ret]))
-    elif node is clas.deletex: return DeleteX(x[3],x[5])
-    elif node is clas.START: return value
-    else: raise NotImplementedError(node,x)
-
-def parse(s,g=SQLG):
-  print s # todo: remove. but for now it's useful; py.test shows this on failures.
-  if s.strip().lower().startswith('create index'): return IndexX(s)
-  try: return g.parse(s,g.tovalue)
-  except lrparsing.ParseError as e:
-    print s
-    raise SQLSyntaxError(e) # todo: unpack more details from the ParseError (like what expression it thinks it's inside)
