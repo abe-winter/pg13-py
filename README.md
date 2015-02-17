@@ -8,7 +8,9 @@ pg13 is a SQL ORM for python designed with first-class support for mocking & tes
 1. **artisanal mocking**: standard mocking frameworks make you specify the output of every DB call
  * bad because it's extra work, tough to maintain, and you're feeding the test the right answer
 2. **local db**: have a running copy of the database
- * bad because your tests gain an external dependency (the DB) and may gain hidden inter-test data dependencies
+ * but your tests gain an external dependency (the DB)
+ * this encourages hidden inter-test data dependencies
+ * this can interfere with local integration environments
 3. **everything but**: test everything but the DB interaction
  * bad because you're not testing a big part of your app
 
@@ -16,8 +18,8 @@ pg13 takes a different approach:
 * SQL is simulated in python
 * every test can create and populate its own lightweight database
 * tests are deterministic (at least with respect to database reuse)
-* parallelization is safe (at least with respect to data)
-* performance: 200+ tests per second on my laptop
+* parallelization across tests is safe (at least with respect to data)
+* performance: ~200 tests per second on my laptop
 
 Drop me a line if you're using this. `@gmail: awinter.public` (hint: turn it around)
 

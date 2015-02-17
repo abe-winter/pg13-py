@@ -17,6 +17,6 @@ setuptools.setup(
   url='https://github.com/abe-winter/pg13-py',
   license='MIT',
   packages=setuptools.find_packages(),
-  install_requires=['pytest','ujson','lrparsing','ply'],
+  install_requires=['pytest','ujson','ply'],
   extras_require={'psyco':['psycopg2'], 'redis':['hiredis','redis','msgpack-python']},
 )
