@@ -76,3 +76,4 @@ Missing SQL features:
 * indexes and constraints (`create index` statements will parse but are a no-op)
 * asc and desc keywords in `order by` expressions (asc by default; but you can use a minus sign to simulate desc in some cases)
 * drop table
+* type checking (i.e. it will let you insert integers in a text column)

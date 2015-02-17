@@ -17,6 +17,10 @@ def expand_row(table_fields,fields,values):
   indexes=[reverse_indexes.get(i) for i in range(len(table_fields))]
   return [(Missing if i is None else values[i]) for i in indexes]
 
+def field_default(f):
+  if f.coltp.lower() == 'serial': raise NotImplementedError('nextid for serial column')
+  return toliteral(f.default)
+
 FieldLookup=collections.namedtuple('FieldLookup','index type')
 def toliteral(probably_literal):
   # todo: among the exception cases are Missing, str. go through cases and make this cleaner. the test suite alone has multiple types here.
@@ -36,7 +40,7 @@ class Table:
     return map(toliteral,row)
   def apply_defaults(self,row):
     "apply defaults to missing cols for a row that's being inserted"
-    return [(toliteral(f.default) if v is Missing else v) for f,v in zip(self.fields,row)]
+    return [(field_default(f) if v is Missing else v) for f,v in zip(self.fields,row)]
   def insert(self,fields,values,returning,tables_dict):
     nix = sqex.NameIndexer.ctor_name(self.name)
     expanded_row=self.fix_rowtypes(expand_row(self.fields,fields,values) if fields else values)

@@ -61,7 +61,7 @@ class NullX(BaseX): pass
 class FromTableX(BaseX): ATTRS = ('name','alias')
 class JoinX(BaseX): ATTRS = ('a','b','on_stmt')
 class OpX(BaseX):
-  PRIORITY=('or','and','not','>','<','@>','||','!=','=','is not','is','in','*','/','+','-')
+  PRIORITY=('or','and','not','>','<','@>','@@','||','!=','=','is not','is','in','*','/','+','-')
   ATTRS = ('op',)
   def __init__(self,op):
     self.op=op
@@ -140,9 +140,9 @@ class SqlGrammar:
   t_INTLIT = '\d+'
   t_SUBLIT = '%s'
   t_ARITH = '\|\||\/|\+'
-  t_CMP = '\!=|@>|<|>'
+  t_CMP = '\!=|@>|@@|<|>'
   def t_NAME(self,t):
-    '[A-Za-z]\w*'
+    '[A-Za-z]\w*|\"char\"'
     # warning: this allows stuff like SeLeCt with mixed case. who cares.
     t.type = KEYWORDS[t.value.lower()] if t.value.lower() in KEYWORDS else 'BOOL' if t.value.lower() in ('is','not') else 'NAME'
     return t
