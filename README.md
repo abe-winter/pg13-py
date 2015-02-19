@@ -1,6 +1,7 @@
 # pg13 [![Build Status](https://travis-ci.org/abe-winter/pg13-py.svg?branch=master)](https://travis-ci.org/abe-winter/pg13-py)
 
 **install** with `pip install pg13[psyco]`
+
 **docs** at http://pg13.readthedocs.org/en/latest/
 
 pg13 is a SQL ORM for python designed with first-class support for mocking & test. Normally when you want to test an application with database dependencies, you have three dangerous options:

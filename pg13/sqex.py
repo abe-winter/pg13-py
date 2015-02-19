@@ -9,7 +9,6 @@ class TableNameError(StandardError): "expression referencing unk table"
 
 def is_aggregate(ex):
   "is the expression something that runs on a list of rows rather than a single row"
-  # todo: I think the SQL term for this is 'scalar subquery'. use SQL vocabulary
   # todo doc: explain why it's not necessary to do this check on the whereclause
   return isinstance(ex,sqparse2.CallX) and ex.f in ('min','max')
 def contains_aggregate(ex): return bool(sub_slots(ex,is_aggregate))
@@ -31,6 +30,7 @@ def evalop(op,left,right):
   elif op=='||':
     if not all(isinstance(x,list) for x in (left,right)): raise TypeError('non-array-args',self.value)
     return left+right
+  elif op=='@@': raise NotImplementedError
   else: raise NotImplementedError(op,left,right)
 
 class NameIndexer:
@@ -195,22 +195,20 @@ def evalex(x,c_row,nix,tables):
 
 def sub_slots(x,match_fn,path=(),arr=None):
   """given a BaseX in x, explore its ATTRS (doing the right thing for VARLEN).
-  return arr with all attrs matching match_fn.
-  recursive. for each match found, add a tree-index tuple to arr
+  return a list of tree-paths (i.e. tuples) for tree children that match match_fn. The root elt won't match.
   """
+  # todo: profiling suggests this getattr-heavy recursive process is the next bottleneck
   if arr is None: arr=[]
+  elif match_fn(x): arr.append(path) # the elif here means 'don't match top elt'. Not sure if that's the right idea.
   if isinstance(x,sqparse2.BaseX):
     for attr in x.ATTRS:
+      val = getattr(x,attr)
       if attr in x.VARLEN:
-        val = getattr(x,attr)
         for i,elt in enumerate(val or ()):
           nextpath = path + ((attr,i),)
-          if match_fn(elt): arr.append(nextpath)
           sub_slots(elt,match_fn,nextpath,arr)
       else:
         nextpath = path + (attr,)
-        val = getattr(x,attr)
-        if match_fn(val): arr.append(nextpath)
         sub_slots(val,match_fn,nextpath,arr)
   return arr
 
