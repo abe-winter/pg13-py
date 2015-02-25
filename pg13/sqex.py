@@ -1,7 +1,7 @@
 "expression evaluation helpers for pgmock. has duck-dependencies on pgmock's Table class, needs redesign."
 
-import functools,itertools
-from . import sqparse2,threevl
+import itertools
+from . import sqparse2,threevl,misc
 
 # todo: derive errors below from something pg13-specific
 class ColumnNameError(StandardError): "name not in any tables or name matches too many tables"
@@ -34,28 +34,48 @@ def evalop(op,left,right):
   else: raise NotImplementedError(op,left,right)
 
 class NameIndexer:
-  "helper that takes str, NameX or attrx and returns the right thing (or raises an error on ambiguity)"
+  """helper that takes str, NameX or attrx and returns the right thing (or raises an error on ambiguity).
+  Note: alias-only tables 'select from (nested select) as alias' currently live here.
+  Warning: a-only tables probably need to work out their dependency graph
+  """
   @staticmethod
-  def update_aliases(aliases,ftx):
-    "helper for ctor. takes FromTableX"
-    aliases[ftx.name]=ftx.name
-    if ftx.alias: aliases[ftx.alias]=ftx.name
+  def update_aliases(aliases,aonly,x):
+    "helper for ctor. takes AliasX or string as second arg"
+    if isinstance(x,basestring): aliases[x]=x
+    elif isinstance(x,sqparse2.AliasX):
+      if not isinstance(x.alias,basestring): raise TypeError('alias not string',type(x.alias))
+      if isinstance(x.name,basestring): aliases.update({x.name:x.alias,x.name:x.name})
+      elif isinstance(x.name,sqparse2.SelectX):
+        aliases.update({x.alias:x.alias})
+        aonly[x.alias]=x.name
+      else: raise TypeError('aliasx_unk_thing',type(x.name))
+    else: raise TypeError(type(x))
   @classmethod
   def ctor_fromlist(clas,fromlistx):
     aliases={}
+    aonly={}
     for from_item in fromlistx:
-      if isinstance(from_item,sqparse2.FromTableX): clas.update_aliases(aliases,from_item)
+      if isinstance(from_item,basestring): clas.update_aliases(aliases,aonly,from_item)
+      elif isinstance(from_item,sqparse2.AliasX): clas.update_aliases(aliases,aonly,from_item)
       elif isinstance(from_item,sqparse2.JoinX):
-        clas.update_aliases(aliases,from_item.a)
-        clas.update_aliases(aliases,from_item.b)
+        clas.update_aliases(aliases,aonly,from_item.a)
+        clas.update_aliases(aliases,aonly,from_item.b)
       else: raise TypeError(type(from_item))
     table_order=sorted(set(aliases.values()))
-    return clas(aliases,table_order)
+    return clas(aliases,table_order,aonly)
   @classmethod
-  def ctor_name(clas,name): return clas({name:name},[name])
-  def __init__(self,aliases,table_order): self.aliases,self.table_order = aliases,table_order
+  def ctor_name(clas,name): return clas({name:name},[name],{})
+  def __init__(self,aliases,table_order,alias_only_tables):
+    self.aliases,self.table_order,self.aonly = aliases,table_order,alias_only_tables
+    self.aonly_resolved=False
+  @misc.meth_once
+  def resolve_aonly(self,tables_dict):
+    for k,v in self.aonly.items(): self.aonly[k] = run_select(v,tables_dict)
+    self.aonly_resolved = True
   def index_tuple(self,tables_dict,index,is_set):
     "helper for rowget/rowset"
+    if not self.aonly_resolved: raise RuntimeError('resolve_aonly() before querying nix')
+    raise NotImplementedError('give precedence to names in aonly')
     if isinstance(index,sqparse2.NameX): index = index.name
     # careful below: intentionally if, not elif
     if isinstance(index,basestring):
@@ -114,6 +134,7 @@ def replace_subqueries(ex,tables):
 
 def run_select(ex,tables):
   nix, where = decompose_select(ex)
+  nix.resolve_aonly(tables)
   composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
   if ex.order: # note: order comes before limit / offset
     composite_rows.sort(key=lambda c_row:evalex(ex.order,c_row,nix,tables))

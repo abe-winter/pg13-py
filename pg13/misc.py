@@ -1,6 +1,6 @@
 "misc whatever"
 
-import time,os,collections,sys
+import time,os,collections,sys,functools
 
 def utcnow(): return int(time.time())
 
@@ -22,3 +22,14 @@ class GetterBy(list):
   def __init__(self,tups): super(GetterBy,self).__init__(tups)
   def __getitem__(self,(key,value)): return next(x for x in self if getattr(x,key)==value)
   def __contains__(self,(key,value)): return any(getattr(x,key)==value for x in self)
+
+class CallOnceError(StandardError): pass
+def meth_once(f):
+  "call once for member function (i.e. takes self as first arg)"
+  attr = '__meth_once_'+f.__name__
+  @functools.wraps(f)
+  def f2(self,*args,**kwargs):
+    if hasattr(self,attr): raise CallOnceError(f.__name__)
+    setattr(self,attr,True)
+    return f(self,*args,**kwargs)
+  return f2

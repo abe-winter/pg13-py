@@ -50,3 +50,9 @@ def test_dfs():
   xsel = sqex.depth_first_sub(sqparse2.parse('select a+%s from t1 where x=%s'), (10,[1,2]))
   assert xsel.cols.children[0].right==Literal(10)
   assert xsel.where.right==ArrayLit((1,2))
+
+def test_nix_aonly():
+  "NameIndexer support for nested select (i.e. alias-only table)"
+  ex = sqparse2.parse('select * from (select * from t1) as aonly')
+  nix = sqex.NameIndexer.ctor_fromlist(ex.tables)
+  assert isinstance(nix.aonly['aonly'],sqparse2.SelectX)
