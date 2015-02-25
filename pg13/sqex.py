@@ -1,6 +1,6 @@
 "expression evaluation helpers for pgmock. has duck-dependencies on pgmock's Table class, needs redesign."
 
-import itertools
+import itertools,collections
 from . import sqparse2,threevl,misc
 
 # todo: derive errors below from something pg13-specific
@@ -33,6 +33,19 @@ def evalop(op,left,right):
   elif op=='@@': raise NotImplementedError
   else: raise NotImplementedError(op,left,right)
 
+def infer_columns(selectx,tables_dict):
+  "infer the columns for a subselect that creates an implicit table"
+  # todo: support CTEs -- with all this plumbing, might as well
+  # class ColX(BaseX): ATTRS = ('name','coltp','isarray','not_null','default','pkey')
+  for t in selectx.tables:
+    if isinstance(t,basestring): raise NotImplementedError # next
+    elif isinstance(t,sqparse2.AliasX):
+      if isinstance(t.name,basestring): raise NotImplementedError # next
+      elif isinstance(t.name,sqparse2.SelectX): raise NotImplementedError('todo: inner subquery')
+      else: raise TypeError('AliasX.name',type(t.name))
+    else: raise TypeError('table',type(t))
+  raise NotImplementedError
+
 class NameIndexer:
   """helper that takes str, NameX or attrx and returns the right thing (or raises an error on ambiguity).
   Note: alias-only tables 'select from (nested select) as alias' currently live here.
@@ -44,7 +57,7 @@ class NameIndexer:
     if isinstance(x,basestring): aliases[x]=x
     elif isinstance(x,sqparse2.AliasX):
       if not isinstance(x.alias,basestring): raise TypeError('alias not string',type(x.alias))
-      if isinstance(x.name,basestring): aliases.update({x.name:x.alias,x.name:x.name})
+      if isinstance(x.name,basestring): aliases.update({x.alias:x.name,x.name:x.name})
       elif isinstance(x.name,sqparse2.SelectX):
         aliases.update({x.alias:x.alias})
         aonly[x.alias]=x.name
@@ -69,28 +82,32 @@ class NameIndexer:
     self.aliases,self.table_order,self.aonly = aliases,table_order,alias_only_tables
     self.aonly_resolved=False
   @misc.meth_once
-  def resolve_aonly(self,tables_dict):
-    for k,v in self.aonly.items(): self.aonly[k] = run_select(v,tables_dict)
+  def resolve_aonly(self,tables_dict,table_ctor):
+    "circular depends on pgmock.Table. refactor."
+    for alias,selectx in self.aonly.items():
+      table = table_ctor(alias,infer_columns(selectx,tables_dict),None)
+      table.rows = run_select(selectx,tables_dict,table_ctor)
+      self.aonly[k] = table
     self.aonly_resolved = True
   def index_tuple(self,tables_dict,index,is_set):
     "helper for rowget/rowset"
     if not self.aonly_resolved: raise RuntimeError('resolve_aonly() before querying nix')
-    raise NotImplementedError('give precedence to names in aonly')
-    if isinstance(index,sqparse2.NameX): index = index.name
-    # careful below: intentionally if, not elif
+    merged_tables = dict(tables_dict)
+    merged_tables.update(self.aonly) # this comes second in order to overwrite. todo: find spec support.
+    index = index.name if isinstance(index,sqparse2.NameX) else index
     if isinstance(index,basestring):
-      candidates = [t for t in self.table_order if any(f.name==index for f in tables_dict[t].fields)]
+      candidates = [t for t in self.table_order if any(f.name==index for f in merged_tables[t].fields)]
       if len(candidates)!=1: raise ColumnNameError(("ambiguous_column" if candidates else "no_such_column"),index)
       tname, = candidates
-      return self.table_order.index(tname), tables_dict[tname].lookup(index).index
+      return self.table_order.index(tname), merged_tables[tname].lookup(index).index
     if isinstance(index,sqparse2.AttrX):
-      if index.parent.name not in self.aliases: raise TableNameError('table_notin_x',index.parent)
+      if index.parent.name not in self.aliases: raise TableNameError('table_notin_x',index.parent,self.aliases)
       tname = self.aliases[index.parent.name]
       tindex = self.table_order.index(tname)
       if isinstance(index.attr,sqparse2.AsterX):
         if is_set: raise ValueError('cant_set_asterisk') # todo: better error class
         else: return (tindex,)
-      else: return (tindex,tables_dict[tname].lookup(index.attr).index)
+      else: return (tindex,merged_tables[tname].lookup(index.attr).index)
       # todo: stronger typing here. make sure both fields of the AttrX are always strings.
     else: raise TypeError(type(index))
   def rowget(self,tables_dict,row_list,index):
@@ -125,16 +142,16 @@ def flatten_scalar(whatever):
   try: return flat1[0]
   except TypeError: return flat1
 
-def replace_subqueries(ex,tables):
+def replace_subqueries(ex,tables,table_ctor):
   # http://www.postgresql.org/docs/9.1/static/sql-expressions.html#SQL-SYNTAX-SCALAR-SUBQUERIES
   # see here for subquery conditions that *do* use multi-rows. ug. http://www.postgresql.org/docs/9.1/static/functions-subquery.html
   for path in sub_slots(ex, lambda x:isinstance(x,sqparse2.SelectX)):
-    ex[path] = sqparse2.Literal(flatten_scalar(run_select(ex[path], tables)))
+    ex[path] = sqparse2.Literal(flatten_scalar(run_select(ex[path], tables, table_ctor)))
   return ex # but it was modified in place, too
 
-def run_select(ex,tables):
+def run_select(ex,tables,table_ctor):
   nix, where = decompose_select(ex)
-  nix.resolve_aonly(tables)
+  nix.resolve_aonly(tables,table_ctor)
   composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
   if ex.order: # note: order comes before limit / offset
     composite_rows.sort(key=lambda c_row:evalex(ex.order,c_row,nix,tables))

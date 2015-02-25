@@ -134,9 +134,6 @@ def test_select_xcomma():
   tables['t1'].rows=[[1,2,3],[2,3,4]]
   assert [[2,3,4]]==runsql('select * from t1 where (a,b) in %s',([(2,3)],))
 
-@pytest.mark.xfail
-def test_delete(): raise NotImplementedError
-
 def test_not():
   "todo: double-check operator precedence of not vs ="
   tables,runsql=prep("create table t1 (a int,b int)")
@@ -220,6 +217,7 @@ def test_name_indexer():
   assert ni.table_order==['t1','t2']
   tables,runsql=prep('create table t1 (a int,b int)')
   runsql('create table t2 (a int,c int)')
+  ni.resolve_aonly(tables,pgmock.Table)
   assert (0,1)==ni.index_tuple(tables,'b',False)
   assert (0,1)==ni.index_tuple(tables,sqparse2.NameX('b'),False) # make sure NameX handling works
   assert (1,1)==ni.index_tuple(tables,'c',False)
@@ -241,8 +239,11 @@ def test_nested_select():
   assert [[1,2]]==runsql('select * from t1 where a=(select b from t2 where a=6)')
   assert []==runsql('select * from t1 where a=(select b from t2 where a=7)')
 
+@pytest.mark.xfail # delete without a where clause is broken
 def test_delete():
   tables,runsql=prep('create table t1 (a int, b int)')
   tables['t1'].rows=[[0,1],[1,1],[2,0],[2,1]]
   runsql('delete from t1 where b=1')
   assert tables['t1'].rows==[[2,0]]
+  runsql('delete from t1')
+  assert tables['t1'].rows==[]

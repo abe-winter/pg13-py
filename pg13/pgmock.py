@@ -45,6 +45,7 @@ class Table:
     return [(field_default(f) if v is Missing else v) for f,v in zip(self.fields,row)]
   def insert(self,fields,values,returning,tables_dict):
     nix = sqex.NameIndexer.ctor_name(self.name)
+    nix.resolve_aonly(tables_dict,Table)
     expanded_row=self.fix_rowtypes(expand_row(self.fields,fields,values) if fields else values)
     row=self.apply_defaults(expanded_row)
     # todo: check ColX.not_null here. figure out what to do about null pkey field
@@ -65,6 +66,7 @@ class Table:
     return [sqex.evalex(fields,row,self.name,tables) for row in rows]
   def select(self,fields,whereclause,tables_dict,order):
     nix = sqex.NameIndexer.ctor_name(self.name)
+    nix.resolve_aonly(tables_dict,Table)
     match_rows=self.match(whereclause,tables_dict,nix)
     if list(fields.children)==['*']: return self.order_rows(match_rows,order,tables_dict)
     elif sqex.contains_aggregate(fields):
@@ -73,6 +75,7 @@ class Table:
     else: return self.order_rows(self.returnrows(tables_dict,fields,match_rows),order,tables_dict)
   def update(self,setx,where,returning,tables_dict):
     nix = sqex.NameIndexer.ctor_name(self.name)
+    nix.resolve_aonly(tables_dict,Table)
     if not all(isinstance(x,sqparse2.AssignX) for x in setx): raise TypeError('not_xassign',map(type,setx))
     match_rows=self.match(where,tables_dict,nix) if where else self.rows
     for row in match_rows:
@@ -82,14 +85,15 @@ class Table:
     # todo: what's the deal with nested selects in delete. does it get evaluated once to a scalar before running the delete?
     # todo: this will crash with empty where clause
     nix = sqex.NameIndexer.ctor_name(self.name)
+    nix.resolve_aonly(tables_dict,Table)
     self.rows=[r for r in self.rows if not sqex.evalex(where,(r,),nix,tables_dict)]
 
 def apply_sql(ex,values,tables_dict):
   "call the stmt in tree with values subbed on the tables in t_d\
   tree is a parsed statement returned by parse_expression. values is the tuple of %s replacements. tables_dict is a dictionary of Table instances."
   sqex.depth_first_sub(ex,values)
-  sqex.replace_subqueries(ex,tables_dict)
-  if isinstance(ex,sqparse2.SelectX): return sqex.run_select(ex,tables_dict)
+  sqex.replace_subqueries(ex,tables_dict,Table)
+  if isinstance(ex,sqparse2.SelectX): return sqex.run_select(ex,tables_dict,Table)
   elif isinstance(ex,sqparse2.InsertX): return tables_dict[ex.table].insert(ex.cols,ex.values,ex.ret,tables_dict)
   elif isinstance(ex,sqparse2.UpdateX):
     if len(ex.tables)!=1: raise NotImplementedError('multi-table update')
