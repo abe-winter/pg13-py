@@ -31,15 +31,16 @@ class BaseX(object):
     else: return getattr(self,index)
   def check_i(self,i):
     "helper"
-    if not isinstance(i,tuple): raise TypeError('index_by_tuple')
-    if not i: raise ValueError('empty_index')
+    if not isinstance(i,tuple): raise TypeError('want:tuple',type(i))
   def __getitem__(self,i):
     self.check_i(i)
-    if len(i)==1: return self.child(i[0])
+    if len(i)==0: return self
+    elif len(i)==1: return self.child(i[0])
     else: return self.child(i[0])[i[1:]]
   def __setitem__(self,i,x):
     self.check_i(i)
-    if len(i)==1:
+    if len(i)==0: raise ValueError('cant_set_toplevel')
+    elif len(i)==1:
       if isinstance(i[0],tuple):
         attr,ilist = i[0]
         getattr(self,attr)[ilist] = x
@@ -215,6 +216,7 @@ class SqlGrammar:
     """attr : NAME '.' NAME
             | NAME '.' '*'
     """
+    # careful: sqex.infer_columns relies on AttrX not containing anything but a name
     t[0] = AttrX(NameX(t[1]), AsterX() if t[3]=='*' else NameX(t[3]))
   def p_attrx(self,t): "expression : attr"; t[0] = t[1]
   def p_aliasx(self,t): "aliasx : NAME kw_as NAME"; t[0] = AliasX(t[1],t[3])

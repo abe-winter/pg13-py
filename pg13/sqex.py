@@ -33,22 +33,55 @@ def evalop(op,left,right):
   elif op=='@@': raise NotImplementedError
   else: raise NotImplementedError(op,left,right)
 
+def uniqify(list_):
+  "inefficient on long lists; short lists only. preserves order."
+  a=[]
+  for x in list_:
+    if x not in a: a.append(x)
+  return a
+
+def eliminate_sequential_children(paths):
+  "helper for infer_columns. removes paths that are direct children of the n-1 or n-2 path"
+  return [p for i,p in enumerate(paths) if not ((i>0 and paths[i-1]==p[:-1]) or (i>1 and paths[i-2]==p[:-1]))]
+
 def infer_columns(selectx,tables_dict):
-  "infer the columns for a subselect that creates an implicit table"
+  """infer the columns for a subselect that creates an implicit table.
+  the output of this *can* contain duplicate names, fingers crossed that downstream code uses the first.
+  (Look up SQL spec on dupe names.)
+  """
   # todo: support CTEs -- with all this plumbing, might as well
   # class ColX(BaseX): ATTRS = ('name','coltp','isarray','not_null','default','pkey')
+  table2fields = {}
+  table_order = []
   for t in selectx.tables:
-    if isinstance(t,basestring): raise NotImplementedError # next
+    if isinstance(t,basestring):
+      table2fields[t]=tables_dict[t].fields
+      table_order.append(t)
     elif isinstance(t,sqparse2.AliasX):
-      if isinstance(t.name,basestring): raise NotImplementedError # next
+      if isinstance(t.name,basestring):
+        table2fields[t]=tables_dict[t]
+        table_order.append(t.name)
       elif isinstance(t.name,sqparse2.SelectX): raise NotImplementedError('todo: inner subquery')
       else: raise TypeError('AliasX.name',type(t.name))
     else: raise TypeError('table',type(t))
-  raise NotImplementedError
+  # the forms are: *, x.*, x.y, y. expressions are anonymous unless they have an 'as' (which I don't support)
+  table_order=uniqify(table_order)
+  cols=[]
+  for col in selectx.cols.children:
+    if isinstance(col,sqparse2.AsterX):
+      for t in table_order:
+        cols.extend(table2fields[t])
+    elif isinstance(col,sqparse2.BaseX):
+      all_paths = sub_slots(col, lambda x:isinstance(x,(sqparse2.AttrX,sqparse2.NameX)))
+      paths = eliminate_sequential_children(all_paths) # this eliminates NameX under AttrX
+      print 'col %s paths %s' % (col, paths)
+      raise NotImplementedError
+    else:raise TypeError('unk_col_type',type(col))
+  return cols
 
 class NameIndexer:
   """helper that takes str, NameX or attrx and returns the right thing (or raises an error on ambiguity).
-  Note: alias-only tables 'select from (nested select) as alias' currently live here.
+  Note: alias-only tables 'select from (nested select) as alias' currently live here. replace_subqueries might be a better place.
   Warning: a-only tables probably need to work out their dependency graph
   """
   @staticmethod
@@ -87,7 +120,7 @@ class NameIndexer:
     for alias,selectx in self.aonly.items():
       table = table_ctor(alias,infer_columns(selectx,tables_dict),None)
       table.rows = run_select(selectx,tables_dict,table_ctor)
-      self.aonly[k] = table
+      self.aonly[alias] = table
     self.aonly_resolved = True
   def index_tuple(self,tables_dict,index,is_set):
     "helper for rowget/rowset"
@@ -143,15 +176,21 @@ def flatten_scalar(whatever):
   except TypeError: return flat1
 
 def replace_subqueries(ex,tables,table_ctor):
+  "this mutates passed in ex (any BaseX), replacing nested selects with their (flattened) output"
   # http://www.postgresql.org/docs/9.1/static/sql-expressions.html#SQL-SYNTAX-SCALAR-SUBQUERIES
   # see here for subquery conditions that *do* use multi-rows. ug. http://www.postgresql.org/docs/9.1/static/functions-subquery.html
+  if isinstance(ex,sqparse2.SelectX):
+    old_tables, ex.tables = ex.tables, [] # we *don't* recurse into tables because selects in here get transformed into tables
   for path in sub_slots(ex, lambda x:isinstance(x,sqparse2.SelectX)):
     ex[path] = sqparse2.Literal(flatten_scalar(run_select(ex[path], tables, table_ctor)))
+  if isinstance(ex,sqparse2.SelectX): ex.tables = old_tables
   return ex # but it was modified in place, too
 
 def run_select(ex,tables,table_ctor):
   nix, where = decompose_select(ex)
   nix.resolve_aonly(tables,table_ctor)
+  tables=dict(tables) # i.e. copy
+  tables.update(nix.aonly)
   composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
   if ex.order: # note: order comes before limit / offset
     composite_rows.sort(key=lambda c_row:evalex(ex.order,c_row,nix,tables))
@@ -231,23 +270,23 @@ def evalex(x,c_row,nix,tables):
     return [ret] if isinstance(x.expr,(sqparse2.CommaX,sqparse2.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
   else: raise NotImplementedError(type(x),x)
 
-def sub_slots(x,match_fn,path=(),arr=None):
+def sub_slots(x,match_fn,path=(),arr=None,match=False):
   """given a BaseX in x, explore its ATTRS (doing the right thing for VARLEN).
   return a list of tree-paths (i.e. tuples) for tree children that match match_fn. The root elt won't match.
   """
   # todo: profiling suggests this getattr-heavy recursive process is the next bottleneck
   if arr is None: arr=[]
-  elif match_fn(x): arr.append(path) # the elif here means 'don't match top elt'. Not sure if that's the right idea.
+  if match and match_fn(x): arr.append(path)
   if isinstance(x,sqparse2.BaseX):
     for attr in x.ATTRS:
       val = getattr(x,attr)
       if attr in x.VARLEN:
         for i,elt in enumerate(val or ()):
           nextpath = path + ((attr,i),)
-          sub_slots(elt,match_fn,nextpath,arr)
+          sub_slots(elt,match_fn,nextpath,arr,True)
       else:
         nextpath = path + (attr,)
-        sub_slots(val,match_fn,nextpath,arr)
+        sub_slots(val,match_fn,nextpath,arr,True)
   return arr
 
 def depth_first_sub(expr,values):

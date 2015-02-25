@@ -239,6 +239,16 @@ def test_nested_select():
   assert [[1,2]]==runsql('select * from t1 where a=(select b from t2 where a=6)')
   assert []==runsql('select * from t1 where a=(select b from t2 where a=7)')
 
+def test_alias_only():
+  tables,runsql=prep('create table t1 (a int, b int)')
+  tables['t1'].rows=[[0,0],[1,1],[2,2]]
+  print runsql('select * from (select * from t1 where a < 2) as sub')
+  print runsql('select a from (select * from t1 where a < 2) as sub')
+  print runsql('select * from (select a from t1 where a < 2) as sub')
+  print runsql('select a from (select a from t1 where a < 2) as sub')
+  print runsql('select b from (select a from t1 where a < 2) as sub') # fails
+  raise NotImplementedError
+
 @pytest.mark.xfail # delete without a where clause is broken
 def test_delete():
   tables,runsql=prep('create table t1 (a int, b int)')

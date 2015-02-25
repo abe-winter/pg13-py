@@ -56,3 +56,13 @@ def test_nix_aonly():
   ex = sqparse2.parse('select * from (select * from t1) as aonly')
   nix = sqex.NameIndexer.ctor_fromlist(ex.tables)
   assert isinstance(nix.aonly['aonly'],sqparse2.SelectX)
+
+def test_eliminateseqchildren():
+  def get_paths(ex):
+    return sqex.sub_slots(ex, lambda x:isinstance(x,(sqparse2.AttrX,sqparse2.NameX)), match=True)
+  def transform(string):
+    return sqex.eliminate_sequential_children(get_paths(sqparse2.parse(string)))
+  assert [()]==transform('a.b')
+  assert [()]==transform('a')
+  assert [()]==transform('a.*')
+  assert []==transform('*')

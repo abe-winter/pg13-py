@@ -7,7 +7,6 @@ from . import pg,threevl,sqparse2,sqex
 
 # errors
 class PgExecError(sqparse2.PgMockError): "base class for errors during table execution"
-class MissingPKeyError(PgExecError): pass
 class BadFieldName(PgExecError): pass
 
 class Missing: "for distinguishing missing columns vs passed-in null"
