@@ -79,3 +79,9 @@ Missing SQL features:
 * asc and desc keywords in `order by` expressions (asc by default; but you can use a minus sign to simulate desc in some cases)
 * drop table
 * type checking (i.e. it will let you insert integers in a text column)
+
+## pure-python implementation of SQL
+
+If you're looking for a pure-python implementation of SQL, you may be in the right place.
+
+Also check out http://gadfly.sourceforge.net/gadfly.html
