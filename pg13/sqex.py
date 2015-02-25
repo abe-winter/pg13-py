@@ -199,6 +199,13 @@ def replace_subqueries(ex,tables,table_ctor):
   if isinstance(ex,sqparse2.SelectX): ex.tables = old_tables
   return ex # but it was modified in place, too
 
+def unnest_helper(cols,row):
+  print 'unnest_helper', cols, row
+  for col,val in zip(cols.children,row):
+    print 'col',col,'val',val,'contains',contains(col,returns_rows)
+  wrapped = [val if contains(col,returns_rows) else [val] for col,val in zip(cols.children,row)]
+  return map(list,itertools.product(*wrapped))
+
 def run_select(ex,tables,table_ctor):
   nix, where = decompose_select(ex)
   nix.resolve_aonly(tables,table_ctor)
@@ -207,19 +214,21 @@ def run_select(ex,tables,table_ctor):
   composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
   if ex.order: # note: order comes before limit / offset
     composite_rows.sort(key=lambda c_row:evalex(ex.order,c_row,nix,tables))
-  if ex.limit or ex.offset:
-    print ex.limit, ex.offset
-    raise NotImplementedError('notimp: limit,offset')
+  if ex.limit or ex.offset or ex.group:
+    print ex.limit, ex.offset, ex.group
+    raise NotImplementedError('notimp: limit,offset,group')
   if contains(ex.cols,consumes_rows):
     if not all(contains(col,consumes_rows) for col in ex.cols.children):
       # todo: this isn't good enough. what about nesting cases like max(min(whatever))
       raise sqparse2.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
     return evalex(ex.cols,composite_rows,nix,tables)
-  elif contains(ex.cols,returns_rows): raise NotImplementedError
-  else: return [evalex(ex.cols,r,nix,tables) for r in composite_rows]
+  else:
+    ret = [evalex(ex.cols,r,nix,tables) for r in composite_rows]
+    return sum((unnest_helper(ex.cols,row) for row in ret),[]) if contains(ex.cols,returns_rows) else ret
 
 def starlike(x):
   "weird things happen to cardinality when working with * in comma-lists. this detects when to do that."
+  # todo: is '* as name' a thing?
   return isinstance(x,sqparse2.AsterX) or isinstance(x,sqparse2.AttrX) and isinstance(x.attr,sqparse2.AsterX)
 
 def evalex(x,c_row,nix,tables):
@@ -248,7 +257,7 @@ def evalex(x,c_row,nix,tables):
       (ret.extend if starlike(child) else ret.append)(subcall(child))
     return ret
   elif isinstance(x,sqparse2.CallX):
-    if consumes_rows(x): # careful: is_aggregate, not contains_aggregate
+    if consumes_rows(x): # this isn't contains(x,consumes_row) -- it's just checking the current expression
       if not isinstance(c_row,list): raise TypeError('aggregate function expected a list of rows')
       if len(x.args.children)!=1: raise ValueError('aggregate function expected a single value',x.args)
       arg,=x.args.children # intentional: error if len!=1
@@ -257,13 +266,12 @@ def evalex(x,c_row,nix,tables):
       if x.f=='min': return min(vals)
       elif x.f=='max': return max(vals)
       else: raise NotImplementedError
-    elif returns_rows(x):
-      if x.f=='unnest': raise NotImplementedError # todo next
     else:
       args=subcall(x.args)
       if x.f=='coalesce':
         a,b=args # todo: does coalesce take more than 2 args?
         return b if a is None else a
+      elif x.f=='unnest': return subcall(x.args)[0] # this is handled by the caller
       else: raise NotImplementedError('unk_function',x.f)
   elif isinstance(x,sqparse2.SelectX): raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
   elif isinstance(x,sqparse2.AttrX):return nix.rowget(tables,c_row,x)

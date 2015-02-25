@@ -268,3 +268,15 @@ def test_delete():
   assert tables['t1'].rows==[[2,0]]
   runsql('delete from t1')
   assert tables['t1'].rows==[]
+
+def test_unnest():
+  tables,runsql=prep('create table t1 (a int, b int[])')
+  tables['t1'].rows=[[0,[1,2,3]]]
+  assert [[1],[2],[3]]==runsql('select unnest(b) from t1')
+  assert [[0,1],[0,2],[0,3]]==runsql('select a,unnest(b) from t1')
+@pytest.mark.xfail
+def test_max_unnest():
+  "more generally, this is testing produces_rows inside consumes_rows"
+  tables,runsql=prep('create table t1 (a int, b int[])')
+  tables['t1'].rows=[[0,[1,2,3]]]
+  assert [3]==runsql('select max(unnest(b)) from t1')
