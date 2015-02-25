@@ -242,12 +242,17 @@ def test_nested_select():
 def test_alias_only():
   tables,runsql=prep('create table t1 (a int, b int)')
   tables['t1'].rows=[[0,0],[1,1],[2,2]]
-  print runsql('select * from (select * from t1 where a < 2) as sub')
-  print runsql('select a from (select * from t1 where a < 2) as sub')
-  print runsql('select * from (select a from t1 where a < 2) as sub')
-  print runsql('select a from (select a from t1 where a < 2) as sub')
-  print runsql('select b from (select a from t1 where a < 2) as sub') # fails
-  raise NotImplementedError
+  assert [[0,0],[1,1]]==runsql('select * from (select * from t1 where a < 2) as sub')
+  assert [[0],[1]]==runsql('select a from (select * from t1 where a < 2) as sub')
+  assert [[0],[1]]==runsql('select * from (select a from t1 where a < 2) as sub')
+  assert [[0],[1]]==runsql('select a from (select a from t1 where a < 2) as sub')
+  with pytest.raises(sqex.ColumnNameError): runsql('select b from (select a from t1 where a < 2) as sub')
+  with pytest.raises(sqex.ColumnNameError): runsql('select c from (select a from t1 where a < 2) as sub')
+  with pytest.raises(sqex.ColumnNameError): runsql('select c from (select * from t1 where a < 2) as sub')
+  runsql('create table t2 (a int, c int)')
+  tables['t2'].rows=[[0,0]]
+  with pytest.raises(sqex.ColumnNameError): runsql('select a,c from (select * from t1) as sub1,(select * from t2) as sub2')
+  assert [[0,0],[1,0],[2,0]]==runsql('select b,c from (select * from t1) as sub1,(select * from t2) as sub2')
 
 @pytest.mark.xfail # delete without a where clause is broken
 def test_delete():

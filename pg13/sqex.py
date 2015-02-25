@@ -48,9 +48,10 @@ def infer_columns(selectx,tables_dict):
   """infer the columns for a subselect that creates an implicit table.
   the output of this *can* contain duplicate names, fingers crossed that downstream code uses the first.
   (Look up SQL spec on dupe names.)
+  todo(refactor): I think there's common logic here and inside NameIndexer that can be merged.
+  todo(ugly): this is a beast
   """
   # todo: support CTEs -- with all this plumbing, might as well
-  # class ColX(BaseX): ATTRS = ('name','coltp','isarray','not_null','default','pkey')
   table2fields = {}
   table_order = []
   for t in selectx.tables:
@@ -67,22 +68,33 @@ def infer_columns(selectx,tables_dict):
   # the forms are: *, x.*, x.y, y. expressions are anonymous unless they have an 'as' (which I don't support)
   table_order=uniqify(table_order)
   cols=[]
+  used_name_collision = collections.Counter()
   for col in selectx.cols.children:
     if isinstance(col,sqparse2.AsterX):
       for t in table_order:
         cols.extend(table2fields[t])
     elif isinstance(col,sqparse2.BaseX):
-      all_paths = sub_slots(col, lambda x:isinstance(x,(sqparse2.AttrX,sqparse2.NameX)))
+      all_paths = sub_slots(col, lambda x:isinstance(x,(sqparse2.AttrX,sqparse2.NameX)), match=True)
       paths = eliminate_sequential_children(all_paths) # this eliminates NameX under AttrX
-      print 'col %s paths %s' % (col, paths)
-      raise NotImplementedError
-    else:raise TypeError('unk_col_type',type(col))
+      for p in paths:
+        x = col[p]
+        if isinstance(x,sqparse2.AttrX):
+          if not isinstance(x.parent,sqparse2.NameX): raise TypeError('parent_not_name',type(x.parent))
+          if isinstance(x.attr,sqparse2.NameX): raise NotImplementedError
+          elif isinstance(x.attr,sqparse2.AsterX): cols.extend(table2fields[x.parent.name])
+          else: raise TypeError('attr_unk_type',type(x.attr))
+        elif isinstance(x,sqparse2.NameX):
+          matching_fields = filter(None,(next((f for f in table2fields[t] if f.name==x.name),None) for t in table_order))
+          if len(matching_fields)!=1: raise sqparse2.SQLSyntaxError('missing_or_dupe_field',x,matching_fields)
+          cols.append(matching_fields[0])
+        else: raise TypeError('unk_item_type',type(x))
+    else: raise TypeError('unk_col_type',type(col))
   return cols
 
 class NameIndexer:
   """helper that takes str, NameX or attrx and returns the right thing (or raises an error on ambiguity).
   Note: alias-only tables 'select from (nested select) as alias' currently live here. replace_subqueries might be a better place.
-  Warning: a-only tables probably need to work out their dependency graph
+  warning: a-only tables probably need to work out their dependency graph
   """
   @staticmethod
   def update_aliases(aliases,aonly,x):
