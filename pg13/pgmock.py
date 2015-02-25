@@ -1,5 +1,7 @@
 "table class and apply_sql. this is weirdly codependent with sqex.py"
 
+# todo: type checking of literals based on column. flag-based (i.e. not all DBs do this) cast strings to unicode.
+
 import re,collections,contextlib
 from . import pg,threevl,sqparse2,sqex
 

@@ -1,6 +1,7 @@
 "parsing for pgmock -- rewritten in PLY"
 
 # todo: be more consistent about CommaX vs raw tuple
+# todo: factor out the AST-path stuff to its own file
 
 # differences vs real SQL:
 # 1. sql probably allows 'table' as a table name. I think I'm stricter about keywords (and I don't allow quoting columns)
@@ -12,11 +13,11 @@ class PgMockError(StandardError): pass
 class SQLSyntaxError(PgMockError): "base class for errors during parsing. beware: this gets called during table execution for things a real parser would have caught"
 
 class BaseX(object):
-  "base class for expressions"
+  "base class for expressions. 'tree path' is implemented here (i.e. square brackets for get-set)"
   ATTRS=()
   VARLEN=()
   def __init__(self,*args):
-    if len(args)!=len(self.ATTRS): raise TypeError('wrong_n_args',len(args),len(self.ATTRS))
+    if len(args)!=len(self.ATTRS): raise TypeError('wrong_n_args',len(args),len(self.ATTRS),args)
     for attr,arg in zip(self.ATTRS,args): setattr(self,attr,arg)
   def __eq__(self,other):
     return type(self) is type(other) and all(getattr(self,attr)==getattr(other,attr) for attr in self.ATTRS)
@@ -58,7 +59,7 @@ class SubLit(object): pass
 class NameX(BaseX): ATTRS = ('name',)
 class AsterX(BaseX): pass
 class NullX(BaseX): pass
-class FromTableX(BaseX): ATTRS = ('name','alias')
+class AliasX(BaseX): ATTRS = ('name','alias')
 class JoinX(BaseX): ATTRS = ('a','b','on_stmt')
 class OpX(BaseX):
   PRIORITY=('or','and','not','>','<','@>','@@','||','!=','=','is not','is','in','*','/','+','-')
@@ -85,7 +86,7 @@ class AttrX(BaseX): ATTRS = ('parent','attr')
 
 class CommandX(BaseX): "base class for top-level commands. probably won't ever be used."
 class SelectX(CommandX):
-  ATTRS = ('cols','tables','where','order','limit','offset')
+  ATTRS = ('cols','tables','where','group','order','limit','offset')
   VARLEN = ('tables',)
 
 class ColX(BaseX): ATTRS = ('name','coltp','isarray','not_null','default','pkey')
@@ -133,7 +134,7 @@ def tup_remove(tup,val):
     return tup[:i]+tup[i+1:]
   else: return tup
 
-KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete'.split()}
+KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
   t_STRLIT = "'((?<=\\\\)'|[^'])+'"
@@ -212,20 +213,22 @@ class SqlGrammar:
     t[0] = CallX(t[1], t[3])
   def p_attr(self,t):
     """attr : NAME '.' NAME
-                  | NAME '.' '*'
+            | NAME '.' '*'
     """
     t[0] = AttrX(NameX(t[1]), AsterX() if t[3]=='*' else NameX(t[3]))
   def p_attrx(self,t): "expression : attr"; t[0] = t[1]
+  def p_aliasx(self,t): "aliasx : NAME kw_as NAME"; t[0] = AliasX(t[1],t[3])
   def p_paren(self,t):
     "expression : '(' expression ')' \n | '(' commalist ')'" # todo doc: think about this
     t[0] = t[2]
   def p_fromtable(self,t):
     """fromtable : NAME
-                 | NAME kw_as NAME
+                 | aliasx
+                 | '(' selectx ')' kw_as NAME
     """
-    # elif node is clas.from_table: return FromTableX(x[1].name, None if len(x)==2 else x[3].name)
-    if len(t) not in (2,4): raise NotImplementedError('unk_len',len(t))
-    t[0] = FromTableX(t[1],t[3] if len(t) == 4 else None)
+    if len(t)==6: t[0]=AliasX(t[2],t[5])
+    elif len(t)==2: t[0]=t[1]
+    else: raise NotImplementedError('unk_len',len(t))
   def p_joinx(self,t):
     """joinx : fromtable kw_join fromtable
              | fromtable kw_join fromtable kw_on expression
@@ -246,9 +249,11 @@ class SqlGrammar:
   def p_order(self,t): "order : kw_order kw_by expression \n | "; t[0] = t[3] if len(t) == 4 else None
   def p_limit(self,t): "limit : kw_limit expression \n | "; t[0] = t[2] if len(t) == 3 else None
   def p_offset(self,t): "offset : kw_offset expression \n | "; t[0] = t[2] if len(t) == 3 else None
+  def p_group(self,t): "group : kw_group kw_by expression \n | "; t[0] = t[3] if len(t)==4 else None
   def p_selectx(self,t):
-    "expression : kw_select commalist fromlist wherex order limit offset"
+    "selectx : kw_select commalist fromlist wherex group order limit offset"
     t[0] = SelectX(*t[2:])
+  def p_extra_x(self,t): "expression : selectx \n | aliasx"; t[0] = t[1] # expressions that also need to be separately addressable
   def p_isarray(self,t): "is_array : '[' ']' \n | "; t[0] = len(t) > 1
   def p_isnotnull(self,t): "is_notnull : kw_not kw_null \n | "; t[0] = len(t) > 1
   def p_default(self,t): "default : kw_default expression \n | "; t[0] = t[2] if len(t) > 1 else None

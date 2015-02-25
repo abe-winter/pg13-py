@@ -70,9 +70,18 @@ def test_parse_call():
   from pg13.sqparse2 import CallX,Literal,NameX,CommaX
   assert sqparse2.parse('call(1,2,3)')==CallX('call',CommaX([Literal(1), Literal(2), Literal(3)]))
 def test_parse_select():
-  from pg13.sqparse2 import SelectX,CommaX,AsterX,FromTableX,BinX,OpX,NameX
-  assert sqparse2.parse('select * from t1 where a=b')==SelectX(CommaX([AsterX()]),[FromTableX('t1',None)],BinX(OpX('='),NameX('a'),NameX('b')),None,None,None)
+  from pg13.sqparse2 import SelectX,CommaX,AsterX,AliasX,BinX,OpX,NameX
+  assert sqparse2.parse('select * from t1 where a=b group by a')==SelectX(
+    CommaX([AsterX()]),['t1'],
+    BinX(OpX('='),NameX('a'),NameX('b')),
+    NameX('a'),
+    None,None,None
+  )
 
 @pytest.mark.xfail
 def test_operator_order():
   raise NotImplementedError
+
+def test_select_from_as():
+  fromx=sqparse2.parse("select * from (select a as alias from t1 where userid=1) as sub group by tag").tables[0]
+  assert isinstance(fromx,sqparse2.AliasX) and isinstance(fromx.name,sqparse2.SelectX) and fromx.alias=='sub'
