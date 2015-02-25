@@ -33,7 +33,7 @@ def test_sub_stmt():
   xins[p2] = Literal('b')
   assert xins.values==[Literal('a'), Literal('b')]
   x2 = sqparse2.parse('coalesce(max(col),0)')
-  assert sqex.contains_aggregate(x2) # checking that sub_slots can descends into CallX.args
+  assert sqex.contains(x2,sqex.consumes_rows) # checking that sub_slots can descend into CallX.args
 
 def test_decompose_select():
   # basics

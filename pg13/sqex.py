@@ -7,11 +7,10 @@ from . import sqparse2,threevl,misc
 class ColumnNameError(StandardError): "name not in any tables or name matches too many tables"
 class TableNameError(StandardError): "expression referencing unk table"
 
-def is_aggregate(ex):
-  "is the expression something that runs on a list of rows rather than a single row"
-  # todo doc: explain why it's not necessary to do this check on the whereclause
-  return isinstance(ex,sqparse2.CallX) and ex.f in ('min','max')
-def contains_aggregate(ex): return bool(sub_slots(ex,is_aggregate))
+# todo doc: explain why it's not necessary to do these checks on the whereclause
+def consumes_rows(ex): return isinstance(ex,sqparse2.CallX) and ex.f in ('min','max')
+def returns_rows(ex): return isinstance(ex,sqparse2.CallX) and ex.f in ('unnest',)
+def contains(ex,f): return bool(sub_slots(ex,f,match=True))
 
 def evalop(op,left,right):
   "this takes evaluated left and right (i.e. values not expressions)"
@@ -211,11 +210,12 @@ def run_select(ex,tables,table_ctor):
   if ex.limit or ex.offset:
     print ex.limit, ex.offset
     raise NotImplementedError('notimp: limit,offset')
-  if contains_aggregate(ex.cols):
-    if not all(is_aggregate(col) or contains_aggregate(col) for col in ex.cols.children):
+  if contains(ex.cols,consumes_rows):
+    if not all(contains(col,consumes_rows) for col in ex.cols.children):
       # todo: this isn't good enough. what about nesting cases like max(min(whatever))
       raise sqparse2.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
     return evalex(ex.cols,composite_rows,nix,tables)
+  elif contains(ex.cols,returns_rows): raise NotImplementedError
   else: return [evalex(ex.cols,r,nix,tables) for r in composite_rows]
 
 def starlike(x):
@@ -248,7 +248,7 @@ def evalex(x,c_row,nix,tables):
       (ret.extend if starlike(child) else ret.append)(subcall(child))
     return ret
   elif isinstance(x,sqparse2.CallX):
-    if is_aggregate(x): # careful: is_aggregate, not contains_aggregate
+    if consumes_rows(x): # careful: is_aggregate, not contains_aggregate
       if not isinstance(c_row,list): raise TypeError('aggregate function expected a list of rows')
       if len(x.args.children)!=1: raise ValueError('aggregate function expected a single value',x.args)
       arg,=x.args.children # intentional: error if len!=1
@@ -257,12 +257,14 @@ def evalex(x,c_row,nix,tables):
       if x.f=='min': return min(vals)
       elif x.f=='max': return max(vals)
       else: raise NotImplementedError
+    elif returns_rows(x):
+      if x.f=='unnest': raise NotImplementedError # todo next
     else:
       args=subcall(x.args)
       if x.f=='coalesce':
         a,b=args # todo: does coalesce take more than 2 args?
         return b if a is None else a
-      else: raise NotImplementedError('unk_function',x.f.name)
+      else: raise NotImplementedError('unk_function',x.f)
   elif isinstance(x,sqparse2.SelectX): raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
   elif isinstance(x,sqparse2.AttrX):return nix.rowget(tables,c_row,x)
   elif isinstance(x,sqparse2.CaseX):
