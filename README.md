@@ -70,7 +70,8 @@ Run `pip install . && py.test` in the root dir to see if pg13 will work on your 
 Supported SQL features:
 * select, insert, update, create table, delete
 * scalar subqueries (i.e. `select * from t1 where a=(select b from t2 where c=true)`)
-* joins (but without a serious query planner, they're not efficient)
+* various join syntax (but without a serious query planner, it's not efficient on large tables)
+* sub-selects with alias, i.e. temporary tables in select commands
 
 Missing SQL features:
 * common table expressions (`with t0 as (select * from t1 where a=5) select * from t0,t2 where t0.a=t2.a`)

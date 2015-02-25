@@ -219,7 +219,7 @@ class SqlGrammar:
     # careful: sqex.infer_columns relies on AttrX not containing anything but a name
     t[0] = AttrX(NameX(t[1]), AsterX() if t[3]=='*' else NameX(t[3]))
   def p_attrx(self,t): "expression : attr"; t[0] = t[1]
-  def p_aliasx(self,t): "aliasx : NAME kw_as NAME"; t[0] = AliasX(t[1],t[3])
+  def p_aliasx(self,t): "aliasx : expression kw_as NAME"; t[0] = AliasX(t[1],t[3])
   def p_paren(self,t):
     "expression : '(' expression ')' \n | '(' commalist ')'" # todo doc: think about this
     t[0] = t[2]

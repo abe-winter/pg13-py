@@ -74,21 +74,23 @@ def infer_columns(selectx,tables_dict):
       for t in table_order:
         cols.extend(table2fields[t])
     elif isinstance(col,sqparse2.BaseX):
-      all_paths = sub_slots(col, lambda x:isinstance(x,(sqparse2.AttrX,sqparse2.NameX)), match=True)
+      all_paths = sub_slots(col, lambda x:isinstance(x,(sqparse2.AttrX,sqparse2.NameX,sqparse2.AliasX)), match=True)
       paths = eliminate_sequential_children(all_paths) # this eliminates NameX under AttrX
       for p in paths:
         x = col[p]
         if isinstance(x,sqparse2.AttrX):
           if not isinstance(x.parent,sqparse2.NameX): raise TypeError('parent_not_name',type(x.parent))
-          if isinstance(x.attr,sqparse2.NameX): raise NotImplementedError
+          if isinstance(x.attr,sqparse2.NameX): raise NotImplementedError # todo
           elif isinstance(x.attr,sqparse2.AsterX): cols.extend(table2fields[x.parent.name])
           else: raise TypeError('attr_unk_type',type(x.attr))
         elif isinstance(x,sqparse2.NameX):
           matching_fields = filter(None,(next((f for f in table2fields[t] if f.name==x.name),None) for t in table_order))
           if len(matching_fields)!=1: raise sqparse2.SQLSyntaxError('missing_or_dupe_field',x,matching_fields)
           cols.append(matching_fields[0])
+        elif isinstance(x,sqparse2.AliasX): cols.append(sqparse2.ColX(x.alias,None,None,None,None,None))
         else: raise TypeError('unk_item_type',type(x))
     else: raise TypeError('unk_col_type',type(col))
+  print 'cols',cols
   return cols
 
 class NameIndexer:
@@ -102,7 +104,7 @@ class NameIndexer:
     if isinstance(x,basestring): aliases[x]=x
     elif isinstance(x,sqparse2.AliasX):
       if not isinstance(x.alias,basestring): raise TypeError('alias not string',type(x.alias))
-      if isinstance(x.name,basestring): aliases.update({x.alias:x.name,x.name:x.name})
+      if isinstance(x.name,sqparse2.NameX): aliases.update({x.alias:x.name.name,x.name.name:x.name.name})
       elif isinstance(x.name,sqparse2.SelectX):
         aliases.update({x.alias:x.alias})
         aonly[x.alias]=x.name
@@ -246,7 +248,6 @@ def evalex(x,c_row,nix,tables):
       (ret.extend if starlike(child) else ret.append)(subcall(child))
     return ret
   elif isinstance(x,sqparse2.CallX):
-    print 'callx',x
     if is_aggregate(x): # careful: is_aggregate, not contains_aggregate
       if not isinstance(c_row,list): raise TypeError('aggregate function expected a list of rows')
       if len(x.args.children)!=1: raise ValueError('aggregate function expected a single value',x.args)
@@ -280,6 +281,7 @@ def evalex(x,c_row,nix,tables):
     print 'ret:',ret,x.expr
     print "warning: not sure what I'm doing here with cardinality tweak on CommaX"
     return [ret] if isinstance(x.expr,(sqparse2.CommaX,sqparse2.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
+  elif isinstance(x,sqparse2.AliasX): return subcall(x.name) # todo: rename AliasX 'name' to 'expr'
   else: raise NotImplementedError(type(x),x)
 
 def sub_slots(x,match_fn,path=(),arr=None,match=False):

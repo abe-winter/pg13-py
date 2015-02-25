@@ -254,6 +254,12 @@ def test_alias_only():
   with pytest.raises(sqex.ColumnNameError): runsql('select a,c from (select * from t1) as sub1,(select * from t2) as sub2')
   assert [[0,0],[1,0],[2,0]]==runsql('select b,c from (select * from t1) as sub1,(select * from t2) as sub2')
 
+def test_call_as():
+  tables,runsql=prep('create table t1 (a int, b int)')
+  tables['t1'].rows=[[None,1],[1,2]]
+  assert [[0],[1]]==runsql('select coalesce(a,0) as c from t1')
+  assert [[0],[1]]==runsql('select c from (select coalesce(a,0) as c from t1) as sub')
+
 @pytest.mark.xfail # delete without a where clause is broken
 def test_delete():
   tables,runsql=prep('create table t1 (a int, b int)')
