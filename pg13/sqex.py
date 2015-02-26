@@ -24,12 +24,15 @@ def evalop(op,left,right):
     if right is not None: raise NotImplementedError('can null be on either side? what if neither value is null?')
     return (left is not None) if (op=='is not') else (left is None)
   elif op=='@>':
-    if not all(isinstance(x,list) for x in (left,right)): raise TypeError('non-array-args',self.value)
+    # todo: support a TextSearchDoc that will overload a lot of these operators
+    if not all(isinstance(x,list) for x in (left,right)): raise TypeError('non-array-args',op,left,right)
     return set(left)>=set(right)
   elif op=='||':
-    if not all(isinstance(x,list) for x in (left,right)): raise TypeError('non-array-args',self.value)
+    if not all(isinstance(x,list) for x in (left,right)): raise TypeError('non-array-args',op,left,right)
     return left+right
-  elif op=='@@': raise NotImplementedError
+  elif op=='@@':
+    if not all(isinstance(x,set) for x in (left,right)): raise TypeError('non_set_args',op,type(left),type(right))
+    return bool(left&right)
   else: raise NotImplementedError(op,left,right)
 
 def uniqify(list_):
@@ -157,7 +160,6 @@ class NameIndexer:
     else: raise TypeError(type(index))
   def rowget(self,tables_dict,row_list,index):
     "row_list in self.row_order"
-    # print 'rowget', self.index_tuple(tables_dict,index,False), row_list
     tmp=row_list
     for i in self.index_tuple(tables_dict,index,False): tmp=tmp[i]
     return tmp
@@ -286,11 +288,13 @@ def evalex(x,c_row,nix,tables):
       elif x.f=='count': return len(vals)
       else: raise NotImplementedError
     else:
+      # todo: get more concrete about argument counts
       args=subcall(x.args)
       if x.f=='coalesce':
         a,b=args # todo: does coalesce take more than 2 args?
         return b if a is None else a
-      elif x.f=='unnest': return subcall(x.args)[0] # this is handled by the caller
+      elif x.f=='unnest': return subcall(x.args)[0] # note: run_select does some work in this case too
+      elif x.f in ('to_tsquery','to_tsvector'): return set(subcall(x.args.children[0]).split())
       else: raise NotImplementedError('unk_function',x.f)
   elif isinstance(x,sqparse2.SelectX): raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
   elif isinstance(x,sqparse2.AttrX):return nix.rowget(tables,c_row,x)

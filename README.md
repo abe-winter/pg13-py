@@ -68,12 +68,13 @@ SQL is a standard, and many implementations don't replicate the standard exactly
 Run `pip install . && py.test` in the root dir to see if pg13 will work on your system.
 
 Supported SQL features:
-* select, insert, update, create table, delete
+* select, insert, update, create table, delete (with syntax limitations)
 * scalar subqueries (i.e. `select * from t1 where a=(select b from t2 where c=true)`)
 * various join syntax (but without a serious query planner, it's not efficient on large tables)
 * sub-selects with alias, i.e. temporary tables in select commands
 * group by seems to work in simple cases, expect bugs
-* array, some of its functions (including unnest), some of its operators
+* some array functions (including unnest) and operators
+* text search support is limited (limited versions of to_tsvector, to_tsquery, @@)
 
 Missing SQL features:
 * common table expressions (`with t0 as (select * from t1 where a=5) select * from t0,t2 where t0.a=t2.a`)
@@ -85,9 +86,11 @@ Missing SQL features:
 * partitioning
 * window functions
 * anything unique to oracle or mysql
+* datetime type & interval math are not supported in syntax. if you pass python datetimes as subbed literals it might work.
+* stored procs
 
 ## pure-python implementation of SQL
 
-If you're looking for a pure-python implementation of SQL, you may be in the right place.
+If you're looking for a pure-python implementation of SQL (an evaluator, not just a parser), you may be in the right place.
 
 Also check out http://gadfly.sourceforge.net/gadfly.html

@@ -287,3 +287,11 @@ def test_groupby():
   assert [[0,2,2],[1,2,4]]==runsql('select a,count(a),max(b) from t1 group by a')
   assert [[0,2,1],[1,2,3]]==runsql('select a,count(a),min(b) from t1 group by a')
   assert [[0,2],[1,2]]==runsql('select a,count(*) from t1 group by a')
+
+def test_textsearch():
+  tables,runsql=prep('create table t1 (a int, b text)')
+  tables['t1'].rows=[[0,'one two three okay'],[1,'four five six okay']]
+  assert []==runsql('select a from t1 where to_tsvector(b) @@ to_tsquery(%s)',('unk_token',))
+  assert [[0]]==runsql('select a from t1 where to_tsvector(b) @@ to_tsquery(%s)',('one',))
+  assert [[1]]==runsql('select a from t1 where to_tsvector(b) @@ to_tsquery(%s)',('four',))
+  assert [[0],[1]]==runsql('select a from t1 where to_tsvector(b) @@ to_tsquery(%s)',('okay',))
