@@ -65,20 +65,26 @@ Very very new. Don't use it to run your nuclear facility. Probably don't use the
 
 SQL is a standard, and many implementations don't replicate the standard exactly. This one also doesn't.
 
-Run `pip install . && py.test` in the root dir to see if pg13 will work on your system. Hint: you can probably survive without the psycopg2 dependency.
+Run `pip install . && py.test` in the root dir to see if pg13 will work on your system.
 
 Supported SQL features:
 * select, insert, update, create table, delete
 * scalar subqueries (i.e. `select * from t1 where a=(select b from t2 where c=true)`)
 * various join syntax (but without a serious query planner, it's not efficient on large tables)
 * sub-selects with alias, i.e. temporary tables in select commands
+* group by seems to work in simple cases, expect bugs
+* array, some of its functions (including unnest), some of its operators
 
 Missing SQL features:
 * common table expressions (`with t0 as (select * from t1 where a=5) select * from t0,t2 where t0.a=t2.a`)
 * indexes and constraints (`create index` statements will parse but are a no-op)
 * asc and desc keywords in `order by` expressions (asc by default; but you can use a minus sign to simulate desc in some cases)
 * drop table
-* type checking (i.e. it will let you insert integers in a text column)
+* type checking (a correct simulation of unicode quirks is particularly lacking)
+* lots of functions and operators
+* partitioning
+* window functions
+* anything unique to oracle or mysql
 
 ## pure-python implementation of SQL
 

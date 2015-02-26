@@ -8,7 +8,7 @@ class ColumnNameError(StandardError): "name not in any tables or name matches to
 class TableNameError(StandardError): "expression referencing unk table"
 
 # todo doc: explain why it's not necessary to do these checks on the whereclause
-def consumes_rows(ex): return isinstance(ex,sqparse2.CallX) and ex.f in ('min','max')
+def consumes_rows(ex): return isinstance(ex,sqparse2.CallX) and ex.f in ('min','max','count')
 def returns_rows(ex): return isinstance(ex,sqparse2.CallX) and ex.f in ('unnest',)
 def contains(ex,f): return bool(sub_slots(ex,f,match=True))
 
@@ -89,7 +89,6 @@ def infer_columns(selectx,tables_dict):
         elif isinstance(x,sqparse2.AliasX): cols.append(sqparse2.ColX(x.alias,None,None,None,None,None))
         else: raise TypeError('unk_item_type',type(x))
     else: raise TypeError('unk_col_type',type(col))
-  print 'cols',cols
   return cols
 
 class NameIndexer:
@@ -146,7 +145,7 @@ class NameIndexer:
       if len(candidates)!=1: raise ColumnNameError(("ambiguous_column" if candidates else "no_such_column"),index)
       tname, = candidates
       return self.table_order.index(tname), merged_tables[tname].lookup(index).index
-    if isinstance(index,sqparse2.AttrX):
+    elif isinstance(index,sqparse2.AttrX):
       if index.parent.name not in self.aliases: raise TableNameError('table_notin_x',index.parent,self.aliases)
       tname = self.aliases[index.parent.name]
       tindex = self.table_order.index(tname)
@@ -200,11 +199,14 @@ def replace_subqueries(ex,tables,table_ctor):
   return ex # but it was modified in place, too
 
 def unnest_helper(cols,row):
-  print 'unnest_helper', cols, row
-  for col,val in zip(cols.children,row):
-    print 'col',col,'val',val,'contains',contains(col,returns_rows)
   wrapped = [val if contains(col,returns_rows) else [val] for col,val in zip(cols.children,row)]
   return map(list,itertools.product(*wrapped))
+
+def collapse_group_expr(groupx,cols,ret_row):
+  "collapses columns matching the group expression. I'm sure this is buggy; look at a real DB's imp of this."
+  for i,col in enumerate(cols.children):
+    if col==groupx: ret_row[i]=ret_row[i][0]
+  return ret_row
 
 def run_select(ex,tables,table_ctor):
   nix, where = decompose_select(ex)
@@ -214,9 +216,22 @@ def run_select(ex,tables,table_ctor):
   composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
   if ex.order: # note: order comes before limit / offset
     composite_rows.sort(key=lambda c_row:evalex(ex.order,c_row,nix,tables))
-  if ex.limit or ex.offset or ex.group:
-    print ex.limit, ex.offset, ex.group
+  if ex.limit or ex.offset:
+    print ex.limit, ex.offset
     raise NotImplementedError('notimp: limit,offset,group')
+  if ex.group:
+    # todo: non-aggregate expressions are allowed if they consume only the group expression
+    # todo: does the group expression have to be a NameX? for now it can be any expression. check specs.
+    # todo: this block shares logic with other parts of the function. needs refactor.
+    badcols=[col for col in ex.cols.children if not col==ex.group and not contains(col,consumes_rows)]
+    if badcols: raise ValueError('illegal_cols_in_group',badcols)
+    if contains(ex.cols,returns_rows): raise NotImplementedError('todo: unnest with grouping')
+    groups = collections.OrderedDict()
+    for row in composite_rows:
+      k = evalex(ex.group,row,nix,tables)
+      if k not in groups: groups[k] = []
+      groups[k].append(row)
+    return [collapse_group_expr(ex.group, ex.cols, evalex(ex.cols,g_rows,nix,tables)) for g_rows in groups.values()]
   if contains(ex.cols,consumes_rows):
     if not all(contains(col,consumes_rows) for col in ex.cols.children):
       # todo: this isn't good enough. what about nesting cases like max(min(whatever))
@@ -231,6 +246,9 @@ def starlike(x):
   # todo: is '* as name' a thing?
   return isinstance(x,sqparse2.AsterX) or isinstance(x,sqparse2.AttrX) and isinstance(x.attr,sqparse2.AsterX)
 
+# todo: evalex should use intermediate types: Scalar, Row, RowList, Table.
+#   Row and Table might be able to bundle into RowList. RowList should know the type and names of its columns.
+#   This will solve a lot of cardinality confusion.
 def evalex(x,c_row,nix,tables):
   "c_row is a composite row, i.e. a list/tuple of rows from all the query's tables, ordered by nix.table_order"
   def subcall(x): "helper for recursive calls"; return evalex(x,c_row,nix,tables)
@@ -265,6 +283,7 @@ def evalex(x,c_row,nix,tables):
       if not vals: return None
       if x.f=='min': return min(vals)
       elif x.f=='max': return max(vals)
+      elif x.f=='count': return len(vals)
       else: raise NotImplementedError
     else:
       args=subcall(x.args)
@@ -294,7 +313,7 @@ def evalex(x,c_row,nix,tables):
   elif isinstance(x,sqparse2.AliasX): return subcall(x.name) # todo: rename AliasX 'name' to 'expr'
   else: raise NotImplementedError(type(x),x)
 
-def sub_slots(x,match_fn,path=(),arr=None,match=False):
+def sub_slots(x,match_fn,path=(),arr=None,match=False): # todo: rename match to topmatch for clarity
   """given a BaseX in x, explore its ATTRS (doing the right thing for VARLEN).
   return a list of tree-paths (i.e. tuples) for tree children that match match_fn. The root elt won't match.
   """

@@ -280,3 +280,10 @@ def test_max_unnest():
   tables,runsql=prep('create table t1 (a int, b int[])')
   tables['t1'].rows=[[0,[1,2,3]]]
   assert [3]==runsql('select max(unnest(b)) from t1')
+
+def test_groupby():
+  tables,runsql=prep('create table t1 (a int, b int)')
+  tables['t1'].rows=[[0,1],[0,2],[1,3],[1,4]]
+  assert [[0,2,2],[1,2,4]]==runsql('select a,count(a),max(b) from t1 group by a')
+  assert [[0,2,1],[1,2,3]]==runsql('select a,count(a),min(b) from t1 group by a')
+  assert [[0,2],[1,2]]==runsql('select a,count(*) from t1 group by a')

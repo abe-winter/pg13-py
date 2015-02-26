@@ -75,9 +75,11 @@ class OpX(BaseX):
 class BinX(BaseX): ATTRS = ('op','left','right')
 class UnX(BaseX): ATTRS = ('op','val')
 class CommaX(BaseX):
+  # todo: implement an __iter__ for this; I
   ATTRS = ('children',)
   VARLEN = ('children',)
   def __init__(self,children): self.children=list(children) # needs to be a list (i.e. mutable) for SubLit substitution (in sqex.sub_slots)
+  def __iter__(self): raise NotImplementedError("don't iterate CommaX directly -- loop on x.children")
 class CallX(BaseX): ATTRS = ('f','args') # args is not VARLEN; it's a commax because it's passed to evalex I think
 class WhenX(BaseX): ATTRS = ('when','then')
 class CaseX(BaseX):
