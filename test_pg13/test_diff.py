@@ -58,9 +58,11 @@ def test_worddiff():
   assert len(deltas)==2
   assert diff.applydiff(a,deltas)==b
 
-@pytest.mark.xfail
 def test_subslice():
-  raise NotImplementedError,'todo next'
+  assert diff.subslice((1,2),(2,5),'head')==(2,3)
+  assert diff.subslice((1,2),(2,5),'middle')==(3,4)
+  assert diff.subslice((1,2),(2,5),'tail')==(4,5)
+  with pytest.raises(ValueError): diff.subslice((1,2),(2,5),'bad_val')
 
 def test_rediff():
   a='two houses both alike in dignity eh?'; b='two houses doth quoth alike in dignity '

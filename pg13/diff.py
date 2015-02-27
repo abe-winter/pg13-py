@@ -86,10 +86,12 @@ def subslice(inner,outer,section):
   outer is a slice (2-tuple, not an official python slice) in global coordinates\
   inner is a slice (2-tuple) on that slice\
   returns the result of sub-slicing outer by inner'
+  # todo: think about constraints here. inner and outer ordered, inner[1] less than outer[1]-outer[0]
+  # todo: this would make more sense as a member of a Slice class
   if section=='head': return outer[0],outer[0]+inner[0]
   elif section=='tail': return outer[0]+inner[1],outer[1]
   elif section=='middle': return outer[0]+inner[0],outer[0]+inner[1]
-  else: raise ValueError('section val %s not in head,middle,tail'%section)
+  else: raise ValueError('section val %s not one of (head,middle,tail)'%section)
 
 def rediff(a,b,global_a_slice=None):
   "recursive diff (splits around longest substring and runs diff on head and tail remnants).\

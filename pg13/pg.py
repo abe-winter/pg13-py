@@ -6,12 +6,6 @@
 import sys,contextlib,ujson,functools,collections
 from . import errors
 
-def sel(cols,table,where=None):
-  'simple query generator'
-  # todo(awinter): this isn't used. should it be? else delete.
-  return ('select %s from %s where %s'%(cols,table,where)) if where is not None \
-    else ('select %s from %s'%(cols,table))
-
 class Select1Error(StandardError): "base for select1 error conditions"
 class Missing(Select1Error): pass
 class NotUnique(Select1Error): pass

@@ -87,6 +87,7 @@ def test_select_max():
   runsql("insert into t1 (a,b,c) values (1,2,3)")
   runsql("insert into t1 (a,b,c) values (4,5,6)")
   assert [4]==runsql("select max(a) from t1")
+  with pytest.raises(sqparse2.SQLSyntaxError): runsql('select a,max(a) from t1') # todo: spec support
 
 def test_select_coalesce():
   tables,runsql=prep("create table t1 (a int, b int, c int)")

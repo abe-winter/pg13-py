@@ -33,7 +33,7 @@ def evalop(op,left,right):
   elif op=='@@':
     if not all(isinstance(x,set) for x in (left,right)): raise TypeError('non_set_args',op,type(left),type(right))
     return bool(left&right)
-  else: raise NotImplementedError(op,left,right)
+  else: raise NotImplementedError(op,left,right) # pragma: no cover
 
 def uniqify(list_):
   "inefficient on long lists; short lists only. preserves order."
@@ -90,8 +90,8 @@ def infer_columns(selectx,tables_dict):
           if len(matching_fields)!=1: raise sqparse2.SQLSyntaxError('missing_or_dupe_field',x,matching_fields)
           cols.append(matching_fields[0])
         elif isinstance(x,sqparse2.AliasX): cols.append(sqparse2.ColX(x.alias,None,None,None,None,None))
-        else: raise TypeError('unk_item_type',type(x))
-    else: raise TypeError('unk_col_type',type(col))
+        else: raise TypeError('unk_item_type',type(x)) # pragma: no cover
+    else: raise TypeError('unk_col_type',type(col)) # pragma: no cover
   return cols
 
 class NameIndexer:
@@ -109,8 +109,8 @@ class NameIndexer:
       elif isinstance(x.name,sqparse2.SelectX):
         aliases.update({x.alias:x.alias})
         aonly[x.alias]=x.name
-      else: raise TypeError('aliasx_unk_thing',type(x.name))
-    else: raise TypeError(type(x))
+      else: raise TypeError('aliasx_unk_thing',type(x.name)) # pragma: no cover
+    else: raise TypeError(type(x)) # pragma: no cover
   @classmethod
   def ctor_fromlist(clas,fromlistx):
     aliases={}
@@ -121,7 +121,7 @@ class NameIndexer:
       elif isinstance(from_item,sqparse2.JoinX):
         clas.update_aliases(aliases,aonly,from_item.a)
         clas.update_aliases(aliases,aonly,from_item.b)
-      else: raise TypeError(type(from_item))
+      else: raise TypeError(type(from_item)) # pragma: no cover
     table_order=sorted(set(aliases.values()))
     return clas(aliases,table_order,aonly)
   @classmethod
@@ -157,7 +157,7 @@ class NameIndexer:
         else: return (tindex,)
       else: return (tindex,merged_tables[tname].lookup(index.attr).index)
       # todo: stronger typing here. make sure both fields of the AttrX are always strings.
-    else: raise TypeError(type(index))
+    else: raise TypeError(type(index)) # pragma: no cover
   def rowget(self,tables_dict,row_list,index):
     "row_list in self.row_order"
     tmp=row_list
@@ -218,7 +218,7 @@ def run_select(ex,tables,table_ctor):
   composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
   if ex.order: # note: order comes before limit / offset
     composite_rows.sort(key=lambda c_row:evalex(ex.order,c_row,nix,tables))
-  if ex.limit or ex.offset:
+  if ex.limit or ex.offset: # pragma: no cover
     print ex.limit, ex.offset
     raise NotImplementedError('notimp: limit,offset,group')
   if ex.group:
@@ -263,7 +263,7 @@ def evalex(x,c_row,nix,tables):
     if x.op.op=='+': return inner
     elif x.op.op=='-': return -inner
     elif x.op.op=='not': return threevl.ThreeVL.nein(inner)
-    else: raise NotImplementedError('unk_op',x.op)
+    else: raise NotImplementedError('unk_op',x.op) # pragma: no cover
   elif isinstance(x,sqparse2.NameX): return nix.rowget(tables,c_row,x)
   elif isinstance(x,sqparse2.AsterX):
     # todo doc: how does this get disassembled by caller?
@@ -286,7 +286,7 @@ def evalex(x,c_row,nix,tables):
       if x.f=='min': return min(vals)
       elif x.f=='max': return max(vals)
       elif x.f=='count': return len(vals)
-      else: raise NotImplementedError
+      else: raise NotImplementedError('unk_func',x.f) # pragma: no cover
     else:
       # todo: get more concrete about argument counts
       args=subcall(x.args)
@@ -295,7 +295,7 @@ def evalex(x,c_row,nix,tables):
         return b if a is None else a
       elif x.f=='unnest': return subcall(x.args)[0] # note: run_select does some work in this case too
       elif x.f in ('to_tsquery','to_tsvector'): return set(subcall(x.args.children[0]).split())
-      else: raise NotImplementedError('unk_function',x.f)
+      else: raise NotImplementedError('unk_function',x.f) # pragma: no cover
   elif isinstance(x,sqparse2.SelectX): raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
   elif isinstance(x,sqparse2.AttrX):return nix.rowget(tables,c_row,x)
   elif isinstance(x,sqparse2.CaseX):
@@ -315,7 +315,7 @@ def evalex(x,c_row,nix,tables):
     print "warning: not sure what I'm doing here with cardinality tweak on CommaX"
     return [ret] if isinstance(x.expr,(sqparse2.CommaX,sqparse2.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
   elif isinstance(x,sqparse2.AliasX): return subcall(x.name) # todo: rename AliasX 'name' to 'expr'
-  else: raise NotImplementedError(type(x),x)
+  else: raise NotImplementedError(type(x),x) # pragma: no cover
 
 def sub_slots(x,match_fn,path=(),arr=None,match=False): # todo: rename match to topmatch for clarity
   """given a BaseX in x, explore its ATTRS (doing the right thing for VARLEN).
@@ -343,5 +343,5 @@ def depth_first_sub(expr,values):
   for path,val in zip(arr,values):
     if isinstance(val,(basestring,int,float)): expr[path] = sqparse2.Literal(val)
     elif isinstance(val,(list,tuple)): expr[path] = sqparse2.ArrayLit(val)
-    else: raise TypeError('unk_sub_type',type(val),val)
+    else: raise TypeError('unk_sub_type',type(val),val) # pragma: no cover
   return expr

@@ -60,18 +60,6 @@ class Table:
     if isinstance(name,sqparse2.NameX): name = name.name # this is horrible; be consistent
     try: return FieldLookup(*next((i,f) for i,f in enumerate(self.fields) if f.name==name))
     except StopIteration: raise BadFieldName(name)
-  def returnrows(self,tables,fields,rows):
-    raise NotImplementedError('returnrows nix')
-    return [sqex.evalex(fields,row,self.name,tables) for row in rows]
-  def select(self,fields,whereclause,tables_dict,order):
-    nix = sqex.NameIndexer.ctor_name(self.name)
-    nix.resolve_aonly(tables_dict,Table)
-    match_rows=self.match(whereclause,tables_dict,nix)
-    if list(fields.children)==['*']: return self.order_rows(match_rows,order,tables_dict)
-    elif sqex.contains_aggregate(fields):
-      if not all(map(sqex.contains_aggregate,fields.children)): raise sqparse2.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
-      return self.order_rows([sqex.evalex(f,match_rows,nix,tables_dict) for f in fields.children],order,tables_dict)
-    else: return self.order_rows(self.returnrows(tables_dict,fields,match_rows),order,tables_dict)
   def update(self,setx,where,returning,tables_dict):
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
@@ -103,7 +91,7 @@ def apply_sql(ex,values,tables_dict):
     tables_dict[ex.name]=Table(ex.name,ex.cols,ex.pkey.fields if ex.pkey else [])
   elif isinstance(ex,sqparse2.IndexX): pass
   elif isinstance(ex,sqparse2.DeleteX): return tables_dict[ex.table].delete(ex.where,tables_dict)
-  else: raise TypeError(type(ex))
+  else: raise TypeError(type(ex)) # pragma: no cover
 
 class ConnectionMock:
   "for supporting the contextmanager call"

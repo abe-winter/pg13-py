@@ -126,17 +126,6 @@ def un_priority(op,val):
   if isinstance(val,BinX) and val.op < op: return bin_priority(val.op,UnX(op,val.left),val.right)
   else: return UnX(op,val)
 
-def keywordify(kw_order,keywords,vals):
-  "helper for getting ordered / null values from expressions that are marked by keyword"
-  d=dict(zip(keywords,vals))
-  return (d.get(field,None) for field in kw_order)
-def kw(name): return lrparsing.Keyword(name,False)
-def tup_remove(tup,val):
-  if val in tup:
-    i=tup.index(val)
-    return tup[:i]+tup[i+1:]
-  else: return tup
-
 KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
@@ -182,35 +171,35 @@ class SqlGrammar:
     # todo: ply exposes precedence with %prec, use it.
     if len(t)==4: t[0] = bin_priority(t[2],t[1],t[3])
     elif len(t)==3: t[0] = un_priority(t[1],t[2])
-    else: raise NotImplementedError('unk_len',len(t))
+    else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
   def p_x_commalist(self,t):
     """commalist : commalist ',' expression
                  | expression
     """
     if len(t) == 2: t[0] = CommaX([t[1]])
     elif len(t) == 4: t[0] = CommaX(t[1].children+[t[3]])
-    else: raise NotImplementedError('unk_len',len(t))
+    else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
   def p_array(self,t):
     """expression : '{' commalist '}'
                   | kw_array '[' commalist ']'
     """
     if len(t)==4: t[0] = ArrayLit(t[2].children)
     elif len(t)==5: t[0] = ArrayLit(t[3].children)
-    else: raise NotImplementedError('unk_len',len(t))
+    else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
   def p_whenlist(self,t):
     """whenlist : whenlist kw_when expression kw_then expression
                 | kw_when expression kw_then expression
     """
     if len(t)==5: t[0] = [WhenX(t[2],t[4])]
     elif len(t)==6: t[0] = t[1] + [WhenX(t[3],t[5])]
-    else: raise NotImplementedError('unk_len',len(t))
+    else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
   def p_case(self,t):
     """expression : kw_case whenlist kw_else expression kw_end
                   | kw_case whenlist kw_end
     """
     if len(t)==4: t[0] = CaseX(t[2],None)
     elif len(t)==6: t[0] = CaseX(t[2],t[4])
-    else: raise NotImplementedError('unk_len',len(t))
+    else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
   def p_call(self,t):
     "expression : NAME '(' commalist ')'"
     t[0] = CallX(t[1], t[3])
@@ -232,14 +221,14 @@ class SqlGrammar:
     """
     if len(t)==6: t[0]=AliasX(t[2],t[5])
     elif len(t)==2: t[0]=t[1]
-    else: raise NotImplementedError('unk_len',len(t))
+    else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
   def p_joinx(self,t):
     """joinx : fromtable kw_join fromtable
              | fromtable kw_join fromtable kw_on expression
     """
     if len(t)==4: t[0] = JoinX(t[1],t[3],None)
     elif len(t)==6: t[0] = JoinX(t[1],t[3],t[5])
-    else: raise NotImplementedError('unk_len',len(t))
+    else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
   def p_fromitem(self,t): "fromitem : fromtable \n | joinx"; t[0] = t[1]
   def p_fromitem_list(self,t):
     """fromitem_list : fromitem_list ',' fromitem
@@ -247,7 +236,7 @@ class SqlGrammar:
     """
     if len(t)==2: t[0] = [t[1]]
     elif len(t)==4: t[0] = t[1] + [t[3]]
-    else: raise NotImplementedError('unk_len', len(t))
+    else: raise NotImplementedError('unk_len', len(t)) # pragma: no cover
   def p_fromlist(self,t): "fromlist : kw_from fromitem_list \n | "; t[0] = t[2] if len(t) == 3 else []
   def p_wherex(self,t): "wherex : kw_where expression \n | "; t[0] = t[2] if len(t) == 3 else None
   def p_order(self,t): "order : kw_order kw_by expression \n | "; t[0] = t[3] if len(t) == 4 else None
@@ -267,12 +256,12 @@ class SqlGrammar:
     "create_list : create_list ',' col_spec \n | col_spec"
     if len(t)==2: t[0] = [t[1]]
     elif len(t)==4: t[0] = t[1] + [t[3]]
-    else: raise NotImplementedError('unk_len',len(t))
+    else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
   def p_namelist(self,t):
     "namelist : namelist ',' NAME \n | NAME"
     if len(t)==2: t[0] = [t[1]]
     elif len(t)==4: t[0] = t[1] + [t[3]]
-    else: raise NotImplementedError('unk_len',len(t))
+    else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
   def p_pkey(self,t): "pkey_stmt : ',' kw_primary kw_key '(' namelist ')' \n | "; t[0] = PKeyX(t[5]) if len(t) > 1 else None
   def p_nexists(self,t): "nexists : kw_if kw_not kw_exists \n | "; t[0] = len(t) > 1
   def p_createx(self,t):
@@ -293,7 +282,7 @@ class SqlGrammar:
     "assignlist : assignlist ',' assign \n | assign"
     if len(t)==4: t[0] = t[1] + [t[3]]
     elif len(t)==2: t[0] = [t[1]]
-    else: raise NotImplementedError('unk_len', len(t))
+    else: raise NotImplementedError('unk_len', len(t)) # pragma: no cover
   def p_updatex(self,t):
     "expression : kw_update namelist kw_set assignlist wherex opt_returnx"
     t[0] = UpdateX(t[2],t[4],t[5],t[6])
