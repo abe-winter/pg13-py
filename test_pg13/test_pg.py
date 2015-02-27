@@ -45,8 +45,11 @@ def test_select():
   ebuns=populate(3)
   assert [[0,1,'a','[]'],[1,1,'a','[]']]==list(Model.select(ebuns.pool,id2=1))
 def test_row_eq():
-  assert Model(1,0,'a','[]')==Model(1,0,'a','[]')
-  assert Model(1,0,'a','[]')!=Model(1,2,'a','[]')
+  m1=Model(1,0,'a','[]')
+  assert m1==Model(1,0,'a','[]')
+  assert m1!=Model(1,2,'a','[]')
+  assert not m1==0
+  assert m1!=0
 def test_select_models():
   ebuns=populate(3)
   assert [Model(0,1,'a','[]'),Model(1,1,'a','[]')]==list(Model.select_models(ebuns.pool,id2=1))
@@ -54,15 +57,13 @@ def test_select_models():
 def test_selectwhere():
   ebuns=populate(3)
   assert [Model(0,2,'a','[]')]==list(Model.selectwhere(ebuns.pool,0,'id2>%s',(1,)))
-@pytest.mark.xfail
 def test_insert():
   ebuns=prepmock(Model)
   Model.insert(ebuns.pool,['userid','id2'],[0,1])
-  with pytest.raises(pgmock.DuplicateError):
+  with pytest.raises(pg.DupeInsert):
     Model.insert(ebuns.pool,['userid','id2'],[0,1])
   # todo: make sure it handles JSONFIELDS correctly
-  print Model.insert(ebuns.pool,['userid','id2'],[0,2],'id2') # todo: figure out multi-column returning
-  raise NotImplementedError
+  assert [2]==Model.insert(ebuns.pool,['userid','id2'],[0,2],'id2') # todo: make sure this is the same against live DBs
 def test_insert_all():
   ebuns=prepmock(Model)
   # note: see note on null-handling trickiness in SpecialField.des
@@ -110,6 +111,16 @@ def test_updatewhere():
   Model.updatewhere(ebuns.pool,{'userid':1},content='userid_1')
   for userid,_,content,_ in ebuns.pool.tables['model'].rows:
     assert content==('userid_1' if userid==1 else 'a')
+def test_repr(): assert '<Model(pg.Row) userid:0,id2:0>'==repr(Model(0,0,'a','[]'))
+
+def test_selectxiny():
+  ebuns=populate(2)
+  print ebuns.pool.tables['model'].rows
+  # [<Model(pg.Row) userid:0,id2:0>, <Model(pg.Row) userid:0,id2:1>]
+  assert [Model(0,0,'a','[]'),Model(0,1,'a','[]')]==list(Model.select_xiny(ebuns.pool,0,'id2',[0,1]))
+  assert [Model(0,0,'a','[]')]==list(Model.select_xiny(ebuns.pool,0,'id2',[0]))
+  assert []==list(Model.select_xiny(ebuns.pool,0,'id2',[]))
+  assert [Model(0,0,'a','[]')]==list(Model.select_xiny(ebuns.pool,0,'(id2,content)',[(0,'a')]))
 
 def test_delete():
   ebuns=populate(2,2)

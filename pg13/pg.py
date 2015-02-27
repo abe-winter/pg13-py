@@ -36,7 +36,7 @@ class SpecialField(object):
       container,item=self.pytype
       if container in (list,set): return isinstance(pyvar,container) and all(isinstance(x,item) for x in pyvar)
       elif container is dict: return isinstance(pyvar,container) and all(isinstance(x,item) for x in pyvar.values())
-      else: raise TypeError('unk_container_class',container)
+      else: raise TypeError('unk_container_class',container) # pragma: no cover
     else: return isinstance(pyvar,self.pytype)
   def validate_raise(self,validate,pyvar):
     if validate and not self.validate(pyvar): raise TypeError(self.pytype,type(pyvar))
@@ -45,7 +45,7 @@ class SpecialField(object):
     self.validate_raise(validate,pyvar)
     if self.serdes=='json': return ujson.dumps(pyvar)
     elif self.serdes=='class': return pyvar.ser(validate)
-    else: raise ValueError('serdes',self.serdes)
+    else: raise ValueError('serdes',self.serdes) # pragma: no cover
   def des(self,underlying,validate=True):
     if self.serdes=='json':
       if underlying is None: raise NullJsonError
@@ -55,11 +55,11 @@ class SpecialField(object):
         # note below: doing a little casting on the container type; whatever. serialized dict could get converted to list of keys
         if container in (list,set): pyvar=container([item(*x) for x in pyvar])
         elif container is dict: pyvar={k:item(*v) for k,v in pyvar.items()}
-        else: raise TypeError('unk_container_class',container)
+        else: raise TypeError('unk_container_class',container) # pragma: no cover
       self.validate_raise(validate,pyvar)
       return pyvar
     elif self.serdes=='class': return self.pytype.des(underlying,validate)
-    else: raise ValueError('serdes',self.serdes)
+    else: raise ValueError('serdes',self.serdes) # pragma: no cover
   def sqltype(self): return 'text'
 
 class PgPool(object):
@@ -155,8 +155,8 @@ class Row(object):
     clas.create_indexes(pool_or_cursor)
   @classmethod
   def names(class_): "helper; returns list of the FIELD names"; return zip(*class_.FIELDS)[0]
-  def __eq__(self,other): return all(self[k]==other[k] for k in self.names()) if isinstance(other,type(self)) else False
-  def __neq__(self,other): return (not (self==other)) if isinstance(other,type(self)) else False
+  def __eq__(self,other): return isinstance(other,type(self)) and all(self[k]==other[k] for k in self.names())
+  def __neq__(self,other): return not self==other
   def __init__(self,*cols):
     "note: __init__ takes strings for SpecialField fields instead of the deserialized object because it expects to construct from DB rows"
     if len(cols)!=len(self.FIELDS): raise ValueError(len(cols),len(self.FIELDS))
@@ -184,7 +184,7 @@ class Row(object):
     "get the thing and the stuff from REFKEYS in a single roundtrip"
     # create an array_agg per thing in REFKEYS.
     # need to figure out how to unpack json in a select stmt.
-    raise NotImplementedError('todo')
+    raise NotImplementedError('todo') # pragma: no cover
   @classmethod
   def select(clas,pool_or_cursor,**kwargs):
     """
@@ -214,7 +214,7 @@ class Row(object):
     if kwargs: query+=' where %s'%' and '.join('%s=%%s'%k for k in kwargs)
     if isinstance(pool_or_cursor,PgPool):
       return pool_or_cursor.select(query,tuple(kwargs.values())) # return the generator
-    else: # assume it's a cursor
+    else: # pragma: no cover # assume it's a cursor
       pool_or_cursor.execute(query,tuple(kwargs.values()))
       return pool_or_cursor # iterable just like the generator ret by pool.select
   @classmethod
@@ -244,7 +244,7 @@ class Row(object):
     qstring=('select * from %s where userid=%i '%(clas.TABLE,userid))+('and ' if needs_and else '')+qtail
     if isinstance(pool_or_cursor,PgPool):
       retgen=pool_or_cursor.select(qstring,tuple(vals)) # it's a generator (not that that affects performance of big Qs without SS cursors)
-    else:
+    else: # pragma: no cover
       pool_or_cursor.execute(qstring,tuple(vals))
       retgen=pool_or_cursor
     return (clas(*row) for row in retgen)
@@ -305,7 +305,7 @@ class Row(object):
     if returning:
       query += ' returning '+returning
       if isinstance(pool_or_cursor,PgPool): return pool_or_cursor.commitreturn(query,vals)
-      else:
+      else: # pragma: no cover
         pool_or_cursor.execute(query,vals)
         return pool_or_cursor.fetchone()
     else:
@@ -318,7 +318,7 @@ class Row(object):
     # note: don't do SpecialField resolution here; clas.insert takes care of it
     return clas.insert(pool_or_cursor,fields,vals,returning=returning)
   @classmethod
-  def checkdb(clas,pool_or_cursor): raise NotImplementedError("check that DB table matches our fields")
+  def checkdb(clas,pool_or_cursor): raise NotImplementedError("check that DB table matches our fields") # pragma: no cover
   @classmethod
   def insert_mtac(clas,pool_or_cursor,restrict,incfield,fields=(),vals=()):
     """
@@ -339,7 +339,7 @@ class Row(object):
     valstring = ','.join(['%s']*len(qvals))
     query = 'insert into %s (%s) values (%s,%s) returning *'%(clas.TABLE,qcols,mtac,valstring)
     if isinstance(pool_or_cursor,PgPool): return clas(*pool_or_cursor.commitreturn(query,qvals))
-    else:
+    else: # pragma: no cover
       pool_or_cursor.execute(query,qvals)
       return clas(*pool_or_cursor.fetchone())
   @classmethod
@@ -368,7 +368,7 @@ class Row(object):
       query+=' returning '+','.join(raw_keys)
       if isinstance(pool_or_cursor,PgPool):
         return pool_or_cursor.commitreturn(query,vals)
-      else:
+      else: # pragma: no cover
         pool_or_cursor.execute(query,vals)
         return pool_or_cursor.fetchone()
     else:
@@ -415,7 +415,7 @@ class Row(object):
     whereclause=' and '.join('%s=%%s'%k for k in self.PKEY.split(','))
     q='delete from %s where %s'%(self.TABLE,whereclause)
     pool_or_cursor.commit(q,vals) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(q,vals)
-  def clientmodel(self):
+  def clientmodel(self): # pragma: no cover
     "Use the class's CLIENTFIELDS attribute to create a dictionary the client can read. Don't use this."
     raise NotImplementedError # todo delete: this is only used in dead pinboard code and a test
     return {k:self[k] for k in self.CLIENTFIELDS}
