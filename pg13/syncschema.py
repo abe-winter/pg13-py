@@ -31,11 +31,11 @@ Change2=collections.namedtuple('Change2','utc deltas crc32')
 
 class RefKey(object):
   "stick these in the REFKEYS dict in a pg.Row descendant (i.e. a model)."
-  def __init__(self,refmodel,pkey,getter=None):
-    "refmodel is the class that's being looked up.\
+  def __init__(self,refmodels,pkey,getter=None):
+    "refmodel is a list of classes being looked up.\
     pkey is a list of fieldnames and None, has the same length as refmodel's pkey. Must have exactly 1 None, which gets interpolated."
     if pkey.count(None)!=1: raise ValueError('need exactly 1 null')
-    self.refmodel,self.pkey,self.getter=refmodel,pkey,getter
+    self.refmodels,self.pkey,self.getter=refmodels,pkey,getter
   def pkeys(self,parent,field):
     "returns a list of pkey tuples by combining parent[field] with our attrs"
     template=[(parent[k] if k is not None else None) for k in self.pkey]

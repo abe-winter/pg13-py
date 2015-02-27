@@ -95,7 +95,7 @@ class Simple(pg.Row):
   FIELDS=[('userid','int'),('docid','text'),('tags',pg.SpecialField(syncschema.VDList,'class'))]
   PKEY='userid,docid'
   TABLE='simple'
-  REFKEYS={'tags':syncschema.RefKey(Ref,['userid','docid',None])}
+  REFKEYS={'tags':syncschema.RefKey([Ref],['userid','docid',None])}
 
 MODELGB=misc.GetterBy([
   syncmessage.ModelInfo('simple',Simple,None),

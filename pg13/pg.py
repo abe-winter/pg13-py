@@ -183,7 +183,7 @@ class Row(object):
   def pkey_get_withref(clas,pool_or_cursor,*vals):
     "get the thing and the stuff from REFKEYS in a single roundtrip"
     # create an array_agg per thing in REFKEYS.
-    # need to figure out how to unpack json in a select stmt.
+    # this requires a DB stored proc (or a really complicated select) to unpack the versioned fields.
     raise NotImplementedError('todo') # pragma: no cover
   @classmethod
   def select(clas,pool_or_cursor,**kwargs):
@@ -424,7 +424,9 @@ class Row(object):
     # todo doc: better explanation of what refkeys are and how fields plays in
     dd=collections.defaultdict(list)
     if any(f not in self.REFKEYS for f in fields): raise ValueError(fields,'not all in',self.REFKEYS.keys())
-    for f in fields: dd[self.REFKEYS[f].refmodel].extend(self.REFKEYS[f].pkeys(self,f))
+    for f in fields:
+      rk=self.REFKEYS[f]
+      for model in rk.refmodels: dd[model].extend(rk.pkeys(self,f))
     return dd
   def __repr__(self):
     pkey = ' %s'%','.join('%s:%s'%(k,self[k]) for k in self.PKEY.split(',')) if self.PKEY else ''
