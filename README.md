@@ -68,7 +68,7 @@ SQL is a standard, and many implementations don't replicate the standard exactly
 Run `pip install . && py.test` in the root dir to see if pg13 will work on your system.
 
 Supported SQL features:
-* select, insert, update, create table, delete (with syntax limitations)
+* commands: select, insert, update, create table, delete (with syntax limitations)
 * scalar subqueries (i.e. `select * from t1 where a=(select b from t2 where c=true)`)
 * various join syntax (but without a serious query planner, it's not efficient on large tables)
 * sub-selects with alias, i.e. temporary tables in select commands
@@ -77,10 +77,10 @@ Supported SQL features:
 * text search support is limited (limited versions of to_tsvector, to_tsquery, @@)
 
 Missing SQL features:
+* commands: drop table, alter table
 * common table expressions (`with t0 as (select * from t1 where a=5) select * from t0,t2 where t0.a=t2.a`)
 * indexes and constraints (`create index` statements will parse but are a no-op)
 * asc and desc keywords in `order by` expressions (asc by default; but you can use a minus sign to simulate desc in some cases)
-* drop table
 * type checking (a correct simulation of unicode quirks is particularly lacking)
 * lots of functions and operators
 * partitioning
@@ -91,6 +91,8 @@ Missing SQL features:
 
 ## pure-python implementation of SQL
 
-If you're looking for a pure-python implementation of SQL (an evaluator, not just a parser), you may be in the right place.
+If you're looking for a pure-python SQL engine (an evaluator, not just a parser), you may be in the right place.
 
-Also check out http://gadfly.sourceforge.net/gadfly.html
+See also:
+* http://gadfly.sourceforge.net/gadfly.html
+* https://pypi.python.org/pypi/engine

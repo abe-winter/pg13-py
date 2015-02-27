@@ -89,6 +89,7 @@ class Ref(pg.Row):
   FIELDS=[('userid','int'),('docid','text'),('tag','text'),('xfactor',pg.SpecialField(syncschema.VDList,'class'))]
   PKEY='userid,docid,tag'
   TABLE='ref'
+  SENDRAW=['tag']
 
 class Simple(pg.Row):
   "simple model for testing do_*"
@@ -159,20 +160,23 @@ def test_update_checkstale():
     ujson.dumps(['simple',[0,'2'],'tags']):['checkstale',0],
   })).values()
 
-def check_helper(request):
+def check_helper(request,include_children_for={},make_models=lambda x:None):
   pool=pgmock.PgPoolMock()
   Simple.create_table(pool)
-  return syncmessage.do_check(pool,
-    request,
-    {('simple',(0,'1')):Simple.insert_all(pool,0,'1',syncschema.VDList.create([]))},
-    {},
-    MODELGB
-  )
+  Ref.create_table(pool)
+  models = make_models(pool) or {('simple',(0,'1')):Simple.insert_all(pool,0,'1',syncschema.VDList.create([]))}
+  return syncmessage.do_check(pool,request,models,include_children_for,MODELGB)
 def test_do_check():
   assert check_helper(mkdict(1))==mkdict(['ok',1]) # ok case
   assert check_helper(mkdict(2))==mkdict(['upload',1]) # upload case
   assert check_helper(mkdict(None))==mkdict(['here',1,[]]) # load case
   assert check_helper(mkdict(0))==mkdict(['here',1,[]]) # newer case
+def test_check_raw():
+  def make_models(pool): return {
+      ('simple',(0,'1')):Simple.insert_all(pool,0,'1',syncschema.VDList.create(['tag'])),
+      ('ref',(0,'1','tag')):Ref.insert_all(pool,0,'1','tag',syncschema.VDList.create([])),
+    }
+  assert check_helper(mkdict(None),{'simple':['tags']},make_models)[syncmessage.FieldKey('ref',(0,'1','tag'),'tag')]==['here',None,'tag']
 
 def test_missing_fields():
   assert [['?field']]==check_helper(mkdict(0,field='whatever')).values()

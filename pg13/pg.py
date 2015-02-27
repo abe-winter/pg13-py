@@ -131,6 +131,7 @@ class Row(object):
   INDEXES = []
   TABLE = ''
   REFKEYS={} # this is used by syncschema. see syncschema.py for usage.
+  SENDRAW = [] # used by syncschema to send non-syncable fields 'raw'
   @classmethod
   def create_indexes(clas,pool_or_cursor):
     "this gets called by create_table, but if you've created an index you can use it to add it (assuming none exist)"

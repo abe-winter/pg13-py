@@ -56,6 +56,9 @@ def process_update(pool,model,field,sdiff):
   except pg.FieldError: return ['?field']
   if isinstance(sdiff,CheckStale): return ['chkstale',syncable.version(),syncable.generate()]
   elif not isinstance(sdiff,SerialDiff): raise TypeError(type(sdiff))
+  if not isinstance(syncable,syncschema.Syncable):
+    logging.error('update_nonsync_field',field)
+    return ['error!']
   if syncable.version()>sdiff.vbase:
     # todo: if syncable.version()==sdiff.vnew and 'todo: test that the data is the same': return ['same',syncable.version()]
     return ['merge!',syncable.version(),syncable.generate()]
@@ -85,11 +88,15 @@ def process_check(pool,model,field,version):
   "helper for do_check. version is an integer or null. returns ..."
   try: syncable=model[field]
   except pg.FieldError: return ['?field']
+  if not isinstance(syncable,syncschema.Syncable): return ['here',None,syncable]
   if syncable.version()>version: # this includes version=None. this is the load case as well as update.
     return ['here',syncable.version(),syncable.generate()] # 'here' as in 'here, take this' or 'here you go'
   elif syncable.version()==version: return ['ok',version]
   elif syncable.version()<version: return ['upload',syncable.version()]
   else: raise RuntimeError("shouldn't get here")
+def merge_null_missing(request,name,field,pkeys):
+  "helper for add_missing_children. sets k:None for the field for pkeys not already in request."
+  request.update({rk:None for rk in [FieldKey(name,pkey,field) for pkey in pkeys] if rk not in request})
 def add_missing_children(models,request,include_children_for,modelgb):
   "helper for do_check. mutates request"
   for (nombre,pkey),model in models.items():
@@ -98,8 +105,10 @@ def add_missing_children(models,request,include_children_for,modelgb):
       childname=modelgb['row',modelclass].name
       for childfield,cftype in modelclass.FIELDS:
         # warning: issubclass fails in SpecialField tuple case. (a) issubclass sucks and (b) be more static about types.
-        if not isinstance(cftype,pg.SpecialField) or not issubclass(cftype.pytype,syncschema.Syncable): continue
-        request.update({rk:None for rk in [FieldKey(childname,pkey,childfield) for pkey in pkeys] if rk not in request})
+        if isinstance(cftype,pg.SpecialField) and issubclass(cftype.pytype,syncschema.Syncable):
+          merge_null_missing(request,childname,childfield,pkeys)
+        elif childfield in modelclass.SENDRAW: merge_null_missing(request,childname,childfield,pkeys)
+        else: pass # intentional: ignore the field
   return request # the in-place updated original
 def do_check(pool,request,models,include_children_for,modelgb):
   "request is the output of translate_check. models a dict of {(model_name,pkey_tuple):model}.\
