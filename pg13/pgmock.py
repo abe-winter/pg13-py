@@ -93,6 +93,14 @@ def apply_sql(ex,values,tables_dict):
   elif isinstance(ex,sqparse2.DeleteX): return tables_dict[ex.table].delete(ex.where,tables_dict)
   else: raise TypeError(type(ex)) # pragma: no cover
 
+class CursorMock(pg.Cursor):
+  def __init__(self,poolmock): self.poolmock = poolmock; self.lastret = None
+  def execute(self,qstring,vals=()):
+    self.lastret = apply_sql(sqparse2.parse(qstring),vals,self.poolmock.tables)
+    return len(self.lastret) if isinstance(self.lastret,list) else None
+  def __iter__(self): return iter(self.lastret)
+  def fetchone(self): return self.lastret[0]
+
 class ConnectionMock:
   "for supporting the contextmanager call"
   def __init__(self,poolmock): self.poolmock=poolmock
@@ -107,3 +115,5 @@ class PgPoolMock(pg.Pool): # only inherits so isinstance tests pass
   def close(self): self.tables={} # so GC can work. doubt this will ever get called.
   @contextlib.contextmanager
   def __call__(self): yield ConnectionMock(self)
+  @contextlib.contextmanager
+  def withcur(self): yield CursorMock(self)
