@@ -62,7 +62,13 @@ class SpecialField(object):
     else: raise ValueError('serdes',self.serdes) # pragma: no cover
   def sqltype(self): return 'text'
 
-class PgPool(object):
+class Cursor(object):
+  "based class for cursor wrappers. necessary for error-wrapping."
+  def execute(self,qstring,vals=()): raise NotImplementedError
+  def __iter__(self): raise NotImplementedError
+  def fetchone(self): raise NotImplementedError
+
+class Pool(object):
   """
   This is the base class for pool wrappers. Most of the Row methods expect one of these as the first argument.
 
@@ -99,6 +105,22 @@ def dirty(field,ttl=None):
       return d[f.__name__] if f.__name__ in d else d.setdefault(f.__name__,f(self,*args,**kwargs))
     return wrapper
   return decorator
+
+def commit_or_execute(pool_or_cursor,qstring,vals=()):
+  if isinstance(pool_or_cursor,Pool): pool_or_cursor.commit(qstring,vals)
+  elif isinstance(pool_or_cursor,Cursor): pool_or_cursor.execute(qstring,vals)
+  else: raise TypeError('bad_pool_or_cursor_type',type(pool_or_cursor))
+def select_or_execute(pool_or_cursor,qstring,vals=()):
+  if isinstance(pool_or_cursor,Pool): return pool_or_cursor.select(qstring,vals)
+  elif isinstance(pool_or_cursor,Cursor):
+    pool_or_cursor.execute(qstring,vals)
+    return pool_or_cursor
+  else: raise TypeError('bad_pool_or_cursor_type',type(pool_or_cursor))
+def commitreturn_or_fetchone(pool_or_cursor,qstring,vals=()):
+  if isinstance(pool_or_cursor,Pool): return pool_or_cursor.commitreturn(qstring,vals)
+  elif isinstance(pool_or_cursor,Cursor):
+    pool_or_cursor.execute(qstring,vals)
+    return pool_or_cursor.fetchone()
 
 class Row(object):
   """Base class for models.
@@ -138,7 +160,7 @@ class Row(object):
     for index in clas.INDEXES:
       # note: these are specified as either 'field,field,field' or a runnable query. you can put any query you want in there
       query = index if 'create index' in index.lower() else 'create index on %s (%s)'%(clas.TABLE,index)
-      pool_or_cursor.commit(query) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(query)
+      commit_or_execute(pool_or_cursor,query)
   @classmethod
   def create_table(clas,pool_or_cursor):
     """Use FIELDS, PKEY, INDEXES and TABLE members to create a sql table for the model.
@@ -152,7 +174,7 @@ class Row(object):
     base = 'create table if not exists %s (%s'%(clas.TABLE,fields)
     if clas.PKEY: base += ',primary key (%s)'%clas.PKEY
     base += ')'
-    pool_or_cursor.commit(base) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(base)
+    commit_or_execute(pool_or_cursor,base)
     clas.create_indexes(pool_or_cursor)
   @classmethod
   def names(class_): "helper; returns list of the FIELD names"; return zip(*class_.FIELDS)[0]
@@ -189,7 +211,7 @@ class Row(object):
   @classmethod
   def select(clas,pool_or_cursor,**kwargs):
     """
-    :param PgPool pool_or_cursor: can also be a psycopg2 cursor.
+    :param Pool pool_or_cursor: can also be a psycopg2 cursor.
     :param kwargs: see examples above.
     :return: generator yielding raw rows (i.e. generator of lists)
 
@@ -213,11 +235,7 @@ class Row(object):
     # todo(awinter): write a test for whether eqexpr matters; figure out pg behavior and apply to pgmock
     query="select %s from %s"%(columns,clas.TABLE)
     if kwargs: query+=' where %s'%' and '.join('%s=%%s'%k for k in kwargs)
-    if isinstance(pool_or_cursor,PgPool):
-      return pool_or_cursor.select(query,tuple(kwargs.values())) # return the generator
-    else: # pragma: no cover # assume it's a cursor
-      pool_or_cursor.execute(query,tuple(kwargs.values()))
-      return pool_or_cursor # iterable just like the generator ret by pool.select
+    return select_or_execute(pool_or_cursor,query,tuple(kwargs.values()))
   @classmethod
   def select_models(clas,pool_or_cursor,**kwargs):
     """
@@ -243,12 +261,7 @@ class Row(object):
     .. seealso:: select_xiny
     """
     qstring=('select * from %s where userid=%i '%(clas.TABLE,userid))+('and ' if needs_and else '')+qtail
-    if isinstance(pool_or_cursor,PgPool):
-      retgen=pool_or_cursor.select(qstring,tuple(vals)) # it's a generator (not that that affects performance of big Qs without SS cursors)
-    else: # pragma: no cover
-      pool_or_cursor.execute(qstring,tuple(vals))
-      retgen=pool_or_cursor
-    return (clas(*row) for row in retgen)
+    return (clas(*row) for row in select_or_execute(pool_or_cursor, qstring, tuple(vals)))
   @classmethod
   def select_xiny(clas,pool_or_cursor,userid,field,values):
     """
@@ -280,9 +293,9 @@ class Row(object):
     if len(clas.FIELDS)!=len(vals): raise ValueError('fv_len_mismatch',len(clas.FIELDS),len(vals),clas.TABLE)
     vals=clas.serialize_row([f[0] for f in clas.FIELDS],vals)
     query = "insert into %s values (%s)"%(clas.TABLE,','.join(['%s']*len(vals)))
-    try: pool_or_cursor.commit(query,vals) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(query,vals)
+    try: commit_or_execute(pool_or_cursor, query, vals)
     except errors.PgPoolError as e:
-      # todo: make sure IntegrityError is always dupe-key
+      # todo: need cross-db, cross-version, cross-driver testing to get this right
       raise DupeInsert(clas.TABLE,e) # note: pgmock raises DupeInsert directly, so catching this works in caller. (but args are different)
     return clas(*vals)
   @classmethod
@@ -303,14 +316,8 @@ class Row(object):
     if len(fields)!=len(vals): raise ValueError('fv_len_mismatch',len(fields),len(vals),clas.TABLE)
     vals=clas.serialize_row(fields,vals)
     query = "insert into %s (%s) values (%s)"%(clas.TABLE,','.join(fields),','.join(['%s']*len(vals)))
-    if returning:
-      query += ' returning '+returning
-      if isinstance(pool_or_cursor,PgPool): return pool_or_cursor.commitreturn(query,vals)
-      else: # pragma: no cover
-        pool_or_cursor.execute(query,vals)
-        return pool_or_cursor.fetchone()
-    else:
-      pool_or_cursor.commit(query,vals) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(query,vals)
+    if returning: return commitreturn_or_fetchone(pool_or_cursor,query+' returning '+returning,vals)
+    else: commit_or_execute(pool_or_cursor,query,vals)
   @classmethod
   def kwinsert(clas,pool_or_cursor,**kwargs):
     "kwargs version of insert"
@@ -339,10 +346,7 @@ class Row(object):
     qvals = tuple(restrict.values())+tuple(vals)
     valstring = ','.join(['%s']*len(qvals))
     query = 'insert into %s (%s) values (%s,%s) returning *'%(clas.TABLE,qcols,mtac,valstring)
-    if isinstance(pool_or_cursor,PgPool): return clas(*pool_or_cursor.commitreturn(query,qvals))
-    else: # pragma: no cover
-      pool_or_cursor.execute(query,qvals)
-      return clas(*pool_or_cursor.fetchone())
+    return clas(*commitreturn_or_fetchone(pool_or_cursor,query,qvals))
   @classmethod
   def pkey_update(clas,pool_or_cursor,pkey_vals,escape_keys,raw_keys=None):
     """raw_keys vs escape_keys -- raw_keys doesn't get escaped, so you can do something like column=column+1
@@ -365,15 +369,8 @@ class Row(object):
     # note: raw_keys could contain %s as well as a lot of other poison
     query='update %s set %s where %s'%(clas.TABLE,setclause,whereclause)
     vals=tuple(escape_keys.values())+pkey_vals
-    if raw_keys:
-      query+=' returning '+','.join(raw_keys)
-      if isinstance(pool_or_cursor,PgPool):
-        return pool_or_cursor.commitreturn(query,vals)
-      else: # pragma: no cover
-        pool_or_cursor.execute(query,vals)
-        return pool_or_cursor.fetchone()
-    else:
-      pool_or_cursor.commit(query,vals) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(query,vals)
+    if raw_keys: return commitreturn_or_fetchone(pool_or_cursor,query+' returning '+','.join(raw_keys),vals)
+    else: commit_or_execute(pool_or_cursor,query,vals)
   def pkey_vals(self):
     """
     :return: tuple of the instance's primary key (the values, not the field names)
@@ -409,13 +406,13 @@ class Row(object):
     whereclause=' and '.join(eqexpr(k,v) for k,v in where_keys.items())
     q='update %s set %s where %s'%(clas.TABLE,setclause,whereclause)
     vals = tuple(update_keys.values()+where_keys.values())
-    pool_or_cursor.commit(q,vals) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(q,vals)
+    commit_or_execute(pool_or_cursor,q,vals)
   def delete(self,pool_or_cursor):
     ".. warning:: pgmock doesn't support delete yet, so this isn't tested"
     vals=self.pkey_vals()
     whereclause=' and '.join('%s=%%s'%k for k in self.PKEY.split(','))
     q='delete from %s where %s'%(self.TABLE,whereclause)
-    pool_or_cursor.commit(q,vals) if isinstance(pool_or_cursor,PgPool) else pool_or_cursor.execute(q,vals)
+    commit_or_execute(pool_or_cursor,q,vals)
   def clientmodel(self): # pragma: no cover
     "Use the class's CLIENTFIELDS attribute to create a dictionary the client can read. Don't use this."
     raise NotImplementedError # todo delete: this is only used in dead pinboard code and a test

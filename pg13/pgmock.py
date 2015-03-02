@@ -99,7 +99,7 @@ class ConnectionMock:
   @contextlib.contextmanager
   def cursor(self): yield self.poolmock
 
-class PgPoolMock(pg.PgPool): # only inherits so isinstance tests pass
+class PgPoolMock(pg.Pool): # only inherits so isinstance tests pass
   def __init__(self): self.tables={}
   def select(self,qstring,vals=()): return apply_sql(sqparse2.parse(qstring),vals,self.tables)
   def commit(self,qstring,vals=()): return apply_sql(sqparse2.parse(qstring),vals,self.tables)
