@@ -56,6 +56,7 @@ def process_update(pool,model,field,sdiff):
   except pg.FieldError: return ['?field']
   if isinstance(sdiff,CheckStale): return ['chkstale',syncable.version(),syncable.generate()]
   elif not isinstance(sdiff,SerialDiff): raise TypeError(type(sdiff))
+  # new if stmt starts here (don't change to elif)
   if not isinstance(syncable,syncschema.Syncable):
     logging.error('update_nonsync_field',field)
     return ['error!']

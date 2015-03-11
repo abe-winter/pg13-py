@@ -275,8 +275,7 @@ class Row(object):
       Model.select_xiny(pool,15,'docid',[1,2,3])
       Model.select_xiny(pool,15,'(docid,subdocid)',[(1,2),(1,3)]) # I'm not sure if the parens around the field are necessary here
     """
-    if not values: return []
-    return clas.selectwhere(pool_or_cursor,userid,'%s in %%s'%field,(tuple(values),))
+    return clas.selectwhere(pool_or_cursor,userid,'%s in %%s'%field,(tuple(values),)) if values else []
   @classmethod
   def serialize_row(clas,fieldnames,vals):
     "I think this is only relevant if you're using SpecialField"

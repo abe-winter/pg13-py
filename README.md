@@ -88,6 +88,7 @@ Missing SQL features:
 * anything unique to oracle or mysql
 * datetime type & interval math are not supported in syntax. if you pass python datetimes as subbed literals it might work.
 * stored procs
+* transactions aren't simulated correctly: for example, an error won't abort a transaction
 
 ## pure-python implementation of SQL
 
