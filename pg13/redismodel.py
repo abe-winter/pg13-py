@@ -3,6 +3,7 @@
 import msgpack,socket
 
 class RedisModel(object):
+  "don't use overlapping names in KEY/VALUE"
   NAMESPACE=None
   VERSION=None
   KEY=None
@@ -26,7 +27,7 @@ class RedisModel(object):
   @classmethod
   def get(clas,con,*keyvals):
     vals=con.get(clas.make_key(*keyvals))
-    return None if vals is None else clas(keyvals,msgpack.loads(vals))
+    return None if vals is None else clas(list(keyvals),msgpack.loads(vals))
   @classmethod
   def incrby(clas,con,n,*keyvals):
     k=clas.make_key(*keyvals)
@@ -38,6 +39,7 @@ class RedisModel(object):
   @classmethod
   def des(clas,keyblob,valblob):
     "deserialize. translate publish message, basically"
+    raise NotImplementedError("don't use tuples, it breaks __eq__. this function probably isn't used in real life")
     raw_keyvals=msgpack.loads(keyblob)
     (namespace,version),keyvals=raw_keyvals[:2],raw_keyvals[2:]
     if namespace!=clas.NAMESPACE or version!=clas.VERSION:
@@ -62,15 +64,21 @@ class RedisModel(object):
     k,v=self.kv()
     con.publish(k,v)
   def save_and_pub(self,con): self.save(con); self.pub(con) # todo: atomic
+  def expire(self,con): con.expire(self.make_key(*self.keyvals), self.TTL)
+  def ttl(self,con): "remaining time-to-live in seconds"; return con.ttl(self.make_key(*self.keyvals))
   def __repr__(self):
     keys=','.join('%s:%r'%(nm,v) for (nm,tp),v in zip(self.KEY,self.keyvals))
     vals=','.join('%s:%r'%(nm,v) for (nm,tp),v in zip(self.VALUE,self.vals))
     return '<RedisModel %s KEY %s VALUE %s>'%(self.__class__.__name__,keys,vals)
-  def __getitem__(self,k):
-    k_or_v,name=k
-    if k_or_v=='key': return next(v for (nm,tp),v in zip(self.KEY,self.keyvals) if nm==name)
-    elif k_or_v=='val': return next(v for (nm,tp),v in zip(self.VALUE,self.vals) if nm==name)
-    else: raise ValueError('expected "key" or "val", not "%s"'%k_or_v)
+  def __getitem__(self,field):
+    "this can definitely raise a KeyError, probably and IndexError under weird circumstances"
+    keynames = zip(*self.KEY)[0]
+    valnames = zip(*self.VALUE)[0]
+    if field in keynames: return self.keyvals[keynames.index(field)]
+    elif field in valnames: return self.vals[valnames.index(field)]
+    else: raise KeyError(field)
+  def __eq__(self, other):
+    return isinstance(other,type(self)) and self.keyvals == other.keyvals and self.vals == other.vals
 
 class PubsubError(IOError): "hmm"
 class PubsubDisco(PubsubError): "hmm"
