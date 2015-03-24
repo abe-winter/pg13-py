@@ -140,7 +140,7 @@ class NameIndexer:
   def index_tuple(self,tables_dict,index,is_set):
     "helper for rowget/rowset"
     if not self.aonly_resolved: raise RuntimeError('resolve_aonly() before querying nix')
-    merged_tables = dict(tables_dict)
+    merged_tables = dict(tables_dict) # i.e. copy for mutation
     merged_tables.update(self.aonly) # this comes second in order to overwrite. todo: find spec support.
     index = index.name if isinstance(index,sqparse2.NameX) else index
     if isinstance(index,basestring):

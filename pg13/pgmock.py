@@ -18,13 +18,24 @@ def expand_row(table_fields,fields,values):
   indexes=[reverse_indexes.get(i) for i in range(len(table_fields))]
   return [(Missing if i is None else values[i]) for i in indexes]
 
+def emergency_cast(colx, value):
+  """ugly: this is a huge hack. get serious about where this belongs in the architecture.
+  For now, most types rely on being fed in as SubbedLiteral.
+  """
+  if colx.coltp.lower()=='boolean':
+    if isinstance(value,sqparse2.NameX): value = value.name
+    if isinstance(value,bool): return value
+    return dict(true=True, false=False)[value.lower()] # keyerror if other
+  else:
+    return value # todo: type check?
+
 def field_default(colx, table_name, tables_dict):
   "takes sqparse2.ColX, Table"
   if colx.coltp.lower() == 'serial':
     x = sqparse2.parse('select coalesce(max(%s),-1)+1 from %s' % (colx.name, table_name))
     return sqex.run_select(x, tables_dict, Table)[0]
   elif colx.not_null: raise NotImplementedError('todo: not_null error')
-  return toliteral(colx.default)
+  else: return toliteral(colx.default)
 
 FieldLookup=collections.namedtuple('FieldLookup','index type')
 def toliteral(probably_literal):
@@ -45,7 +56,7 @@ class Table:
     return map(toliteral,row)
   def apply_defaults(self, row, tables_dict):
     "apply defaults to missing cols for a row that's being inserted"
-    return [(field_default(f, self.name, tables_dict) if v is Missing else v) for f,v in zip(self.fields,row)]
+    return [emergency_cast(colx, field_default(colx, self.name, tables_dict) if v is Missing else v) for colx,v in zip(self.fields,row)]
   def insert(self,fields,values,returning,tables_dict):
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)

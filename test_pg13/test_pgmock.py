@@ -314,3 +314,8 @@ def test_cast():
   # cast literal
   runsql('insert into t1 values (2, 345::text)')
   assert tables['t1'].rows[1] == [2,'345']
+
+def test_default():
+  tables, runsql = prep('create table t1(a int, b boolean default false)')
+  runsql('insert into t1 (a) values (0)')
+  assert tables['t1'].rows == [[0, False]]
