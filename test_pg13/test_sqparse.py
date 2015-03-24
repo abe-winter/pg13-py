@@ -35,25 +35,29 @@ def test_parse_select():
 
 def test_parse_create():
   # todo: real tests here instead of repr comparison
-  from pg13.sqparse2 import Literal,NameX,CreateX,ColX,PKeyX,NullX
+  from pg13.sqparse2 import Literal,NameX,CreateX,ColX,PKeyX,NullX,CheckX,BinX,Literal,OpX
   assert sqparse2.parse('create table tbl (a int, b int, c text[])')==CreateX(
     False, 'tbl', [
       ColX('a','int',False,False,None,False),
       ColX('b','int',False,False,None,False),
       ColX('c','text',True,False,None,False),
-    ], None
+    ], None, [], None
   )
   assert sqparse2.parse('create table tbl (a int, b int, primary key (a,b))')==CreateX(
     False, 'tbl', [
       ColX('a','int',False,False,None,False),
       ColX('b','int',False,False,None,False),
-    ], PKeyX(['a','b'])
+    ], PKeyX(['a','b']), [], None
   )
   ex=sqparse2.parse('create table t1 (a int default 7, b int default null, d int primary key)')
-  print ex.cols[0].default, ex.cols[1].default, ex.cols[2].pkey
   assert ex.cols[0].default==Literal(7) and ex.cols[1].default==NullX() and ex.cols[2].pkey
   assert sqparse2.parse('create table t1 (a int not null)').cols[0].not_null
-  print sqparse2.parse('create table if not exists t1 (a int not null)')
+  assert sqparse2.parse('create table if not exists t1 (a int not null)').nexists
+  assert sqparse2.parse('create table t2 (check (a=5)) inherits t1') == CreateX(
+    False,'t2',[],None,[CheckX(BinX(OpX('='),NameX('a'),Literal(5)))],'t1'
+  )
+  # test duplicate primary key
+  with pytest.raises(sqparse2.SQLSyntaxError): sqparse2.parse('create table t (primary key (a,b),primary key (c,d))')
 
 def test_parse_insert():
   from pg13.sqparse2 import InsertX,NameX,CommaX,Literal,ReturnX,AsterX

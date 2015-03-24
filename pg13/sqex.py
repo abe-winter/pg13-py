@@ -314,7 +314,6 @@ def evalex(x,c_row,nix,tables):
   elif isinstance(x,sqparse2.ReturnX):
     # todo: I think ReturnX is *always* CommaX now; revisit this
     ret=subcall(x.expr)
-    print 'ret:',ret,x.expr
     print "warning: not sure what I'm doing here with cardinality tweak on CommaX"
     return [ret] if isinstance(x.expr,(sqparse2.CommaX,sqparse2.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
   elif isinstance(x,sqparse2.AliasX): return subcall(x.name) # todo: rename AliasX 'name' to 'expr'

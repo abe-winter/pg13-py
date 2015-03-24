@@ -6,7 +6,7 @@
 # differences vs real SQL:
 # 1. sql probably allows 'table' as a table name. I think I'm stricter about keywords (and I don't allow quoting columns)
 
-import ply.lex, ply.yacc
+import ply.lex, ply.yacc, itertools
 
 # errors
 class PgMockError(StandardError): pass
@@ -97,9 +97,12 @@ class ColX(BaseX): ATTRS = ('name','coltp','isarray','not_null','default','pkey'
 class PKeyX(BaseX):
   ATTRS = ('fields',)
   VARLEN = ('fields',)
+class TableConstraintX(BaseX): "intermediate base class for table constraints. PKeyX isn't included in this because it has its own slot in CreateX."
+class CheckX(TableConstraintX): ATTRS = ('expr',)
 class CreateX(CommandX):
-  ATTRS = ('nexists','name','cols','pkey')
-  VARLEN = ('cols',)
+  "note: technically pkey is a table_constraint but it also comes from cols so its separate"
+  ATTRS = ('nexists','name','cols','pkey','table_constraints','inherits')
+  VARLEN = ('cols','table_constraints') # todo: is pkey varlen or CommaX?
 
 class ReturnX(BaseX): ATTRS = ('expr',)
 class InsertX(CommandX):
@@ -127,7 +130,7 @@ def un_priority(op,val):
   if isinstance(val,BinX) and val.op < op: return bin_priority(val.op,UnX(op,val.left),val.right)
   else: return UnX(op,val)
 
-KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group'.split()}
+KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group inherits check constraint'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
   t_STRLIT = "'((?<=\\\\)'|[^'])+'"
@@ -255,21 +258,37 @@ class SqlGrammar:
   def p_default(self,t): "default : kw_default expression \n | "; t[0] = t[2] if len(t) > 1 else None
   def p_ispkey(self,t): "is_pkey : kw_primary kw_key \n | "; t[0] = len(t) > 1
   def p_colspec(self,t): "col_spec : NAME NAME is_array is_notnull default is_pkey"; t[0] = ColX(*t[1:])
-  def p_createlist(self,t):
-    "create_list : create_list ',' col_spec \n | col_spec"
-    if len(t)==2: t[0] = [t[1]]
-    elif len(t)==4: t[0] = t[1] + [t[3]]
-    else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
   def p_namelist(self,t):
     "namelist : namelist ',' NAME \n | NAME"
     if len(t)==2: t[0] = [t[1]]
     elif len(t)==4: t[0] = t[1] + [t[3]]
     else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
-  def p_pkey(self,t): "pkey_stmt : ',' kw_primary kw_key '(' namelist ')' \n | "; t[0] = PKeyX(t[5]) if len(t) > 1 else None
+  def p_pkey(self,t): "pkey_stmt : kw_primary kw_key '(' namelist ')'"; t[0] = PKeyX(t[4])
   def p_nexists(self,t): "nexists : kw_if kw_not kw_exists \n | "; t[0] = len(t) > 1
+  def p_inheritx(self,t):
+    "opt_inheritx : kw_inherits NAME \n | "
+    t[0] = None if len(t)==1 else t[2]
+  def p_constraint_name(self,t):
+    "opt_constraint_name : kw_constraint NAME \n | "
+    t[0] = None if len(t) == 1 else t[2]
+  def p_tconstraint_check(self,t):
+    "table_constraint : opt_constraint_name kw_check '(' expression ')'"
+    t[0] = CheckX(t[4])
+  def p_tablespec(self,t):
+    "tablespec : col_spec \n | pkey_stmt \n | table_constraint"
+    t[0] = t[1]
+  def p_tablespecs(self,t):
+    "tablespecs : tablespecs ',' tablespec \n | tablespec"
+    t[0] = [t[1]] if len(t)==2 else t[1] + [t[3]]
   def p_createx(self,t):
-    "expression : kw_create kw_table nexists NAME '(' create_list pkey_stmt ')'"
-    t[0] = CreateX(t[3],t[4],t[6],t[7])
+    "expression : kw_create kw_table nexists NAME '(' tablespecs ')' opt_inheritx"
+    all_constraints = {k:list(group) for k, group in itertools.groupby(t[6], lambda x:type(x))}
+    pkey = (all_constraints.get(PKeyX) or [None])[0] # todo: get pkey from column constraints as well
+    if PKeyX in all_constraints and len(all_constraints[PKeyX]) != 1:
+      raise SQLSyntaxError('too_many_pkeyx', all_constraints[PKeyX])
+    # note below: this is a rare case where issubclass is safe
+    table_constraints = sum([v for k,v in all_constraints.items() if issubclass(k, TableConstraintX)], [])
+    t[0] = CreateX(t[3], t[4], all_constraints.get(ColX) or [], pkey, table_constraints, t[8])
   def p_returnx(self,t):
     "opt_returnx : kw_returning commalist \n | "
     # note: this gets weird because '(' commalist ')' is an expression but we need bare commalist to support non-paren returns
