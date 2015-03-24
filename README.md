@@ -75,6 +75,7 @@ Supported SQL features:
 * group by seems to work in simple cases, expect bugs
 * some array functions (including unnest) and operators
 * text search support is limited (limited versions of to_tsvector, to_tsquery, @@)
+* serial columns
 
 Missing SQL features:
 * commands: drop table, alter table

@@ -86,6 +86,7 @@ class CaseX(BaseX):
   ATTRS = ('cases','elsex')
   VARLEN = ('cases',)
 class AttrX(BaseX): ATTRS = ('parent','attr')
+class CastX(BaseX): ATTRS = ('expr','to_type')
 
 class CommandX(BaseX): "base class for top-level commands. probably won't ever be used."
 class SelectX(CommandX):
@@ -134,6 +135,7 @@ class SqlGrammar:
   t_SUBLIT = '%s'
   t_ARITH = '\|\||\/|\+'
   t_CMP = '\!=|@>|@@|<|>'
+  t_CAST = '::'
   def t_NAME(self,t):
     '[A-Za-z]\w*|\"char\"'
     # warning: this allows stuff like SeLeCt with mixed case. who cares.
@@ -146,7 +148,7 @@ class SqlGrammar:
     # general
     'STRLIT','INTLIT','NAME','SUBLIT',
     # operators
-    'ARITH','CMP',
+    'ARITH','CMP','CAST',
   ) + tuple(KEYWORDS.values())
   precedence = (
     # ('left','DOT'),
@@ -161,6 +163,7 @@ class SqlGrammar:
   def p_unop(self,t): "unop : '-' \n | kw_not"; t[0] = OpX(t[1])
   def p_isnot(self,t): "isnot : kw_is kw_not"; t[0] = 'is not'
   def p_boolop(self,t): "boolop : kw_and \n | kw_or \n | kw_in"; t[0] = t[1]
+  def p_castx(self,t): "expression : expression CAST NAME"; t[0] = CastX(t[1],t[3])
   def p_binop(self,t):
     "binop : ARITH \n | CMP \n | boolop \n | isnot \n | '=' \n | '-' \n | '*' \n | kw_is"
     t[0] = OpX(t[1])

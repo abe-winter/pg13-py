@@ -88,3 +88,7 @@ def test_select_from_as():
 def test_call_as():
   from pg13.sqparse2 import AliasX,CallX,CommaX,NameX
   assert sqparse2.parse('select unnest(a) as b from t1').cols.children[0]==AliasX(CallX('unnest',CommaX([NameX('a')])),'b')
+
+def test_cast_op():
+  from pg13.sqparse2 import CommaX,CastX,Literal
+  assert sqparse2.parse('select 12345::text').cols == CommaX([CastX(Literal(12345),'text')])
