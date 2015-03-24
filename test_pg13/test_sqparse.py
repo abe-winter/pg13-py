@@ -53,8 +53,8 @@ def test_parse_create():
   assert ex.cols[0].default==Literal(7) and ex.cols[1].default==NullX() and ex.cols[2].pkey
   assert sqparse2.parse('create table t1 (a int not null)').cols[0].not_null
   assert sqparse2.parse('create table if not exists t1 (a int not null)').nexists
-  assert sqparse2.parse('create table t2 (check (a=5)) inherits t1') == CreateX(
-    False,'t2',[],None,[CheckX(BinX(OpX('='),NameX('a'),Literal(5)))],'t1'
+  assert sqparse2.parse('create table t2 (check (a=5)) inherits (t1)') == CreateX(
+    False,'t2',[],None,[CheckX(BinX(OpX('='),NameX('a'),Literal(5)))],['t1']
   )
   # test duplicate primary key
   with pytest.raises(sqparse2.SQLSyntaxError): sqparse2.parse('create table t (primary key (a,b),primary key (c,d))')

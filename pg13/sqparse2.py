@@ -266,8 +266,8 @@ class SqlGrammar:
   def p_pkey(self,t): "pkey_stmt : kw_primary kw_key '(' namelist ')'"; t[0] = PKeyX(t[4])
   def p_nexists(self,t): "nexists : kw_if kw_not kw_exists \n | "; t[0] = len(t) > 1
   def p_inheritx(self,t):
-    "opt_inheritx : kw_inherits NAME \n | "
-    t[0] = None if len(t)==1 else t[2]
+    "opt_inheritx : kw_inherits '(' namelist ')' \n | "
+    t[0] = None if len(t)==1 else t[3]
   def p_constraint_name(self,t):
     "opt_constraint_name : kw_constraint NAME \n | "
     t[0] = None if len(t) == 1 else t[2]
