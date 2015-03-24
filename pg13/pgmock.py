@@ -18,9 +18,13 @@ def expand_row(table_fields,fields,values):
   indexes=[reverse_indexes.get(i) for i in range(len(table_fields))]
   return [(Missing if i is None else values[i]) for i in indexes]
 
-def field_default(f):
-  if f.coltp.lower() == 'serial': raise NotImplementedError('nextid for serial column')
-  return toliteral(f.default)
+def field_default(colx, table_name, tables_dict):
+  "takes sqparse2.ColX, Table"
+  if colx.coltp.lower() == 'serial':
+    x = sqparse2.parse('select coalesce(max(%s),-1)+1 from %s' % (colx.name, table_name))
+    return sqex.run_select(x, tables_dict, Table)[0]
+  elif colx.not_null: raise NotImplementedError('todo: not_null error')
+  return toliteral(colx.default)
 
 FieldLookup=collections.namedtuple('FieldLookup','index type')
 def toliteral(probably_literal):
@@ -39,14 +43,14 @@ class Table:
   def fix_rowtypes(self,row):
     if len(row)!=len(self.fields): raise ValueError
     return map(toliteral,row)
-  def apply_defaults(self,row):
+  def apply_defaults(self, row, tables_dict):
     "apply defaults to missing cols for a row that's being inserted"
-    return [(field_default(f) if v is Missing else v) for f,v in zip(self.fields,row)]
+    return [(field_default(f, self.name, tables_dict) if v is Missing else v) for f,v in zip(self.fields,row)]
   def insert(self,fields,values,returning,tables_dict):
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
     expanded_row=self.fix_rowtypes(expand_row(self.fields,fields,values) if fields else values)
-    row=self.apply_defaults(expanded_row)
+    row=self.apply_defaults(expanded_row, tables_dict)
     # todo: check ColX.not_null here. figure out what to do about null pkey field
     for i,elt in enumerate(row):
       # todo(awinter): think about dependency model if one field relies on another. (what do I mean? 'insert into t1 (a,b) values (10,a+5)'? is that valid?)

@@ -296,3 +296,11 @@ def test_textsearch():
   assert [[0]]==runsql('select a from t1 where to_tsvector(b) @@ to_tsquery(%s)',('one',))
   assert [[1]]==runsql('select a from t1 where to_tsvector(b) @@ to_tsquery(%s)',('four',))
   assert [[0],[1]]==runsql('select a from t1 where to_tsvector(b) @@ to_tsquery(%s)',('okay',))
+
+def test_serial():
+  "make sure default does the right thing for serial column type"
+  tables,runsql=prep('create table t1 (a serial, b int)')
+  for i in range(3):
+    runsql('insert into t1 (b) values (%s)',(i,))
+  assert tables['t1'].rows == [[0,0],[1,1],[2,2]]
+  # warning: what's supposed to happen when a value is passed for serial?

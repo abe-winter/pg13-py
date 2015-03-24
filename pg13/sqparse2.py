@@ -140,7 +140,7 @@ class SqlGrammar:
     t.type = KEYWORDS[t.value.lower()] if t.value.lower() in KEYWORDS else 'BOOL' if t.value.lower() in ('is','not') else 'NAME'
     return t
   literals = ('[',']','(',')','{','}',',','.','*','=','-')
-  t_ignore = ' '
+  t_ignore = ' \n\t'
   def t_error(self,t): raise SQLSyntaxError(t) # I think t is LexToken(error,unparsed_tail)
   tokens = (
     # general
