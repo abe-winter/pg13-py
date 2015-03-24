@@ -76,6 +76,7 @@ Supported SQL features:
 * some array functions (including unnest) and operators
 * text search support is limited (limited versions of to_tsvector, to_tsquery, @@)
 * serial columns
+* :: casting operator (not all types supported)
 
 Missing SQL features:
 * commands: drop table, alter table

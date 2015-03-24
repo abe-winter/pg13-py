@@ -304,3 +304,13 @@ def test_serial():
     runsql('insert into t1 (b) values (%s)',(i,))
   assert tables['t1'].rows == [[0,0],[1,1],[2,2]]
   # warning: what's supposed to happen when a value is passed for serial?
+
+def test_cast():
+  tables,runsql=prep('create table t1 (a int, b text)')
+  # cast existing column
+  runsql('insert into t1 (a) values (1)')
+  runsql('update t1 set b=a::text')
+  assert tables['t1'].rows[0] == [1,'1']
+  # cast literal
+  runsql('insert into t1 values (2, 345::text)')
+  assert tables['t1'].rows[1] == [2,'345']
