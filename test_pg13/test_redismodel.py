@@ -18,7 +18,6 @@ def test_getitem():
   assert rm['c'] == 'a'
   assert rm['d'] == []
 
-@pytest.mark.xfail # until travis-ci settings know -m "not integration"
 @pytest.mark.integration
 @pytest.mark.redis
 def test_setget():
