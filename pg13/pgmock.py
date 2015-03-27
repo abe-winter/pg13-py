@@ -103,7 +103,9 @@ class Table:
       if len(indexes)!=len(self.pkey): raise ValueError('bad pkey')
       pkey_vals=map(row.__getitem__,indexes)
       return next((r for r in self.rows if pkey_vals==map(r.__getitem__,indexes)),None)
-    else: return row if row in self.rows else None
+    else:
+      # warning: is this right? it's saying that if not given, the pkey is the whole row. test dupe inserts on a real DB.
+      return row if row in self.rows else None
   def fix_rowtypes(self,row):
     if len(row)!=len(self.fields): raise ValueError
     return map(toliteral,row)
