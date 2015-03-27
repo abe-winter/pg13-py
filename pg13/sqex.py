@@ -140,24 +140,24 @@ class NameIndexer:
   def index_tuple(self,tables_dict,index,is_set):
     "helper for rowget/rowset"
     if not self.aonly_resolved: raise RuntimeError('resolve_aonly() before querying nix')
-    merged_tables = dict(tables_dict) # i.e. copy for mutation
-    merged_tables.update(self.aonly) # this comes second in order to overwrite. todo: find spec support.
-    index = index.name if isinstance(index,sqparse2.NameX) else index
-    if isinstance(index,basestring):
-      candidates = [t for t in self.table_order if any(f.name==index for f in merged_tables[t].fields)]
-      if len(candidates)!=1: raise ColumnNameError(("ambiguous_column" if candidates else "no_such_column"),index)
-      tname, = candidates
-      return self.table_order.index(tname), merged_tables[tname].lookup(index).index
-    elif isinstance(index,sqparse2.AttrX):
-      if index.parent.name not in self.aliases: raise TableNameError('table_notin_x',index.parent,self.aliases)
-      tname = self.aliases[index.parent.name]
-      tindex = self.table_order.index(tname)
-      if isinstance(index.attr,sqparse2.AsterX):
-        if is_set: raise ValueError('cant_set_asterisk') # todo: better error class
-        else: return (tindex,)
-      else: return (tindex,merged_tables[tname].lookup(index.attr).index)
-      # todo: stronger typing here. make sure both fields of the AttrX are always strings.
-    else: raise TypeError(type(index)) # pragma: no cover
+    with tables_dict.tempkeys():
+      tables_dict.update(self.aonly) # todo: find spec support for aliases overwriting existing tables. (more likely, it's an error)
+      index = index.name if isinstance(index,sqparse2.NameX) else index
+      if isinstance(index,basestring):
+        candidates = [t for t in self.table_order if any(f.name==index for f in tables_dict[t].fields)]
+        if len(candidates)!=1: raise ColumnNameError(("ambiguous_column" if candidates else "no_such_column"),index)
+        tname, = candidates
+        return self.table_order.index(tname), tables_dict[tname].lookup(index).index
+      elif isinstance(index,sqparse2.AttrX):
+        if index.parent.name not in self.aliases: raise TableNameError('table_notin_x',index.parent,self.aliases)
+        tname = self.aliases[index.parent.name]
+        tindex = self.table_order.index(tname)
+        if isinstance(index.attr,sqparse2.AsterX):
+          if is_set: raise ValueError('cant_set_asterisk') # todo: better error class
+          else: return (tindex,)
+        else: return (tindex,tables_dict[tname].lookup(index.attr).index)
+        # todo: stronger typing here. make sure both fields of the AttrX are always strings.
+      else: raise TypeError(type(index)) # pragma: no cover
   def rowget(self,tables_dict,row_list,index):
     "row_list in self.row_order"
     tmp=row_list
@@ -213,35 +213,35 @@ def collapse_group_expr(groupx,cols,ret_row):
 def run_select(ex,tables,table_ctor):
   nix, where = decompose_select(ex)
   nix.resolve_aonly(tables,table_ctor)
-  tables=dict(tables) # i.e. copy
-  tables.update(nix.aonly)
-  composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
-  if ex.order: # note: order comes before limit / offset
-    composite_rows.sort(key=lambda c_row:evalex(ex.order,c_row,nix,tables))
-  if ex.limit or ex.offset: # pragma: no cover
-    print ex.limit, ex.offset
-    raise NotImplementedError('notimp: limit,offset,group')
-  if ex.group:
-    # todo: non-aggregate expressions are allowed if they consume only the group expression
-    # todo: does the group expression have to be a NameX? for now it can be any expression. check specs.
-    # todo: this block shares logic with other parts of the function. needs refactor.
-    badcols=[col for col in ex.cols.children if not col==ex.group and not contains(col,consumes_rows)]
-    if badcols: raise ValueError('illegal_cols_in_group',badcols)
-    if contains(ex.cols,returns_rows): raise NotImplementedError('todo: unnest with grouping')
-    groups = collections.OrderedDict()
-    for row in composite_rows:
-      k = evalex(ex.group,row,nix,tables)
-      if k not in groups: groups[k] = []
-      groups[k].append(row)
-    return [collapse_group_expr(ex.group, ex.cols, evalex(ex.cols,g_rows,nix,tables)) for g_rows in groups.values()]
-  if contains(ex.cols,consumes_rows):
-    if not all(contains(col,consumes_rows) for col in ex.cols.children):
-      # todo: this isn't good enough. what about nesting cases like max(min(whatever))
-      raise sqparse2.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
-    return evalex(ex.cols,composite_rows,nix,tables)
-  else:
-    ret = [evalex(ex.cols,r,nix,tables) for r in composite_rows]
-    return sum((unnest_helper(ex.cols,row) for row in ret),[]) if contains(ex.cols,returns_rows) else ret
+  with tables.tempkeys(): # so aliases are temporary. todo doc: why am I doing this here *and* in index_tuple?
+    tables.update(nix.aonly)
+    composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
+    if ex.order: # note: order comes before limit / offset
+      composite_rows.sort(key=lambda c_row:evalex(ex.order,c_row,nix,tables))
+    if ex.limit or ex.offset: # pragma: no cover
+      print ex.limit, ex.offset
+      raise NotImplementedError('notimp: limit,offset,group')
+    if ex.group:
+      # todo: non-aggregate expressions are allowed if they consume only the group expression
+      # todo: does the group expression have to be a NameX? for now it can be any expression. check specs.
+      # todo: this block shares logic with other parts of the function. needs refactor.
+      badcols=[col for col in ex.cols.children if not col==ex.group and not contains(col,consumes_rows)]
+      if badcols: raise ValueError('illegal_cols_in_group',badcols)
+      if contains(ex.cols,returns_rows): raise NotImplementedError('todo: unnest with grouping')
+      groups = collections.OrderedDict()
+      for row in composite_rows:
+        k = evalex(ex.group,row,nix,tables)
+        if k not in groups: groups[k] = []
+        groups[k].append(row)
+      return [collapse_group_expr(ex.group, ex.cols, evalex(ex.cols,g_rows,nix,tables)) for g_rows in groups.values()]
+    if contains(ex.cols,consumes_rows):
+      if not all(contains(col,consumes_rows) for col in ex.cols.children):
+        # todo: this isn't good enough. what about nesting cases like max(min(whatever))
+        raise sqparse2.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
+      return evalex(ex.cols,composite_rows,nix,tables)
+    else:
+      ret = [evalex(ex.cols,r,nix,tables) for r in composite_rows]
+      return sum((unnest_helper(ex.cols,row) for row in ret),[]) if contains(ex.cols,returns_rows) else ret
 
 def starlike(x):
   "weird things happen to cardinality when working with * in comma-lists. this detects when to do that."

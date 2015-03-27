@@ -3,9 +3,9 @@ from pg13 import pgmock,sqparse2,pg,sqex
 
 def prep(create_stmt):
   "helper for table setup"
-  tables={}
-  pgmock.apply_sql(sqparse2.parse(create_stmt),(),tables)
-  def runsql(stmt,vals=()): return pgmock.apply_sql(sqparse2.parse(stmt),vals,tables)
+  tables=pgmock.TablesDict()
+  pgmock.apply_sql(sqparse2.parse(create_stmt),(),tables,None)
+  def runsql(stmt,vals=()): return pgmock.apply_sql(sqparse2.parse(stmt),vals,tables,None)
   return tables,runsql
 
 def test_default_null_vs_notprovided():
@@ -319,3 +319,39 @@ def test_default():
   tables, runsql = prep('create table t1(a int, b boolean default false)')
   runsql('insert into t1 (a) values (0)')
   assert tables['t1'].rows == [[0, False]]
+
+def test_tempkeys():
+  td = pgmock.TablesDict()
+  td['a'] = [1,2,3]
+  with td.tempkeys():
+    td['b'] = td['a']
+    td['b'].append(4)
+    assert td['b'] is td['a']
+  assert td['a'] == [1,2,3,4]
+  with pytest.raises(KeyError): td['b']
+
+def test_transaction_basics():
+  ppm = pgmock.PgPoolMock()
+  # 1. test that create table persists past commit
+  with ppm.withcur() as cursor:
+    cursor.execute('create table t1 (a int, b int)')
+  assert ppm.tables.keys() == ['t1']
+  # 2. test that insert persists past commit
+  with ppm.withcur() as cursor:
+    cursor.execute('insert into t1 values (1,3)')
+  assert len(ppm.tables['t1'].rows) == 1
+  class IgnorableError(StandardError): pass
+  # 3. test that create table doesn't survive a rollback
+  try:
+    with ppm.withcur() as cursor:
+      cursor.execute('create table t2 (a int, b int)')
+      raise IgnorableError
+  except IgnorableError: pass
+  assert ppm.tables.keys() == ['t1']
+  # 4. test that insert doesn't survive a rollback
+  try:
+    with ppm.withcur() as cursor:
+      cursor.execute('insert into t1 values (1,4)')
+      raise IgnorableError
+  except IgnorableError: pass
+  assert len(ppm.tables['t1'].rows) == 1

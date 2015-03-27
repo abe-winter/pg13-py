@@ -2,7 +2,7 @@
 
 # todo: type checking of literals based on column. flag-based (i.e. not all DBs do this) cast strings to unicode.
 
-import re,collections,contextlib
+import re,collections,contextlib,threading,copy
 from . import pg,threevl,sqparse2,sqex
 
 # errors
@@ -10,6 +10,57 @@ class PgExecError(sqparse2.PgMockError): "base class for errors during table exe
 class BadFieldName(PgExecError): pass
 
 class Missing: "for distinguishing missing columns vs passed-in null"
+
+class TablesDict:
+  "dictionary wrapper that knows about transactions"
+  # todo: consider setting transaction_owner by cursor *and* thread
+  # warning: lots of disaster can result from sharing cursors between threads
+  def __init__(self):
+    self.lock = threading.Lock()
+    self.levels = [{}]
+    self.transaction = False
+    self.connection_owner = None
+  def __getitem__(self, k): return self.levels[-1][k]
+  def __setitem__(self, k, v): self.levels[-1][k] = v
+  def __contains__(self, k): return k in self.levels[-1]
+  def update(self, *args, **kwargs): self.levels[-1].update(*args,**kwargs)
+  def __iter__(self): return iter(self.levels[-1])
+  def keys(self): return self.levels[-1].keys()
+  def values(self): return self.levels[-1].values()
+  @contextlib.contextmanager
+  def tempkeys(self):
+    """Add a new level to make new keys temporary. Used instead of copy in sqex.
+    This may *seem* similar to a transaction but the tables are not being duplicated, just referenced.
+    At __exit__, old dict is restored (but changes to Tables remain).
+    """
+    self.levels.append(dict(self.levels[-1]))
+    try: yield
+    finally: self.levels.pop()
+  def trans_start(self, cursor):
+    self.lock.acquire()
+    if self.transaction: raise RuntimeError('in transaction after acquiring lock')
+    self.levels.append(copy.deepcopy(self.levels[0])) # i.e. copy all the tables, too
+    self.transaction = True
+    self.connection_owner = cursor
+  def trans_commit(self):
+    if not self.transaction: raise RuntimeError('commit not in transaction')
+    self.levels = [self.levels[1]]
+    self.transaction = False
+    self.lock.release()
+  def trans_rollback(self):
+    if not self.transaction: raise RuntimeError('commit not in transaction')
+    self.levels = [self.levels[0]]
+    self.transaction = False
+    self.lock.release()
+  @contextlib.contextmanager
+  def lock_db(self,cursor,is_start):
+    if self.transaction and self.connection_owner is cursor:
+      # note: this case is relying on the fact that if the above is true, our thread did it,
+      #   therefore the lock can't be released on our watch.
+      yield
+    elif is_start: yield # apply_sql will call trans_start() on its own, block there if necessary
+    else:
+      with self.lock: yield
 
 def expand_row(table_fields,fields,values):
   "helper for insert. turn (field_names, values) into the full-width, properly-ordered row"
@@ -43,7 +94,9 @@ def toliteral(probably_literal):
   if probably_literal==sqparse2.NameX('null'): return None
   return probably_literal.toliteral() if hasattr(probably_literal,'toliteral') else probably_literal
 class Table:
-  def __init__(self,name,fields,pkey): self.name,self.fields,self.pkey=name,fields,(pkey or []); self.rows=[]
+  def __init__(self,name,fields,pkey):
+    self.name,self.fields,self.pkey=name,fields,(pkey or [])
+    self.rows=[]
   def pkey_get(self,row):
     if len(self.pkey):
       indexes=[i for i,f in enumerate(self.fields) if f.name in self.pkey]
@@ -90,45 +143,55 @@ class Table:
     nix.resolve_aonly(tables_dict,Table)
     self.rows=[r for r in self.rows if not sqex.evalex(where,(r,),nix,tables_dict)]
 
-def apply_sql(ex,values,tables_dict):
+def apply_sql(ex,values,tables_dict,cursor):
   "call the stmt in tree with values subbed on the tables in t_d\
   tree is a parsed statement returned by parse_expression. values is the tuple of %s replacements. tables_dict is a dictionary of Table instances."
   sqex.depth_first_sub(ex,values)
-  sqex.replace_subqueries(ex,tables_dict,Table)
-  if isinstance(ex,sqparse2.SelectX): return sqex.run_select(ex,tables_dict,Table)
-  elif isinstance(ex,sqparse2.InsertX): return tables_dict[ex.table].insert(ex.cols,ex.values,ex.ret,tables_dict)
-  elif isinstance(ex,sqparse2.UpdateX):
-    if len(ex.tables)!=1: raise NotImplementedError('multi-table update')
-    return tables_dict[ex.tables[0]].update(ex.assigns,ex.where,ex.ret,tables_dict)
-  elif isinstance(ex,sqparse2.CreateX):
-    if ex.name in tables_dict: raise ValueError('table_exists',ex.name)
-    if any(c.pkey for c in ex.cols): raise NotImplementedError('inline pkey')
-    tables_dict[ex.name]=Table(ex.name,ex.cols,ex.pkey.fields if ex.pkey else [])
-  elif isinstance(ex,sqparse2.IndexX): pass
-  elif isinstance(ex,sqparse2.DeleteX): return tables_dict[ex.table].delete(ex.where,tables_dict)
-  else: raise TypeError(type(ex)) # pragma: no cover
+  with tables_dict.lock_db(cursor, isinstance(ex,sqparse2.StartX)):
+    sqex.replace_subqueries(ex,tables_dict,Table)
+    if isinstance(ex,sqparse2.SelectX): return sqex.run_select(ex,tables_dict,Table)
+    elif isinstance(ex,sqparse2.InsertX): return tables_dict[ex.table].insert(ex.cols,ex.values,ex.ret,tables_dict)
+    elif isinstance(ex,sqparse2.UpdateX):
+      if len(ex.tables)!=1: raise NotImplementedError('multi-table update')
+      return tables_dict[ex.tables[0]].update(ex.assigns,ex.where,ex.ret,tables_dict)
+    elif isinstance(ex,sqparse2.CreateX):
+      if ex.name in tables_dict: raise ValueError('table_exists',ex.name)
+      if any(c.pkey for c in ex.cols): raise NotImplementedError('inline pkey')
+      tables_dict[ex.name]=Table(ex.name,ex.cols,ex.pkey.fields if ex.pkey else [])
+    elif isinstance(ex,sqparse2.IndexX): pass
+    elif isinstance(ex,sqparse2.DeleteX): return tables_dict[ex.table].delete(ex.where,tables_dict)
+    elif isinstance(ex,sqparse2.StartX): tables_dict.trans_start(cursor)
+    elif isinstance(ex,sqparse2.CommitX): tables_dict.trans_commit()
+    elif isinstance(ex,sqparse2.RollbackX): tables_dict.trans_rollback()
+    else: raise TypeError(type(ex)) # pragma: no cover
 
 class CursorMock(pg.Cursor):
   def __init__(self,poolmock): self.poolmock = poolmock; self.lastret = None
   def execute(self,qstring,vals=()):
-    self.lastret = apply_sql(sqparse2.parse(qstring),vals,self.poolmock.tables)
+    self.lastret = apply_sql(sqparse2.parse(qstring), vals, self.poolmock.tables, self)
     return len(self.lastret) if isinstance(self.lastret,list) else None
   def __iter__(self): return iter(self.lastret)
   def fetchone(self): return self.lastret[0]
+  def __enter__(self):
+    # todo: should transactions be happening with-ing the cursor or connection? I'm thinking the latter
+    self.execute('start transaction')
+    return self
+  def __exit__(self, etype, evalue, tb): self.execute('commit' if etype is None else 'rollback')
 
 class ConnectionMock:
   "for supporting the contextmanager call"
   def __init__(self,poolmock): self.poolmock=poolmock
   @contextlib.contextmanager
-  def cursor(self): yield self.poolmock
+  def cursor(self): yield CursorMock(self.poolmock)
 
 class PgPoolMock(pg.Pool): # only inherits so isinstance tests pass
-  def __init__(self): self.tables={}
-  def select(self,qstring,vals=()): return apply_sql(sqparse2.parse(qstring),vals,self.tables)
-  def commit(self,qstring,vals=()): return apply_sql(sqparse2.parse(qstring),vals,self.tables)
-  def commitreturn(self,qstring,vals=()): return apply_sql(sqparse2.parse(qstring),vals,self.tables)[0]
-  def close(self): self.tables={} # so GC can work. doubt this will ever get called.
+  def __init__(self): self.tables=TablesDict()
+  def select(self,qstring,vals=()): return apply_sql(sqparse2.parse(qstring),vals,self.tables,None)
+  def commit(self,qstring,vals=()): return apply_sql(sqparse2.parse(qstring),vals,self.tables,None)
+  def commitreturn(self,qstring,vals=()): return apply_sql(sqparse2.parse(qstring),vals,self.tables,None)[0]
+  def close(self): pass
   @contextlib.contextmanager
   def __call__(self): yield ConnectionMock(self)
   @contextlib.contextmanager
-  def withcur(self): yield CursorMock(self)
+  def withcur(self):
+    with CursorMock(self) as cursor: yield cursor

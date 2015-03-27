@@ -77,6 +77,7 @@ Supported SQL features:
 * text search support is limited (limited versions of to_tsvector, to_tsquery, @@)
 * serial columns
 * :: casting operator (not all types supported)
+* transactions exist but are very crude. in theory they're thread-safe but that's not tested. locking is database-level (i.e. no reading from one table while mutating another). pg13 will do a rollback when there's an error.
 
 Missing SQL features:
 * commands: drop table, alter table
@@ -90,7 +91,7 @@ Missing SQL features:
 * anything unique to oracle or mysql
 * datetime type & interval math are not supported in syntax. if you pass python datetimes as subbed literals it might work.
 * stored procs
-* transactions aren't simulated correctly: for example, an error won't abort a transaction
+* prepared statements
 
 ## pure-python implementation of SQL
 
