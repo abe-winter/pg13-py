@@ -118,6 +118,10 @@ class IndexX(CommandX): ATTRS = ('string',)
 
 class DeleteX(CommandX): ATTRS = ('table','where','returnx')
 
+class StartX(CommandX): ATTRS = ()
+class CommitX(CommandX): ATTRS = ()
+class RollbackX(CommandX): ATTRS = ()
+
 def bin_priority(op,left,right):
   "I don't know how to handle order of operations in the LR grammar, so here it is"
   # note: recursion limits protect this from infinite looping. I'm serious. (i.e. it will crash rather than hanging)
@@ -130,7 +134,7 @@ def un_priority(op,val):
   if isinstance(val,BinX) and val.op < op: return bin_priority(val.op,UnX(op,val.left),val.right)
   else: return UnX(op,val)
 
-KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group inherits check constraint'.split()}
+KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group inherits check constraint start transaction commit rollback'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
   t_STRLIT = "'((?<=\\\\)'|[^'])+'"
@@ -311,6 +315,11 @@ class SqlGrammar:
   def p_deletex(self,t):
     "expression : kw_delete kw_from NAME wherex opt_returnx"
     t[0] = DeleteX(t[3],t[4],t[5])
+
+  # todo: these aren't really expressions; they can only be used at top-level. sqex will catch it. should the syntax know?
+  def p_startx(self,t): "expression : kw_start kw_transaction"; t[0] = StartX()
+  def p_commitx(self,t): "expression : kw_commit"; t[0] = CommitX()
+  def p_rollbackx(self,t): "expression : kw_rollback"; t[0] = RollbackX()
 
   def p_error(self,t): raise SQLSyntaxError(t)
 

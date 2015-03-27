@@ -93,3 +93,9 @@ def test_cast_op():
   from pg13.sqparse2 import CommaX,CastX,Literal
   assert sqparse2.parse('select 12345::text').cols == CommaX([CastX(Literal(12345),'text')])
   # todo: what happens when a more complicated expression is before the cast? read specs and do more tests
+
+def test_parse_transactions():
+  from pg13.sqparse2 import StartX,CommitX,RollbackX
+  assert sqparse2.parse('start transaction') == StartX()
+  assert sqparse2.parse('commit') == CommitX()
+  assert sqparse2.parse('rollback') == RollbackX()

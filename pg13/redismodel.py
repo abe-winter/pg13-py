@@ -12,7 +12,8 @@ class RedisModel(object):
   @classmethod
   def type_check(clas,types,vals,errname):
     if len(types)!=len(vals): raise TypeError('length mismatch for %s.%s (got %i want %i)'%(clas.__name__,errname,len(vals),len(types)))
-    if not all(isinstance(v,t) for v,t in zip(vals,types)): raise TypeError('type mismatch for %s.%s'%(clas.__name__,errname))
+    for i,(v,t) in enumerate(zip(vals, types)):
+      if not isinstance(v,t): raise TypeError('type_mismatch', clas.__name__, errname, {'index':i, 'want':t, 'got':type(v)})
   @classmethod
   def make_key(clas,*keyvals):
     if any(x is None for x in (clas.NAMESPACE,clas.VERSION,clas.KEY)): raise TypeError('null meta-information in class')
