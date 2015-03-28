@@ -9,8 +9,15 @@ def get_version(fname):
 setuptools.setup(
   name='pg13',
   version=get_version(os.path.join(os.path.dirname(__file__),'pg13/__init__.py')),
-  description='sql models with built-in mocking framework',
-  classifiers=[],
+  description='in-process sql mocking for python',
+  classifiers=[
+    'License :: OSI Approved :: MIT License',
+    'Programming Language :: Python :: 2.7',
+    'Programming Language :: Python :: 2 :: Only',
+    'Topic :: Database',
+    'Topic :: Software Development :: Interpreters',
+    'Topic :: Software Development :: Testing',
+  ],
   keywords=['sql','mocking','orm','database','testing'],
   author='Abe Winter',
   author_email='abe-winter@users.noreply.github.com',

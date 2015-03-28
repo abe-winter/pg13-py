@@ -69,6 +69,7 @@ class Cursor(object):
   def fetchone(self): raise NotImplementedError
 
 class Pool(object):
+  # todo: DBAPI compatibility https://www.python.org/dev/peps/pep-0249/
   """
   This is the base class for pool wrappers. Most of the Row methods expect one of these as the first argument.
 
@@ -83,6 +84,8 @@ class Pool(object):
         password='topsecret',
       )
       return pool_psyco.PgPoolPsyco(' '.join("%s='%s'"%(k,v) for k,v in dets.items()))
+
+  Careful: this isn't DBAPI compatible. In particular commit() doesn't do what you expect.
   """
   def __init__(self,dbargs): raise NotImplementedError
   def select(self,qstring,vals=()): raise NotImplementedError
