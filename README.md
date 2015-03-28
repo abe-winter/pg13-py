@@ -19,7 +19,7 @@ pg13 takes a different approach:
 * SQL is simulated in python
 * every test can create and populate its own lightweight database
 * tests are deterministic (at least with respect to database reuse)
-* parallelization across tests is safe (at least with respect to data)
+* parallelizing your test suite is safe (because each test gets a fresh DB)
 * performance: ~200 tests per second on my laptop
 
 Drop me a line if you're using this. `@gmail: awinter.public` (hint: turn it around)
@@ -77,7 +77,7 @@ Supported SQL features:
 * text search support is limited (limited versions of to_tsvector, to_tsquery, @@)
 * serial columns
 * :: casting operator (not all types supported)
-* transactions exist but are very crude. in theory they're thread-safe but that's not tested. locking is database-level (i.e. no reading from one table while mutating another). pg13 will do a rollback when there's an error.
+* transactions exist but are very crude. in theory they're thread-safe but that's not tested. locking is database-level (i.e. no reading from one table while mutating another). pg13 will do a rollback when there's an error. transactions copy the whole DB, so there may be performance issues for large DBs.
 
 Missing SQL features:
 * commands: drop table, alter table
@@ -95,7 +95,7 @@ Missing SQL features:
 
 ## pure-python implementation of SQL
 
-If you're looking for a pure-python SQL engine (an evaluator, not just a parser), you may be in the right place.
+If you're looking for a pure-python SQL engine (an evaluator, not just a parser), you may be in the right place. pg13's SQL logic weighs in around 1000 lines (600 logic + 350 parser).
 
 See also:
 * http://gadfly.sourceforge.net/gadfly.html
