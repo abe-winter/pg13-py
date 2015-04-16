@@ -9,8 +9,9 @@ def get_version(fname):
 setuptools.setup(
   name='pg13',
   version=get_version(os.path.join(os.path.dirname(__file__),'pg13/__init__.py')),
-  description='in-process sql mocking for python',
+  description='sql evaluator for mocking',
   classifiers=[
+    'Development Status :: 4 - Beta',
     'License :: OSI Approved :: MIT License',
     'Programming Language :: Python :: 2.7',
     'Programming Language :: Python :: 2 :: Only',

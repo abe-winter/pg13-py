@@ -46,7 +46,8 @@ Create table and do an insert.
 ```python
 Model.create_table(pool)
 Model.insert_all(pool, 1, 2, 'three')
-assert pool.tables['model'].rows == [[1, 2, 'three']] # everything is stored like you'd expect
+# everything is stored like you'd expect:
+assert pool.tables['model'].rows == [[1, 2, 'three']]
 ```
 This is a multitenant autoincrement insert:
 ```python

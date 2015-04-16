@@ -160,21 +160,24 @@ def test_attr():
   with pytest.raises(sqparse2.SQLSyntaxError): sqparse2.parse('a.b.c')
 
 def test_join_syntax():
-  from pg13.sqparse2 import JoinX,BinX,OpX,NameX,AttrX,CommaX,AsterX
+  from pg13.sqparse2 import JoinX,BinX,OpX,NameX,AttrX,CommaX,AsterX,JoinTypeX
+  inner_join = JoinTypeX(None,False,None)
   ex=sqparse2.parse('select * from t1,t2 where t1.x=t2.y')
   assert all(isinstance(x,sqparse2.AttrX) for x in (ex.where.left,ex.where.right))
   assert sqparse2.parse('select * from t1 join t2').tables==[
-    JoinX('t1','t2',None)
+    JoinX('t1','t2',None,inner_join)
   ]
   assert sqparse2.parse('select * from t1 join t2 on x=y').tables==[JoinX(
     't1','t2',
-    BinX(OpX('='), NameX('x'), NameX('y'))
+    BinX(OpX('='), NameX('x'), NameX('y')),
+    inner_join
   )]
   x = sqparse2.parse('select t1.* from t1 join t2 on x=y and z=a')
   assert x.cols==CommaX([AttrX(NameX('t1'),AsterX())])
   assert x.tables==[JoinX(
     't1','t2',
-    BinX(OpX('and'),BinX(OpX('='),NameX('x'),NameX('y')),BinX(OpX('='),NameX('z'),NameX('a')))
+    BinX(OpX('and'),BinX(OpX('='),NameX('x'),NameX('y')),BinX(OpX('='),NameX('z'),NameX('a'))),
+    inner_join
   )]
   assert sqparse2.parse('select t1.*,t2.* from t1 join t2 on x=y').cols==CommaX([
     AttrX(NameX('t1'),AsterX()),
@@ -182,8 +185,15 @@ def test_join_syntax():
   ])
   assert sqparse2.parse('select * from t1 join t2 on t1.x=t2.y').tables==[JoinX(
     't1','t2',
-    BinX(OpX('='),AttrX(NameX('t1'),NameX('x')),AttrX(NameX('t2'),NameX('y')))
+    BinX(OpX('='),AttrX(NameX('t1'),NameX('x')),AttrX(NameX('t2'),NameX('y'))),
+    inner_join
   )]
+
+def test_jointype():
+  from pg13.sqparse2 import JoinTypeX
+  assert JoinTypeX('left',True,None) == sqparse2.parse('select * from t1 left outer join t2').tables[0].jointype
+  assert JoinTypeX(None,False,None) == sqparse2.parse('select * from t1 inner join t2').tables[0].jointype
+  assert JoinTypeX('full',True,None) == sqparse2.parse('select * from t1 full join t2').tables[0].jointype
 
 def test_xgetset():
   "tree-aware getitem/setitem for expressions"

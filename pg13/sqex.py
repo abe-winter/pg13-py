@@ -1,4 +1,5 @@
 "expression evaluation helpers for pgmock. has duck-dependencies on pgmock's Table class, needs redesign."
+# todo: most of the heavy lifting happens here. profile and identify candidates for Cython port.
 
 import itertools,collections
 from . import sqparse2,threevl,misc

@@ -61,7 +61,13 @@ class NameX(BaseX): ATTRS = ('name',)
 class AsterX(BaseX): pass
 class NullX(BaseX): pass
 class AliasX(BaseX): ATTRS = ('name','alias')
-class JoinX(BaseX): ATTRS = ('a','b','on_stmt')
+
+class JoinTypeX(BaseX):
+  ATTRS = ('side','outer','natural')
+  @property
+  def inner(self): return not self.is_outer
+
+class JoinX(BaseX): ATTRS = ('a','b','on_stmt','jointype')
 class OpX(BaseX):
   PRIORITY=('or','and','not','>','<','@>','@@','||','!=','=','is not','is','in','*','/','+','-')
   ATTRS = ('op',)
@@ -134,7 +140,7 @@ def un_priority(op,val):
   if isinstance(val,BinX) and val.op < op: return bin_priority(val.op,UnX(op,val.left),val.right)
   else: return UnX(op,val)
 
-KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group inherits check constraint start transaction commit rollback'.split()}
+KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group inherits check constraint start transaction commit rollback left right full inner outer using'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
   t_STRLIT = "'((?<=\\\\)'|[^'])+'"
@@ -232,13 +238,24 @@ class SqlGrammar:
     if len(t)==6: t[0]=AliasX(t[2],t[5])
     elif len(t)==2: t[0]=t[1]
     else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
-  def p_joinx(self,t):
-    """joinx : fromtable kw_join fromtable
-             | fromtable kw_join fromtable kw_on expression
+  def p_outerjoin(self,t): "outerjoin : kw_left \n | kw_right \n | kw_full"; t[0] = t[1]
+  def p_jointype(self,t):
+    """jointype : kw_join
+                | kw_inner kw_join
+                | outerjoin kw_outer kw_join
+                | outerjoin kw_join
     """
-    if len(t)==4: t[0] = JoinX(t[1],t[3],None)
-    elif len(t)==6: t[0] = JoinX(t[1],t[3],t[5])
-    else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
+    if len(t) <= 2 or t[1] == 'inner': t[0] = JoinTypeX(None, False, None)
+    else: t[0] = JoinTypeX(t[1], True, None)
+  def p_joinx(self,t):
+    # todo: support join types http://www.postgresql.org/docs/9.4/static/queries-table-expressions.html#QUERIES-JOIN
+    """joinx : fromtable jointype fromtable
+             | fromtable jointype fromtable kw_on expression
+             | fromtable jointype fromtable kw_using '(' namelist ')'
+    """
+    if len(t)==4: t[0] = JoinX(t[1],t[3],None,t[2])
+    elif len(t)==6: t[0] = JoinX(t[1],t[3],t[5],t[2])
+    else: raise NotImplementedError('todo: join .. using')
   def p_fromitem(self,t): "fromitem : fromtable \n | joinx"; t[0] = t[1]
   def p_fromitem_list(self,t):
     """fromitem_list : fromitem_list ',' fromitem
