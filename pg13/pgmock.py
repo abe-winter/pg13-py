@@ -61,6 +61,28 @@ class TablesDict:
     elif is_start: yield # apply_sql will call trans_start() on its own, block there if necessary
     else:
       with self.lock: yield
+  def apply_sql(ex,values,cursor):
+    "call the stmt in tree with values subbed on the tables in t_d\
+    tree is a parsed statement returned by parse_expression. values is the tuple of %s replacements."
+    sqex.depth_first_sub(ex,values)
+    with self.lock_db(cursor, isinstance(ex,sqparse2.StartX)):
+      sqex.replace_subqueries(ex,self,Table)
+      if isinstance(ex,sqparse2.SelectX): return sqex.run_select(ex,self,Table)
+      elif isinstance(ex,sqparse2.InsertX): return self[ex.table].insert(ex.cols,ex.values,ex.ret,self)
+      elif isinstance(ex,sqparse2.UpdateX):
+        if len(ex.tables)!=1: raise NotImplementedError('multi-table update')
+        return self[ex.tables[0]].update(ex.assigns,ex.where,ex.ret,self)
+      elif isinstance(ex,sqparse2.CreateX):
+        if ex.name in self: raise ValueError('table_exists',ex.name)
+        if any(c.pkey for c in ex.cols): raise NotImplementedError('inline pkey')
+        self[ex.name]=Table(ex.name,ex.cols,ex.pkey.fields if ex.pkey else [])
+      elif isinstance(ex,sqparse2.IndexX): pass
+      elif isinstance(ex,sqparse2.DeleteX): return self[ex.table].delete(ex.where,self)
+      elif isinstance(ex,sqparse2.StartX): self.trans_start(cursor)
+      elif isinstance(ex,sqparse2.CommitX): self.trans_commit()
+      elif isinstance(ex,sqparse2.RollbackX): self.trans_rollback()
+      else: raise TypeError(type(ex)) # pragma: no cover
+
 
 def expand_row(table_fields,fields,values):
   "helper for insert. turn (field_names, values) into the full-width, properly-ordered row"
@@ -144,28 +166,6 @@ class Table:
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
     self.rows=[r for r in self.rows if not sqex.evalex(where,(r,),nix,tables_dict)]
-
-def apply_sql(ex,values,tables_dict,cursor):
-  "call the stmt in tree with values subbed on the tables in t_d\
-  tree is a parsed statement returned by parse_expression. values is the tuple of %s replacements. tables_dict is a dictionary of Table instances."
-  sqex.depth_first_sub(ex,values)
-  with tables_dict.lock_db(cursor, isinstance(ex,sqparse2.StartX)):
-    sqex.replace_subqueries(ex,tables_dict,Table)
-    if isinstance(ex,sqparse2.SelectX): return sqex.run_select(ex,tables_dict,Table)
-    elif isinstance(ex,sqparse2.InsertX): return tables_dict[ex.table].insert(ex.cols,ex.values,ex.ret,tables_dict)
-    elif isinstance(ex,sqparse2.UpdateX):
-      if len(ex.tables)!=1: raise NotImplementedError('multi-table update')
-      return tables_dict[ex.tables[0]].update(ex.assigns,ex.where,ex.ret,tables_dict)
-    elif isinstance(ex,sqparse2.CreateX):
-      if ex.name in tables_dict: raise ValueError('table_exists',ex.name)
-      if any(c.pkey for c in ex.cols): raise NotImplementedError('inline pkey')
-      tables_dict[ex.name]=Table(ex.name,ex.cols,ex.pkey.fields if ex.pkey else [])
-    elif isinstance(ex,sqparse2.IndexX): pass
-    elif isinstance(ex,sqparse2.DeleteX): return tables_dict[ex.table].delete(ex.where,tables_dict)
-    elif isinstance(ex,sqparse2.StartX): tables_dict.trans_start(cursor)
-    elif isinstance(ex,sqparse2.CommitX): tables_dict.trans_commit()
-    elif isinstance(ex,sqparse2.RollbackX): tables_dict.trans_rollback()
-    else: raise TypeError(type(ex)) # pragma: no cover
 
 class CursorMock(pg.Cursor):
   def __init__(self,poolmock): self.poolmock = poolmock; self.lastret = None
