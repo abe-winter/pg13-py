@@ -1,5 +1,9 @@
 # pg13 [![Build Status](https://travis-ci.org/abe-winter/pg13-py.svg?branch=master)](https://travis-ci.org/abe-winter/pg13-py)
 
+- [examples](#examples)
+- [status](#status)
+- [sql implementation](#pure-python-implementation-of-sql)
+
 **install** with `pip install pg13[psyco]`
 
 **docs** at http://pg13.readthedocs.org/en/latest/
@@ -22,25 +26,24 @@ pg13 takes a different approach:
 * parallelizing your test suite is safe (because each test gets a fresh DB)
 * performance: ~200 tests per second on my laptop
 
+The ORM is optional; the underlying SQL evaluator has a DBAPI2 interface and can be used directly (see the last line of the examples section).
+
 Drop me a line if you're using this. `@gmail: awinter.public` (hint: turn it around)
 
 ## examples
 
 Note: everything below is happening in-python and in-memory. Each instance (table dictionary) is completely isolated so your tests can run in parallel or whatever, you don't need a live DB on your system. Interacting with a live database looks exactly the same as below except for creating the pool and the pool.tables lines.
 ```python
-from pg13 import pg,pgmock
+# create a model
+from pg13 import pg, pgmock_dbapi2
 class Model(pg.Row):
   FIELDS = [('userid','int'),('id2','int'),('content','text')]
   PKEY = 'userid,id2'
   TABLE = 'model'
-  @pg.dirty('content')
-  def content_len(self):
-    "this will get cached until the 'text' field is changed"
-    return len(self['content'])
 ```
 Connection setup. The pool object is passed into all the ORM methods, so it's a one-stop shop for switching between test and prod.
 ```python
-pool = pgmock.PgPoolMock()
+pool = pgmock_dbapi2.PgPoolMock()
 ```
 Create table and do an insert.
 ```python
@@ -49,15 +52,11 @@ Model.insert_all(pool, 1, 2, 'three')
 # everything is stored like you'd expect:
 assert pool.tables['model'].rows == [[1, 2, 'three']]
 ```
-This is a multitenant autoincrement insert:
-```python
-Model.insert_mtac(pool, {'userid':1}, 'id2', ('content',), ('hello',))
-assert pool.tables['model'].rows[1] == [1, 3, 'hello']
-# notice that 'id2' is one more than for the previous row
-```
 Here's an example of querying the SQL engine directly. This code is running in-process without talking to an external database.
 ```python
-assert pool.select('select userid,id2 from model where userid=2-1')==[[1,2],[1,3]]
+with pool() as dbcon, dbcon.cursor() as cur:
+  cur.execute('select userid,id2 from model where userid=2-1')
+  assert cur.fetchall()==[[1,2]]
 ```
 
 ## status
