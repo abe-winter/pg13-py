@@ -1,7 +1,7 @@
 "pg.Row tests using pgmock"
 
 import pytest,collections,ujson
-from pg13 import pg,pgmock,misc
+from pg13 import pg,pgmock,misc,pgmock_dbapi2
 
 class Model(pg.Row):
   FIELDS = [('userid','int'),('id2','int'),('content','text'),('arr',pg.SpecialField(list))]
@@ -14,7 +14,7 @@ USERID=1
 
 def prepmock(*schemas):
   "helper; create a mock environment"
-  pool=pgmock.PgPoolMock()
+  pool=pgmock_dbapi2.PgPoolMock()
   for s in schemas: s.create_table(pool)
   return misc.EnvBundle(pool,None,None,USERID,None,None)
 

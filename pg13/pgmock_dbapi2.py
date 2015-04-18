@@ -1,7 +1,7 @@
 "dbapi2 interface to pgmock"
 
-import functools
-from . import pgmock, sqparse2
+import functools, contextlib
+from . import pgmock, sqparse2, pg
 
 # globals
 apilevel = '2.0'
@@ -11,6 +11,13 @@ paramstyle = 'format'
 # global dictionary of databases (necessary so different connections can access the same DB)
 DATABASES = {}
 NEXT_DB_ID = 0
+
+def add_db():
+  global NEXT_DB_ID
+  db_id, NEXT_DB_ID = NEXT_DB_ID, NEXT_DB_ID + 1
+  DATABASES[db_id] = pgmock.TablesDict()
+  print 'created db %i' % db_id
+  return db_id
 
 # todo: catch pgmock errors and raise these
 class Error(StandardError): pass
@@ -23,10 +30,9 @@ class InternalError(DatabaseError): pass
 class ProgrammingError(DatabaseError): pass
 class NotSupportedError(DatabaseError): pass
 
-class Cursor:
+class Cursor(pg.Cursor):
   def __init__(self, connection):
     self.connection = connection
-    self.rowcount = -1
     self.arraysize = 1
     self.rows = None
     self.rownumber = None
@@ -55,7 +61,7 @@ class Cursor:
     return ret
   def fetchmany(self, size=None): raise NotImplementedError # hoping nobody cares about this one
   def fetchall(self):
-    if self.rows is None: raise Error('empty')
+    if self.rows is None: raise Error('no query to fetch')
     ret, self.rows = self.rows, None
     return ret
   def nextset(self): raise NotImplementedError('are we supporting multi result sets?')
@@ -81,12 +87,9 @@ class Connection:
   def __init__(self, db_id=None):
     "pass None as db_id to create a new pgmock database"
     self.closed = False
-    if db_id is None:
-      global NEXT_DB_ID
-      db_id, NEXT_DB_ID = NEXT_DB_ID, NEXT_DB_ID + 1
-      DATABASES[db_id] = pgmock.TablesDict()
-    self.db_id = db_id
-    self.db = DATABASES[db_id]
+    self.db_id = add_db() if db_id is None else db_id
+    self.db = DATABASES[self.db_id]
+    print 'connected db %i' % self.db_id
     self._autocommit = False
     self.transaction_open = False
   @property
@@ -112,11 +115,13 @@ class Connection:
     if not self.transaction_open: raise OperationalError("can't commit without transaction_open")
     self.db.trans_commit()
     self.transaction_open = False
+    print 'commit'
   @open_only
   def rollback(self):
     if not self.transaction_open: raise OperationalError("can't rollback without transaction_open")
     self.db.trans_rollback()
     self.transaction_open = False
+    print 'rollback'
   @open_only
   def cursor(self): return Cursor(self)
   @open_only
@@ -128,3 +133,41 @@ class Connection:
     (self.commit if etype is None else self.rollback)()
 
 connect = Connection
+
+def call_cur(f):
+  "decorator for opening a connection and passing a cursor to the function"
+  @functools.wraps(f)
+  def f2(self, *args, **kwargs):
+    with self.withcur() as cur:
+      return f(self, cur, *args, **kwargs)
+  return f2
+
+class PgPoolMock(pg.Pool): # only inherits so isinstance tests pass
+  def __init__(self):
+    self.db_id = add_db()
+  @property
+  def tables(self): return DATABASES[self.db_id]
+  @call_cur
+  def select(self, cursor, qstring, vals=()):
+    "careful: don't pass cursor (it's from decorator)"
+    cursor.execute(qstring, vals) # hmm; do I not want to commit at the end of this?
+    return cursor.fetchall()
+  @call_cur
+  def commit(self, cursor, qstring, vals=()):
+    "careful: don't pass cursor (it's from decorator)"
+    cursor.execute(qstring, vals)
+  @call_cur
+  def commitreturn(self, cursor, qstring, vals=()):
+    "careful: don't pass cursor (it's from decorator)"
+    cursor.execute(qstring, vals)
+    return cursor.fetchall()[0]
+  def close(self): pass # todo: is this closeall?
+  @contextlib.contextmanager
+  def __call__(self):
+    with Connection(self.db_id) as con:
+      yield con
+  @contextlib.contextmanager
+  def withcur(self):
+    "don't pass cursor"
+    with self() as con, con.cursor() as cur:
+      yield cur

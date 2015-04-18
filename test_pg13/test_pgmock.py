@@ -1,5 +1,5 @@
 import pytest
-from pg13 import pgmock,sqparse2,pg,sqex
+from pg13 import pgmock,sqparse2,pg,sqex,pgmock_dbapi2
 
 def prep(create_stmt):
   "helper for table setup"
@@ -331,7 +331,7 @@ def test_tempkeys():
   with pytest.raises(KeyError): td['b']
 
 def test_transaction_basics():
-  ppm = pgmock.PgPoolMock()
+  ppm = pgmock_dbapi2.PgPoolMock()
   # 1. test that create table persists past commit
   with ppm.withcur() as cursor:
     cursor.execute('create table t1 (a int, b int)')

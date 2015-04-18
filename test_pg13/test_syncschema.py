@@ -1,7 +1,7 @@
 "this includes tests for syncmessage"
 
 import pytest,ujson,binascii
-from pg13 import syncschema,syncmessage,pg,pgmock,diff,misc
+from pg13 import syncschema,syncmessage,pg,pgmock,diff,misc,pgmock_dbapi2
 
 def test_vdstring():
   # Syncable subclasses should test: apply, generate, validate, ser, des, create, version
@@ -105,7 +105,7 @@ MODELGB=misc.GetterBy([
 
 def test_simple():
   "make sure it's possible to construct one of these, load-store with the DB, and run diff ops on it"
-  pool=pgmock.PgPoolMock()
+  pool=pgmock_dbapi2.PgPoolMock()
   Simple.create_table(pool)
   model=Simple.insert_all(pool,0,'1',syncschema.VDList())
   assert model['tags'].generate()==[]
@@ -120,7 +120,7 @@ def test_refkey():
   assert model.refkeys(['tags'])=={Ref:[(0,'1','a'),(0,'1','b'),(0,'1','c')]}
 
 def test_amc():
-  pool=pgmock.PgPoolMock()
+  pool=pgmock_dbapi2.PgPoolMock()
   Simple.create_table(pool)
   request=syncmessage.translate_check({ujson.dumps(['simple',[0,'1'],'tags']):0})
   syncmessage.add_missing_children(
@@ -137,7 +137,7 @@ def mkdict(val,pkey=(0,'1'),nombre='simple',field='tags'):
 
 def update_helper(request):
   # def do_update(pool,request,models):
-  pool=pgmock.PgPoolMock()
+  pool=pgmock_dbapi2.PgPoolMock()
   Simple.create_table(pool)
   return syncmessage.do_update(pool,
     request,
@@ -161,7 +161,7 @@ def test_update_checkstale():
   })).values()
 
 def check_helper(request,include_children_for={},make_models=lambda x:None):
-  pool=pgmock.PgPoolMock()
+  pool=pgmock_dbapi2.PgPoolMock()
   Simple.create_table(pool)
   Ref.create_table(pool)
   models = make_models(pool) or {('simple',(0,'1')):Simple.insert_all(pool,0,'1',syncschema.VDList.create([]))}

@@ -13,8 +13,6 @@ class Missing: "for distinguishing missing columns vs passed-in null"
 
 class TablesDict:
   "dictionary wrapper that knows about transactions"
-  # todo: consider setting transaction_owner by cursor *and* thread
-  # warning: lots of disaster can result from sharing cursors between threads
   def __init__(self):
     self.lock = threading.Lock()
     self.levels = [{}]
@@ -36,12 +34,12 @@ class TablesDict:
     self.levels.append(dict(self.levels[-1]))
     try: yield
     finally: self.levels.pop()
-  def trans_start(self, cursor):
+  def trans_start(self, lockref):
     self.lock.acquire()
     if self.transaction: raise RuntimeError('in transaction after acquiring lock')
     self.levels.append(copy.deepcopy(self.levels[0])) # i.e. copy all the tables, too
     self.transaction = True
-    self.transaction_owner = cursor
+    self.transaction_owner = lockref
   def trans_commit(self):
     if not self.transaction: raise RuntimeError('commit not in transaction')
     self.levels = [self.levels[1]]
@@ -53,22 +51,23 @@ class TablesDict:
     self.transaction = False
     self.lock.release()
   @contextlib.contextmanager
-  def lock_db(self,cursor,is_start):
-    if self.transaction and self.transaction_owner is cursor:
+  def lock_db(self,lockref,is_start):
+    if self.transaction and self.transaction_owner is lockref:
       # note: this case is relying on the fact that if the above is true, our thread did it,
       #   therefore the lock can't be released on our watch.
       yield
     elif is_start: yield # apply_sql will call trans_start() on its own, block there if necessary
     else:
       with self.lock: yield
-  def apply_sql(self, ex, values, cursor):
+  def apply_sql(self, ex, values, lockref):
     """call the stmt in tree with values subbed on the tables in t_d.
     ex is a parsed statement returned by parse_expression.
     values is the tuple of %s replacements.
-    cursor can be anything as long as it stays the same; it's used for assigning tranaction ownership.
+    lockref can be anything as long as it stays the same; it's used for assigning tranaction ownership.
+      (safest is to make it a pgmock_dbapi2.Connection, because that will rollback on close)
     """
     sqex.depth_first_sub(ex,values)
-    with self.lock_db(cursor, isinstance(ex,sqparse2.StartX)):
+    with self.lock_db(lockref, isinstance(ex,sqparse2.StartX)):
       sqex.replace_subqueries(ex,self,Table)
       if isinstance(ex,sqparse2.SelectX): return sqex.run_select(ex,self,Table)
       elif isinstance(ex,sqparse2.InsertX): return self[ex.table].insert(ex.cols,ex.values,ex.ret,self)
@@ -81,7 +80,7 @@ class TablesDict:
         self[ex.name]=Table(ex.name,ex.cols,ex.pkey.fields if ex.pkey else [])
       elif isinstance(ex,sqparse2.IndexX): pass
       elif isinstance(ex,sqparse2.DeleteX): return self[ex.table].delete(ex.where,self)
-      elif isinstance(ex,sqparse2.StartX): self.trans_start(cursor)
+      elif isinstance(ex,sqparse2.StartX): self.trans_start(lockref)
       elif isinstance(ex,sqparse2.CommitX): self.trans_commit()
       elif isinstance(ex,sqparse2.RollbackX): self.trans_rollback()
       else: raise TypeError(type(ex)) # pragma: no cover
@@ -169,34 +168,3 @@ class Table:
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
     self.rows=[r for r in self.rows if not sqex.evalex(where,(r,),nix,tables_dict)]
-
-class CursorMock(pg.Cursor):
-  def __init__(self,poolmock): self.poolmock = poolmock; self.lastret = None
-  def execute(self,qstring,vals=()):
-    self.lastret = self.poolmock.tables.apply_sql(sqparse2.parse(qstring), vals, self)
-    return len(self.lastret) if isinstance(self.lastret,list) else None
-  def __iter__(self): return iter(self.lastret)
-  def fetchone(self): return self.lastret[0]
-  def __enter__(self):
-    # todo: should transactions be happening with-ing the cursor or connection? I'm thinking the latter
-    self.execute('start transaction')
-    return self
-  def __exit__(self, etype, evalue, tb): self.execute('commit' if etype is None else 'rollback')
-
-class ConnectionMock:
-  "for supporting the contextmanager call"
-  def __init__(self,poolmock): self.poolmock=poolmock
-  @contextlib.contextmanager
-  def cursor(self): yield CursorMock(self.poolmock)
-
-class PgPoolMock(pg.Pool): # only inherits so isinstance tests pass
-  def __init__(self): self.tables=TablesDict()
-  def select(self,qstring,vals=()): return self.tables.apply_sql(sqparse2.parse(qstring),vals,None)
-  def commit(self,qstring,vals=()): return self.tables.apply_sql(sqparse2.parse(qstring),vals,None)
-  def commitreturn(self,qstring,vals=()): return self.tables.apply_sql(sqparse2.parse(qstring),vals,None)[0]
-  def close(self): pass
-  @contextlib.contextmanager
-  def __call__(self): yield ConnectionMock(self)
-  @contextlib.contextmanager
-  def withcur(self):
-    with CursorMock(self) as cursor: yield cursor
