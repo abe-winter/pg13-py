@@ -44,7 +44,7 @@ class Cursor:
     ex = sqparse2.parse(operation)
     if not self.connection.transaction_open and not self.connection.autocommit:
       self.connection.begin()
-    self.rows = self.connection.db.apply_sql(ex, parameters or (), FAKE_CURSOR)
+    self.rows = self.connection.db.apply_sql(ex, parameters or (), self.connection)
     self.rownumber = 0 # always?
   def executemany(self, operation, seq_of_parameters):
     for param in seq_of_parameters: self.execute(operation, param)
@@ -102,10 +102,13 @@ class Connection:
   @open_only
   def begin(self):
     if self.transaction_open: raise OperationalError("can't begin() with transaction_open")
+    self.db.trans_start(self)
     self.transaction_open = True
-    self.db.trans_start()
   @open_only
-  def commit(self): raise NotImplementedError
+  def commit(self):
+    if not self.transaction_open: raise OperationalError("can't commit without transaction_open")
+    self.db.trans_commit()
+    self.transaction_open = False
   @open_only
   def rollback(self):
     if not self.transaction_open: raise OperationalError("can't rollback without transaction_open")

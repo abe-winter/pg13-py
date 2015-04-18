@@ -1,3 +1,4 @@
+import pytest
 from pg13 import pgmock_dbapi2
 
 def test_connection():
@@ -7,7 +8,7 @@ def test_connection():
     acur.execute('insert into t1 values (3)')
   with pgmock_dbapi2.connect(a.db_id) as b, b.cursor() as bcur:
     bcur.execute('select * from t1')
-    assert bcur.fetchall() == [(1,),(3,)]
+    assert bcur.fetchall() == [[1],[3]]
   with pgmock_dbapi2.connect() as c, c.cursor() as ccur:
-    with pytest.raises(ValueError): # not actually a ValueError
+    with pytest.raises(KeyError):
       ccur.execute('select * from t1')

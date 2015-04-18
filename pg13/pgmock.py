@@ -19,7 +19,7 @@ class TablesDict:
     self.lock = threading.Lock()
     self.levels = [{}]
     self.transaction = False
-    self.connection_owner = None
+    self.transaction_owner = None
   def __getitem__(self, k): return self.levels[-1][k]
   def __setitem__(self, k, v): self.levels[-1][k] = v
   def __contains__(self, k): return k in self.levels[-1]
@@ -41,7 +41,7 @@ class TablesDict:
     if self.transaction: raise RuntimeError('in transaction after acquiring lock')
     self.levels.append(copy.deepcopy(self.levels[0])) # i.e. copy all the tables, too
     self.transaction = True
-    self.connection_owner = cursor
+    self.transaction_owner = cursor
   def trans_commit(self):
     if not self.transaction: raise RuntimeError('commit not in transaction')
     self.levels = [self.levels[1]]
@@ -54,7 +54,7 @@ class TablesDict:
     self.lock.release()
   @contextlib.contextmanager
   def lock_db(self,cursor,is_start):
-    if self.transaction and self.connection_owner is cursor:
+    if self.transaction and self.transaction_owner is cursor:
       # note: this case is relying on the fact that if the above is true, our thread did it,
       #   therefore the lock can't be released on our watch.
       yield
@@ -62,8 +62,11 @@ class TablesDict:
     else:
       with self.lock: yield
   def apply_sql(self, ex, values, cursor):
-    "call the stmt in tree with values subbed on the tables in t_d\
-    tree is a parsed statement returned by parse_expression. values is the tuple of %s replacements."
+    """call the stmt in tree with values subbed on the tables in t_d.
+    ex is a parsed statement returned by parse_expression.
+    values is the tuple of %s replacements.
+    cursor can be anything as long as it stays the same; it's used for assigning tranaction ownership.
+    """
     sqex.depth_first_sub(ex,values)
     with self.lock_db(cursor, isinstance(ex,sqparse2.StartX)):
       sqex.replace_subqueries(ex,self,Table)
