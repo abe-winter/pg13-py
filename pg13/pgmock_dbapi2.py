@@ -64,6 +64,9 @@ class Cursor:
   def __enter__(self): return self
   def __exit__(self,etype,error,tb): self.close()
   def scroll(self, value, mode='relative'): raise NotImplementedError
+  def __iter__(self):
+    rownum, self.rownumber = self.rownumber, None
+    return iter(self.rows[rownum:])
 
 def open_only(f):
   "decorator"
