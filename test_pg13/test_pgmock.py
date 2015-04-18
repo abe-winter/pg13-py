@@ -4,8 +4,8 @@ from pg13 import pgmock,sqparse2,pg,sqex
 def prep(create_stmt):
   "helper for table setup"
   tables=pgmock.TablesDict()
-  pgmock.apply_sql(sqparse2.parse(create_stmt),(),tables,None)
-  def runsql(stmt,vals=()): return pgmock.apply_sql(sqparse2.parse(stmt),vals,tables,None)
+  tables.apply_sql(sqparse2.parse(create_stmt),(),None)
+  def runsql(stmt,vals=()): return tables.apply_sql(sqparse2.parse(stmt),vals,None)
   return tables,runsql
 
 def test_default_null_vs_notprovided():

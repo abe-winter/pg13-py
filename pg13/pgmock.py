@@ -61,7 +61,7 @@ class TablesDict:
     elif is_start: yield # apply_sql will call trans_start() on its own, block there if necessary
     else:
       with self.lock: yield
-  def apply_sql(ex,values,cursor):
+  def apply_sql(self, ex, values, cursor):
     "call the stmt in tree with values subbed on the tables in t_d\
     tree is a parsed statement returned by parse_expression. values is the tuple of %s replacements."
     sqex.depth_first_sub(ex,values)
@@ -170,7 +170,7 @@ class Table:
 class CursorMock(pg.Cursor):
   def __init__(self,poolmock): self.poolmock = poolmock; self.lastret = None
   def execute(self,qstring,vals=()):
-    self.lastret = apply_sql(sqparse2.parse(qstring), vals, self.poolmock.tables, self)
+    self.lastret = self.poolmock.tables.apply_sql(sqparse2.parse(qstring), vals, self)
     return len(self.lastret) if isinstance(self.lastret,list) else None
   def __iter__(self): return iter(self.lastret)
   def fetchone(self): return self.lastret[0]
@@ -188,9 +188,9 @@ class ConnectionMock:
 
 class PgPoolMock(pg.Pool): # only inherits so isinstance tests pass
   def __init__(self): self.tables=TablesDict()
-  def select(self,qstring,vals=()): return apply_sql(sqparse2.parse(qstring),vals,self.tables,None)
-  def commit(self,qstring,vals=()): return apply_sql(sqparse2.parse(qstring),vals,self.tables,None)
-  def commitreturn(self,qstring,vals=()): return apply_sql(sqparse2.parse(qstring),vals,self.tables,None)[0]
+  def select(self,qstring,vals=()): return self.tables.apply_sql(sqparse2.parse(qstring),vals,None)
+  def commit(self,qstring,vals=()): return self.tables.apply_sql(sqparse2.parse(qstring),vals,None)
+  def commitreturn(self,qstring,vals=()): return self.tables.apply_sql(sqparse2.parse(qstring),vals,None)[0]
   def close(self): pass
   @contextlib.contextmanager
   def __call__(self): yield ConnectionMock(self)
