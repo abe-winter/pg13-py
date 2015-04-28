@@ -52,3 +52,8 @@ def test_iter():
     cur.execute('select * from t1')
     assert cur.fetchone() == [1,2]
     assert list(cur) == db.db['t1'].rows[1:]
+
+@pytest.mark.xfail
+def test_count_after_fetch():
+  # todo: look at spec; what's supposed to happen here
+  raise NotImplementedError
