@@ -18,49 +18,10 @@ def eqexpr(key,value):
   "for automatic x is null vs x=value stmts"
   return key+(' is %s' if value is None else '=%s')
 
-class SpecialField(object):
-  """Helper for fields that are stored as text (or json?) by PG with special ser/des rules in python.
-  
-  The documentation for this is nonexistent for now and the way these are used is likely to change."""
-  # todo(awinter): think about collection of serdes classes
-  # todo(awinter): inability to do dict of lists means no easy multimap. whatever.
-  KNOWN_SERDES=('json','class')
-  def __init__(self,pytype,serdes='json'):
-    # this is ugly
-    if serdes not in self.KNOWN_SERDES: raise TypeError('unk_serdes',serdes)
-    if all(hasattr(pytype,meth) for meth in ('ser','des')): serdes='class'
-    if serdes=='class' and isinstance(pytype,tuple): raise TypeError("don't mix collection pytype with class-provided serdes")
-    self.pytype,self.serdes=pytype,serdes
-  def validate(self,pyvar):
-    if isinstance(self.pytype,tuple):
-      container,item=self.pytype
-      if container in (list,set): return isinstance(pyvar,container) and all(isinstance(x,item) for x in pyvar)
-      elif container is dict: return isinstance(pyvar,container) and all(isinstance(x,item) for x in pyvar.values())
-      else: raise TypeError('unk_container_class',container) # pragma: no cover
-    else: return isinstance(pyvar,self.pytype)
-  def validate_raise(self,validate,pyvar):
-    if validate and not self.validate(pyvar): raise TypeError(self.pytype,type(pyvar))
-  def ser(self,pyvar,validate=True):
-    if pyvar is None: raise NullJsonError
-    self.validate_raise(validate,pyvar)
-    if self.serdes=='json': return ujson.dumps(pyvar)
-    elif self.serdes=='class': return pyvar.ser(validate)
-    else: raise ValueError('serdes',self.serdes) # pragma: no cover
-  def des(self,underlying,validate=True):
-    if self.serdes=='json':
-      if underlying is None: raise NullJsonError
-      pyvar=ujson.loads(underlying)
-      if isinstance(self.pytype,tuple):
-        container,item=self.pytype
-        # note below: doing a little casting on the container type; whatever. serialized dict could get converted to list of keys
-        if container in (list,set): pyvar=container([item(*x) for x in pyvar])
-        elif container is dict: pyvar={k:item(*v) for k,v in pyvar.items()}
-        else: raise TypeError('unk_container_class',container) # pragma: no cover
-      self.validate_raise(validate,pyvar)
-      return pyvar
-    elif self.serdes=='class': return self.pytype.des(underlying,validate)
-    else: raise ValueError('serdes',self.serdes) # pragma: no cover
-  def sqltype(self): return 'text'
+class CheckedCollection(object):
+  ""
+  def __init__(self, collection_type, item_type):
+    raise NotImplementedError
 
 class Cursor(object):
   "based class for cursor wrappers. necessary for error-wrapping."
@@ -95,7 +56,13 @@ class Pool(object):
   @contextlib.contextmanager
   def __call__(self): raise NotImplementedError
 
-def transform_specialfield((sf,v)): "helper"; return sf.ser(v) if isinstance(sf,SpecialField) else v
+def is_serdes(x):
+  "todo: once there's a SerDes based class, replace all calls with isinstance()"
+  return hasattr(x,'ser') and hasattr(x,'des')
+
+def transform_specialfield((f,v)):
+  "helper for serialize_row"
+  return f.ser(v) if is_serdes(f) else v
 
 def dirty(field,ttl=None):
   "decorator to cache the result of a function until a field changes"
@@ -172,7 +139,7 @@ class Row(object):
     (even better, increment the TABLE member from 'mymodel' to 'mymodel2')
     """
     print clas.__name__,'create_table'
-    def mkfield((name,tp)): return name,(tp.sqltype() if isinstance(tp,SpecialField) else tp)
+    def mkfield((name,tp)): return name,(tp if isinstance(tp,basestring) else 'jsonb')
     fields = ','.join(map(' '.join,map(mkfield,clas.FIELDS)))
     base = 'create table if not exists %s (%s'%(clas.TABLE,fields)
     if clas.PKEY: base += ',primary key (%s)'%clas.PKEY
@@ -194,7 +161,10 @@ class Row(object):
     if name is Ellipsis: return self.values
     try: index=self.index(name)
     except ValueError: raise FieldError("%s.%s"%(self.__class__.__name__,name))
-    return self.FIELDS[index][1].des(self.values[index]) if isinstance(self.FIELDS[index][1],SpecialField) else self.values[index]
+    val = self.values[index]
+    field = self.FIELDS[index][1]
+    # todo below: think about requiring a SerDes base class here instead of testing for a 'des' meth
+    return field.des(val) if is_serdes(field) else val
   @classmethod
   def index(class_,name): "helper; returns index of field name in row"; return class_.names().index(name)
   @classmethod
@@ -336,8 +306,9 @@ class Row(object):
 
     This needs better doc but there's an exampe on the github page.
     """
-    if isinstance(clas.FIELDS[clas.index(incfield)][1],SpecialField): raise TypeError('mtac_specialfield_unsupported','incfield',incfield)
-    if any(isinstance(clas.FIELDS[clas.index(f)][1],SpecialField) for f in restrict):
+    if not isinstance(clas.FIELDS[clas.index(incfield)][1],basestring):
+      raise TypeError('mtac_specialfield_unsupported','incfield',incfield)
+    if any(not isinstance(clas.FIELDS[clas.index(f)][1],basestring) for f in restrict):
       raise TypeError('mtac_specialfield_unsupported','restrict')
     if len(fields)!=len(vals): raise ValueError("insert_mtac len(fields)!=len(vals)")
     vals=clas.serialize_row(fields,vals)
@@ -359,7 +330,8 @@ class Row(object):
       Model.pkey_update(pool,(1,2),{},{'counter':'counter+1'}) # the last arg is raw_keys. this *doesn't get escaped* so the DB will actually increment the field.
     """
     if not clas.PKEY: raise ValueError("can't update %s, no primary key"%clas.TABLE)
-    if any(isinstance(clas.FIELDS[clas.index(f)][1],SpecialField) for f in (raw_keys or ())): raise TypeError('rawkeys_specialfield_unsupported')
+    if any(not isinstance(clas.FIELDS[clas.index(f)][1],basestring) for f in (raw_keys or ())):
+      raise TypeError('rawkeys_specialfield_unsupported')
     escape_keys=dict(zip(escape_keys,clas.serialize_row(escape_keys,escape_keys.values())))
     pkey = clas.PKEY.split(',')
     raw_keys=raw_keys or {}

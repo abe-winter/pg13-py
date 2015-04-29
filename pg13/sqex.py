@@ -344,7 +344,7 @@ def depth_first_sub(expr,values):
   arr=sub_slots(expr,lambda elt:elt is sqparse2.SubLit)
   if len(arr)!=len(values): raise ValueError('len',len(arr),len(values))
   for path,val in zip(arr,values):
-    if isinstance(val,(basestring,int,float)): expr[path] = sqparse2.Literal(val)
+    if isinstance(val,(basestring,int,float,type(None))): expr[path] = sqparse2.Literal(val)
     elif isinstance(val,(list,tuple)): expr[path] = sqparse2.ArrayLit(val)
     else: raise TypeError('unk_sub_type',type(val),val) # pragma: no cover
   return expr

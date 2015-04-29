@@ -4,7 +4,7 @@ import pytest,collections,ujson
 from pg13 import pg,pgmock,misc,pgmock_dbapi2
 
 class Model(pg.Row):
-  FIELDS = [('userid','int'),('id2','int'),('content','text'),('arr',pg.SpecialField(list))]
+  FIELDS = [('userid','int'),('id2','int'),('content','text'),('arr',list)]
   PKEY = 'userid,id2'
   TABLE = 'model'
   @pg.dirty('content')
@@ -27,7 +27,7 @@ def test_create_table():
   with pytest.raises(ValueError) as e: Model.create_table(ebuns.pool)
   assert e.value.args==('table_exists','model')
 def test_get(): assert 'a'==Model(0,1,'a','[]')['content']
-def test_get_jsonfields(): assert []==Model(0,1,'a','[]')['arr']
+def test_get_jsonfields(): assert []==Model(0,1,'a',[])['arr']
 def test_index(): assert all(i==Model.index(name) for i,(name,tp) in enumerate(Model.FIELDS))
 
 def populate(n=3,nusers=2):
@@ -43,20 +43,20 @@ def test_pkey_get():
   with pytest.raises(pg.Missing): Model.pkey_get(ebuns.pool,3,0)
 def test_select():
   ebuns=populate(3)
-  assert [[0,1,'a','[]'],[1,1,'a','[]']]==list(Model.select(ebuns.pool,id2=1))
+  assert [[0,1,'a',[]],[1,1,'a',[]]]==list(Model.select(ebuns.pool,id2=1))
 def test_row_eq():
-  m1=Model(1,0,'a','[]')
-  assert m1==Model(1,0,'a','[]')
-  assert m1!=Model(1,2,'a','[]')
+  m1=Model(1,0,'a',[])
+  assert m1==Model(1,0,'a',[])
+  assert m1!=Model(1,2,'a',[])
   assert not m1==0
   assert m1!=0
 def test_select_models():
   ebuns=populate(3)
-  assert [Model(0,1,'a','[]'),Model(1,1,'a','[]')]==list(Model.select_models(ebuns.pool,id2=1))
+  assert [Model(0,1,'a',[]),Model(1,1,'a',[])]==list(Model.select_models(ebuns.pool,id2=1))
   assert 6==len(list(Model.select_models(ebuns.pool))) # select all used to not work
 def test_selectwhere():
   ebuns=populate(3)
-  assert [Model(0,2,'a','[]')]==list(Model.selectwhere(ebuns.pool,0,'id2>%s',(1,)))
+  assert [Model(0,2,'a',[])]==list(Model.selectwhere(ebuns.pool,0,'id2>%s',(1,)))
 def test_insert():
   ebuns=prepmock(Model)
   Model.insert(ebuns.pool,['userid','id2'],[0,1])
@@ -66,15 +66,13 @@ def test_insert():
   assert [2]==Model.insert(ebuns.pool,['userid','id2'],[0,2],'id2') # todo: make sure this is the same against live DBs
 def test_insert_all():
   ebuns=prepmock(Model)
-  # note: see note on null-handling trickiness in SpecialField.des
-  with pytest.raises(pg.NullJsonError): Model.insert_all(ebuns.pool,0,0,'a',None)['arr']
   assert []==Model.insert_all(ebuns.pool,0,0,'a',[])['arr']
-  assert [[0,0,'a','[]']]==ebuns.pool.tables['model'].rows
+  assert [[0,0,'a',[]]]==ebuns.pool.tables['model'].rows
   assert []==Model.pkey_get(ebuns.pool,0,0)['arr']
 def test_kwinsert():
   ebuns=prepmock(Model)
   Model.kwinsert(ebuns.pool,userid=0,id2=1,arr=[])
-  assert ebuns.pool.tables['model'].rows==[[0,1,None,'[]']]
+  assert ebuns.pool.tables['model'].rows==[[0,1,None,[]]]
   # todo: test 'returning' feature
 @pytest.mark.xfail
 def test_checkdb(): raise NotImplementedError # todo: find out what PG supports and implement it for pgmock
@@ -88,43 +86,43 @@ def test_pkey_update():
   # todo(awinter): jsonfields and raw_keys vs escape_keys
   ebuns=populate(2)
   Model.pkey_update(ebuns.pool,(0,0),{'content':'whatever'})
-  assert [0,0,'whatever','[]']==Model.select(ebuns.pool,userid=0,id2=0)[0]
+  assert [0,0,'whatever',[]]==Model.select(ebuns.pool,userid=0,id2=0)[0]
 def test_pkey_vals(): assert (10,20)==Model(10,20,'a','[]').pkey_vals()
 def test_update():
   # def update(self,pool_or_cursor,escape_keys,raw_keys=None):
   ebuns=populate(2)
-  Model(0,0,'a','[]').update(ebuns.pool,{'content':'whatever'})
-  assert [0,0,'whatever','[]']==Model.select(ebuns.pool,userid=0,id2=0)[0]
-  m=Model(0,0,'a','[]')
+  Model(0,0,'a',[]).update(ebuns.pool,{'content':'whatever'})
+  assert [0,0,'whatever',[]]==Model.select(ebuns.pool,userid=0,id2=0)[0]
+  m=Model(0,0,'a',[])
   m.update(ebuns.pool,{'arr':[1,2]})
   assert [1,2]==m['arr'],"update isn't re-serializing updated values"
   # todo(awinter): raw keys, jsonfields
 def test_update_rawkeys():
   "there was a query construction bug for rawkeys without escapekeys"
   ebuns=populate(1,1)
-  m=Model(0,0,'a','[]')
+  m=Model(0,0,'a',[])
   m.update(ebuns.pool,{},{'content':"'whatever'"})
   assert m['content']=='whatever'
-  assert ebuns.pool.tables['model'].rows==[[0,0,'whatever','[]']]
+  assert ebuns.pool.tables['model'].rows==[[0,0,'whatever',[]]]
 def test_updatewhere():
   ebuns=populate(2)
   Model.updatewhere(ebuns.pool,{'userid':1},content='userid_1')
   for userid,_,content,_ in ebuns.pool.tables['model'].rows:
     assert content==('userid_1' if userid==1 else 'a')
-def test_repr(): assert '<Model(pg.Row) userid:0,id2:0>'==repr(Model(0,0,'a','[]'))
+def test_repr(): assert '<Model(pg.Row) userid:0,id2:0>'==repr(Model(0,0,'a',[]))
 
 def test_selectxiny():
   ebuns=populate(2)
   print ebuns.pool.tables['model'].rows
   # [<Model(pg.Row) userid:0,id2:0>, <Model(pg.Row) userid:0,id2:1>]
-  assert [Model(0,0,'a','[]'),Model(0,1,'a','[]')]==list(Model.select_xiny(ebuns.pool,0,'id2',[0,1]))
-  assert [Model(0,0,'a','[]')]==list(Model.select_xiny(ebuns.pool,0,'id2',[0]))
+  assert [Model(0,0,'a',[]),Model(0,1,'a',[])]==list(Model.select_xiny(ebuns.pool,0,'id2',[0,1]))
+  assert [Model(0,0,'a',[])]==list(Model.select_xiny(ebuns.pool,0,'id2',[0]))
   assert []==list(Model.select_xiny(ebuns.pool,0,'id2',[]))
-  assert [Model(0,0,'a','[]')]==list(Model.select_xiny(ebuns.pool,0,'(id2,content)',[(0,'a')]))
+  assert [Model(0,0,'a',[])]==list(Model.select_xiny(ebuns.pool,0,'(id2,content)',[(0,'a')]))
 
 def test_delete():
   ebuns=populate(2,2)
-  Model(0,0,'a','[]').delete(ebuns.pool)
+  Model(0,0,'a',[]).delete(ebuns.pool)
   assert 3==len(ebuns.pool.tables['model'].rows)
   assert not Model.select(ebuns.pool,userid=0,id2=0)
 
@@ -151,12 +149,14 @@ SF_TESTS=[
     [(SerDesClass,'class'),SerDesClass(5)],
 ]
 
+@pytest.mark.xfail
 def test_specialfield_ser():
   from pg13.pg import SpecialField
   for sfargs,val in SF_TESTS:
     if sfargs[1:2]==('class',): assert val.ser(None)==SpecialField(*sfargs).ser(val)
     else: assert ujson.dumps(val)==SpecialField(*sfargs).ser(val)
 
+@pytest.mark.xfail
 def test_specialfield_des():
   from pg13.pg import SpecialField
   # note: namedtuples evaluate equal to tuples, but json ser/deses to list. so if there are tuples in there, this is probably working.
