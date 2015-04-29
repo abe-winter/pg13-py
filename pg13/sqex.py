@@ -308,9 +308,10 @@ def evalex(x,c_row,nix,tables):
     else: raise NotImplementedError('unhandled_cast_type',x.to_type)
   elif isinstance(x,(int,basestring,float,type(None))):
     return x # I think Table.insert is creating this in expand_row
-  # todo doc: why tuple and list below?
+  # todo: why tuple, list, dict below? throw some asserts in here and see where these are coming from.
   elif isinstance(x,tuple): return tuple(map(subcall, x))
   elif isinstance(x,list): return map(subcall, x)
+  elif isinstance(x,dict): return x
   elif isinstance(x,sqparse2.NullX): return None
   elif isinstance(x,sqparse2.ReturnX):
     # todo: I think ReturnX is *always* CommaX now; revisit this
@@ -344,7 +345,8 @@ def depth_first_sub(expr,values):
   arr=sub_slots(expr,lambda elt:elt is sqparse2.SubLit)
   if len(arr)!=len(values): raise ValueError('len',len(arr),len(values))
   for path,val in zip(arr,values):
-    if isinstance(val,(basestring,int,float,type(None))): expr[path] = sqparse2.Literal(val)
+    # todo: does ArrayLit get us anything? tree traversal?
+    if isinstance(val,(basestring,int,float,type(None),dict)): expr[path] = sqparse2.Literal(val)
     elif isinstance(val,(list,tuple)): expr[path] = sqparse2.ArrayLit(val)
     else: raise TypeError('unk_sub_type',type(val),val) # pragma: no cover
   return expr

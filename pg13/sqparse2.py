@@ -109,6 +109,7 @@ class CreateX(CommandX):
   "note: technically pkey is a table_constraint but it also comes from cols so its separate"
   ATTRS = ('nexists','name','cols','pkey','table_constraints','inherits')
   VARLEN = ('cols','table_constraints') # todo: is pkey varlen or CommaX?
+class DropX(CommandX): ATTRS = ('ifexists','name','cascade')
 
 class ReturnX(BaseX): ATTRS = ('expr',)
 class InsertX(CommandX):
@@ -140,7 +141,7 @@ def un_priority(op,val):
   if isinstance(val,BinX) and val.op < op: return bin_priority(val.op,UnX(op,val.left),val.right)
   else: return UnX(op,val)
 
-KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group inherits check constraint start transaction commit rollback left right full inner outer using'.split()}
+KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group inherits check constraint start transaction commit rollback left right full inner outer using drop cascade'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
   t_STRLIT = "'((?<=\\\\)'|[^'])+'"
@@ -310,6 +311,11 @@ class SqlGrammar:
     # note below: this is a rare case where issubclass is safe
     table_constraints = sum([v for k,v in all_constraints.items() if issubclass(k, TableConstraintX)], [])
     t[0] = CreateX(t[3], t[4], all_constraints.get(ColX) or [], pkey, table_constraints, t[8])
+  def p_ifexists(self,t): "ifexists : kw_if kw_exists \n | "; t[0] = len(t) > 1
+  def p_cascade(self,t): "cascade : kw_cascade \n | "; t[0] = len(t) > 1
+  def p_dropx(self,t):
+    "expression : kw_drop kw_table ifexists NAME cascade"
+    t[0] = DropX(t[3],t[4],t[5])
   def p_returnx(self,t):
     "opt_returnx : kw_returning commalist \n | "
     # note: this gets weird because '(' commalist ')' is an expression but we need bare commalist to support non-paren returns

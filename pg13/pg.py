@@ -163,7 +163,7 @@ class Row(object):
     except ValueError: raise FieldError("%s.%s"%(self.__class__.__name__,name))
     val = self.values[index]
     field = self.FIELDS[index][1]
-    # todo below: think about requiring a SerDes base class here instead of testing for a 'des' meth
+    # todo: typecheck val on readback
     return field.des(val) if is_serdes(field) else val
   @classmethod
   def index(class_,name): "helper; returns index of field name in row"; return class_.names().index(name)

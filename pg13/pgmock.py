@@ -21,6 +21,7 @@ class TablesDict:
   def __getitem__(self, k): return self.levels[-1][k]
   def __setitem__(self, k, v): self.levels[-1][k] = v
   def __contains__(self, k): return k in self.levels[-1]
+  def __delitem__(self, k): del self.levels[-1][k]
   def update(self, *args, **kwargs): self.levels[-1].update(*args,**kwargs)
   def __iter__(self): return iter(self.levels[-1])
   def keys(self): return self.levels[-1].keys()
@@ -83,6 +84,7 @@ class TablesDict:
       elif isinstance(ex,sqparse2.StartX): self.trans_start(lockref)
       elif isinstance(ex,sqparse2.CommitX): self.trans_commit()
       elif isinstance(ex,sqparse2.RollbackX): self.trans_rollback()
+      elif isinstance(ex,sqparse2.DropX): del self[ex.name]
       else: raise TypeError(type(ex)) # pragma: no cover
 
 
