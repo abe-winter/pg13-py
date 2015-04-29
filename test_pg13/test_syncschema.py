@@ -86,14 +86,14 @@ def test_translate_check():
 
 class Ref(pg.Row):
   "Simple below refers to this"
-  FIELDS=[('userid','int'),('docid','text'),('tag','text'),('xfactor',pg.SpecialField(syncschema.VDList,'class'))]
+  FIELDS=[('userid','int'),('docid','text'),('tag','text'),('xfactor',syncschema.VDList)]
   PKEY='userid,docid,tag'
   TABLE='ref'
   SENDRAW=['tag']
 
 class Simple(pg.Row):
   "simple model for testing do_*"
-  FIELDS=[('userid','int'),('docid','text'),('tags',pg.SpecialField(syncschema.VDList,'class'))]
+  FIELDS=[('userid','int'),('docid','text'),('tags',syncschema.VDList)]
   PKEY='userid,docid'
   TABLE='simple'
   REFKEYS={'tags':syncschema.RefKey([Ref],['userid','docid',None])}

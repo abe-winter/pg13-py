@@ -16,7 +16,7 @@ Here's a typical syncschema transaction:
 '------------+-----------------------+---------------'
 """
 
-import ujson,collections,logging
+import ujson,collections,logging,inspect
 from . import syncschema,pg,diff,misc
 
 # todo delete: vnew isn't used, get rid of the field
@@ -105,8 +105,7 @@ def add_missing_children(models,request,include_children_for,modelgb):
       # warning: this is defaulting to all fields of child object. don't give clients a way to restrict that until there's a reason to.
       childname=modelgb['row',modelclass].name
       for childfield,cftype in modelclass.FIELDS:
-        # warning: issubclass fails in SpecialField tuple case. (a) issubclass sucks and (b) be more static about types.
-        if isinstance(cftype,pg.SpecialField) and issubclass(cftype.pytype,syncschema.Syncable):
+        if not isinstance(cftype,basestring) and inspect.isclass(cftype) and issubclass(cftype,syncschema.Syncable):
           merge_null_missing(request,childname,childfield,pkeys)
         elif childfield in modelclass.SENDRAW: merge_null_missing(request,childname,childfield,pkeys)
         else: pass # intentional: ignore the field
