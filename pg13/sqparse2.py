@@ -268,9 +268,12 @@ class SqlGrammar:
     else: raise NotImplementedError('unk_len',len(t)) # pragma: no cover
   def p_pkey(self,t): "pkey_stmt : kw_primary kw_key '(' namelist ')'"; t[0] = PKeyX(t[4])
   def p_nexists(self,t): "nexists : kw_if kw_not kw_exists \n | "; t[0] = len(t) > 1
+  def p_opt_inheritx(self,t):
+    "opt_inheritx : inheritx \n | "
+    t[0] = None if len(t)==1 else t[1]
   def p_inheritx(self,t):
-    "opt_inheritx : kw_inherits '(' namelist ')' \n | "
-    t[0] = None if len(t)==1 else t[3]
+    "inheritx : kw_inherits '(' namelist ')'"
+    t[0] = t[3]
   def p_constraint_name(self,t):
     "opt_constraint_name : kw_constraint NAME \n | "
     t[0] = None if len(t) == 1 else t[2]
@@ -284,14 +287,19 @@ class SqlGrammar:
     "tablespecs : tablespecs ',' tablespec \n | tablespec"
     t[0] = [t[1]] if len(t)==2 else t[1] + [t[3]]
   def p_createx(self,t):
-    "expression : kw_create kw_table nexists NAME '(' tablespecs ')' opt_inheritx"
-    all_constraints = {k:list(group) for k, group in itertools.groupby(t[6], lambda x:type(x))}
-    pkey = (all_constraints.get(PKeyX) or [None])[0] # todo: get pkey from column constraints as well
-    if PKeyX in all_constraints and len(all_constraints[PKeyX]) != 1:
-      raise SQLSyntaxError('too_many_pkeyx', all_constraints[PKeyX])
-    # note below: this is a rare case where issubclass is safe
-    table_constraints = sum([v for k,v in all_constraints.items() if issubclass(k, TableConstraintX)], [])
-    t[0] = CreateX(t[3], t[4], all_constraints.get(ColX) or [], pkey, table_constraints, t[8])
+    """expression : kw_create kw_table nexists NAME '(' tablespecs ')' opt_inheritx
+                  | kw_create kw_table nexists NAME inheritx
+    """
+    if len(t)==6:
+      t[0] = CreateX(t[3], t[4], [], None, [], t[5])
+    else:
+      all_constraints = {k:list(group) for k, group in itertools.groupby(t[6], lambda x:type(x))}
+      pkey = (all_constraints.get(PKeyX) or [None])[0] # todo: get pkey from column constraints as well
+      if PKeyX in all_constraints and len(all_constraints[PKeyX]) != 1:
+        raise SQLSyntaxError('too_many_pkeyx', all_constraints[PKeyX])
+      # note below: this is a rare case where issubclass is safe
+      table_constraints = sum([v for k,v in all_constraints.items() if issubclass(k, TableConstraintX)], [])
+      t[0] = CreateX(t[3], t[4], all_constraints.get(ColX) or [], pkey, table_constraints, t[8])
   def p_ifexists(self,t): "ifexists : kw_if kw_exists \n | "; t[0] = len(t) > 1
   def p_cascade(self,t): "cascade : kw_cascade \n | "; t[0] = len(t) > 1
   def p_dropx(self,t):

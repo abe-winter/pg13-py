@@ -388,14 +388,32 @@ def test_drop():
       cursor.execute('drop table t1')
     assert e.value.args == ('t1',)
 
-@pytest.mark.xfail
-def test_drop_inherit_cascade():
-  raise NotImplementedError
+def test_create_inherit():
+  ppm = pgmock_dbapi2.PgPoolMock()
+  with ppm.withcur() as cursor:
+    cursor.execute('create table t1 (a int)')
+    cursor.execute('create table t1a inherits (t1)')
+    assert ppm.tables['t1'].child_tables == [ppm.tables['t1a']]
+    assert ppm.tables['t1a'].parent_table == ppm.tables['t1']
+
+def test_drop_inherit():
+  ppm = pgmock_dbapi2.PgPoolMock()
+  with ppm.withcur() as cursor:
+    cursor.execute('create table t1 (a int)')
+    cursor.execute('create table t1a inherits (t1)')
+    with pytest.raises(pgmock.IntegrityError) as e: # drop parent fails without cascade
+      cursor.execute('drop table t1')
+    assert 't1a' in ppm.tables and 't1' in ppm.tables
+    cursor.execute('drop table t1 cascade') # drop succeeds with cascade
+    assert 't1a' not in ppm.tables and 't1' not in ppm.tables
+  ppm = pgmock_dbapi2.PgPoolMock()
+  with ppm.withcur() as cursor:
+    cursor.execute('create table t1 (a int)')
+    cursor.execute('create table t1a inherits (t1)')
+    cursor.execute('drop table t1a')
+    assert 't1a' not in ppm.tables and 't1' in ppm.tables
+  # todo: multi-level inherit
 
 @pytest.mark.xfail
 def test_drop_fkey_cascade():
-  raise NotImplementedError
-
-@pytest.mark.xfail
-def test_drop_inherit_parent():
   raise NotImplementedError

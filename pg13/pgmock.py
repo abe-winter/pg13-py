@@ -8,6 +8,7 @@ from . import pg,threevl,sqparse2,sqex
 # errors
 class PgExecError(sqparse2.PgMockError): "base class for errors during table execution"
 class BadFieldName(PgExecError): pass
+class IntegrityError(PgExecError): pass # careful: pgmock_dbapi also defines this
 
 class Missing: "for distinguishing missing columns vs passed-in null"
 
@@ -60,6 +61,11 @@ class TablesDict:
     elif is_start: yield # apply_sql will call trans_start() on its own, block there if necessary
     else:
       with self.lock: yield
+  def cascade_delete(self, name):
+    "this fails under diamond inheritance"
+    for child in self[name].child_tables:
+      self.cascade_delete(child.name)
+    del self[name]
   def apply_sql(self, ex, values, lockref):
     """call the stmt in tree with values subbed on the tables in t_d.
     ex is a parsed statement returned by parse_expression.
@@ -80,21 +86,33 @@ class TablesDict:
           if ex.nexists: return
           raise ValueError('table_exists',ex.name)
         if any(c.pkey for c in ex.cols): raise NotImplementedError('inline pkey')
-        self[ex.name]=Table(ex.name,ex.cols,ex.pkey.fields if ex.pkey else [])
+        if ex.inherits:
+          # todo: what if child table specifies constraints etc? this needs work.
+          if len(ex.inherits) > 1: raise NotImplementedError('todo: multi-table inherit')
+          parent = self[ex.inherits[0]] = copy.deepcopy(self[ex.inherits[0]]) # copy so rollback works
+          child = self[ex.name] = Table(ex.name, parent.fields, parent.pkey)
+          parent.child_tables.append(child)
+          child.parent_table = parent
+        else:
+          self[ex.name]=Table(ex.name,ex.cols,ex.pkey.fields if ex.pkey else [])
       elif isinstance(ex,sqparse2.IndexX): pass
       elif isinstance(ex,sqparse2.DeleteX): return self[ex.table].delete(ex.where,self)
       elif isinstance(ex,sqparse2.StartX): self.trans_start(lockref)
       elif isinstance(ex,sqparse2.CommitX): self.trans_commit()
       elif isinstance(ex,sqparse2.RollbackX): self.trans_rollback()
       elif isinstance(ex,sqparse2.DropX):
-        if ex.cascade:
-          raise NotImplementedError('drop with cascade')
         if ex.name not in self:
           if ex.ifexists: return
           raise KeyError(ex.name)
-        del self[ex.name]
+        table = self[ex.name]
+        parent = table.parent_table
+        if table.child_tables:
+          if not ex.cascade:
+            raise IntegrityError('delete_parent_without_cascade',ex.name)
+          self.cascade_delete(ex.name)
+        else: del self[ex.name]
+        if parent: parent.child_tables.remove(table)
       else: raise TypeError(type(ex)) # pragma: no cover
-
 
 def expand_row(table_fields,fields,values):
   "helper for insert. turn (field_names, values) into the full-width, properly-ordered row"
