@@ -3,6 +3,10 @@
 import pytest, redis
 from pg13 import redismodel
 
+# travis should skip this because the redis install is expensive
+pytestmark = pytest.mark.travis_skip
+
+# ugly: pie-in-the-sky guess to prevent interfering with prod redis data on my laptop
 TEST_DB = 6
 
 class RM(redismodel.RedisModel):

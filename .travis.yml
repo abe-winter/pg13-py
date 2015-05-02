@@ -1,5 +1,5 @@
 language: python
 python:
   - "2.7"
-install: pip install -e ".[redis]"
-script: py.test test_pg13 -m "not integration"
+install: pip install .
+script: py.test test_pg13 -m "not integration and not travis_skip"

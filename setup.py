@@ -26,5 +26,5 @@ setuptools.setup(
   license='MIT',
   packages=setuptools.find_packages(),
   install_requires=['pytest','ujson','ply'],
-  extras_require={'psyco':['psycopg2'], 'redis':['hiredis','redis','msgpack-python']},
+  extras_require={'psyco':['psycopg2'], 'redis':['hiredis','redis','msgpack-python'], 'sqla':['sqlalchemy']},
 )
