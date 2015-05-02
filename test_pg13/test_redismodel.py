@@ -1,9 +1,10 @@
 "test_redismodel.py. some of these are marked integration and redis"
 
 import pytest
-try: import redis
+try: 
+  import redis
+  from pg13 import redismodel
 except ImportError: pass # this needs to be survivable on travis-ci because we don't install redis
-from pg13 import redismodel
 
 # travis should skip this because the redis install is expensive
 pytestmark = pytest.mark.travis_skip
