@@ -7,13 +7,17 @@
 # 1. sql probably allows 'table' as a table name. I think I'm stricter about keywords (and I don't allow quoting columns)
 
 import ply.lex, ply.yacc, itertools
+from . import treepath
 
 # errors
 class PgMockError(StandardError): pass
-class SQLSyntaxError(PgMockError): "base class for errors during parsing. beware: this gets called during table execution for things a real parser would have caught"
+class SQLSyntaxError(PgMockError):
+  """base class for errors during parsing.
+  beware: this gets called during table execution for things we should catch during parsing.
+  """
 
-class BaseX(object):
-  "base class for expressions. 'tree path' is implemented here (i.e. square brackets for get-set)"
+class BaseX(treepath.PathTree):
+  "base class for expressions"
   ATTRS=()
   VARLEN=()
   def __init__(self,*args):
@@ -23,29 +27,6 @@ class BaseX(object):
     return type(self) is type(other) and all(getattr(self,attr)==getattr(other,attr) for attr in self.ATTRS)
   def __repr__(self):
     return '%s(%s)'%(self.__class__.__name__,','.join(map(repr,(getattr(self,attr) for attr in self.ATTRS))))
-  def child(self,index):
-    "helper for __getitem__/__setitem__"
-    if isinstance(index,tuple):
-      attr,i = index
-      return getattr(self,attr)[i]
-    else: return getattr(self,index)
-  def check_i(self,i):
-    "helper"
-    if not isinstance(i,tuple): raise TypeError('want:tuple',type(i))
-  def __getitem__(self,i):
-    self.check_i(i)
-    if len(i)==0: return self
-    elif len(i)==1: return self.child(i[0])
-    else: return self.child(i[0])[i[1:]]
-  def __setitem__(self,i,x):
-    self.check_i(i)
-    if len(i)==0: raise ValueError('cant_set_toplevel')
-    elif len(i)==1:
-      if isinstance(i[0],tuple):
-        attr,ilist = i[0]
-        getattr(self,attr)[ilist] = x
-      else: setattr(self,i[0],x)
-    else: self.child(i[0])[i[1:]] = x
 
 class Literal(BaseX):
   ATTRS = ('val',)
