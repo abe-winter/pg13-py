@@ -99,3 +99,9 @@ def test_parse_transactions():
   assert sqparse2.parse('start transaction') == StartX()
   assert sqparse2.parse('commit') == CommitX()
   assert sqparse2.parse('rollback') == RollbackX()
+
+def test_drop():
+  from pg13.sqparse2 import DropX
+  assert DropX(False,'t1',False) == sqparse2.parse('drop table t1')
+  assert DropX(False,'t1',True) == sqparse2.parse('drop table t1 cascade')
+  assert DropX(True,'t1',False) == sqparse2.parse('drop table if exists t1')

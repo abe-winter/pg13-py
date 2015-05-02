@@ -355,3 +355,47 @@ def test_transaction_basics():
       raise IgnorableError
   except IgnorableError: pass
   assert len(ppm.tables['t1'].rows) == 1
+
+def test_create_nexists():
+  # 1. create if not exists, table exists
+  ppm = pgmock_dbapi2.PgPoolMock()
+  with ppm.withcur() as cursor:
+    cursor.execute('create table t1 (a int)')
+    cursor.execute('create table if not exists t1 (a int, b int)')
+    assert len(ppm.tables['t1'].fields) == 1
+  # 2. create if not exists, table doesn't exist
+  ppm = pgmock_dbapi2.PgPoolMock()
+  with ppm.withcur() as cursor:
+    cursor.execute('create table if not exists t1 (a int)')
+    assert 't1' in ppm.tables
+  # 3. create, table exists
+  with pgmock_dbapi2.PgPoolMock().withcur() as cursor:
+    cursor.execute('create table t1 (a int)')
+    with pytest.raises(ValueError) as e:
+      cursor.execute('create table t1 (a int, b int)')
+    assert e.value.args == ('table_exists','t1')
+
+def test_drop():
+  ppm = pgmock_dbapi2.PgPoolMock()
+  with ppm.withcur() as cursor:
+    cursor.execute('create table t1 (a int)')
+    assert 't1' in ppm.tables
+    cursor.execute('drop table t1')
+    assert 't1' not in ppm.tables
+  with pgmock_dbapi2.PgPoolMock().withcur() as cursor:
+    cursor.execute('drop table if exists t1')
+    with pytest.raises(KeyError) as e:
+      cursor.execute('drop table t1')
+    assert e.value.args == ('t1',)
+
+@pytest.mark.xfail
+def test_drop_inherit_cascade():
+  raise NotImplementedError
+
+@pytest.mark.xfail
+def test_drop_fkey_cascade():
+  raise NotImplementedError
+
+@pytest.mark.xfail
+def test_drop_inherit_parent():
+  raise NotImplementedError

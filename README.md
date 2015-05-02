@@ -68,7 +68,7 @@ SQL is a standard, and many implementations don't replicate the standard exactly
 Run `pip install . && py.test` in the root dir to see if pg13 will work on your system.
 
 Supported SQL features:
-* commands: select, insert, update, create table, delete (with syntax limitations)
+* commands: select, insert, update, create/drop table, delete (with syntax limitations)
 * scalar subqueries (i.e. `select * from t1 where a=(select b from t2 where c=true)`)
 * various join syntax (but without a serious query planner, it's not efficient on large tables)
 * sub-selects with alias, i.e. temporary tables in select commands
@@ -78,9 +78,10 @@ Supported SQL features:
 * serial columns
 * :: casting operator (not all types supported)
 * transactions exist but are very crude. in theory they're thread-safe but that's not tested. locking is database-level (i.e. no reading from one table while mutating another). pg13 will do a rollback when there's an error. transactions copy the whole DB, so there may be performance issues for large DBs.
+* transactional DDL; create/drop statements are isolated and can be rolled back
 
 Missing SQL features:
-* commands: drop table, alter table
+* alter table
 * common table expressions (`with t0 as (select * from t1 where a=5) select * from t0,t2 where t0.a=t2.a`)
 * indexes and constraints (`create index` statements will parse but are a no-op)
 * asc and desc keywords in `order by` expressions (asc by default; but you can use a minus sign to simulate desc in some cases)

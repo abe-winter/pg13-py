@@ -76,7 +76,9 @@ class TablesDict:
         if len(ex.tables)!=1: raise NotImplementedError('multi-table update')
         return self[ex.tables[0]].update(ex.assigns,ex.where,ex.ret,self)
       elif isinstance(ex,sqparse2.CreateX):
-        if ex.name in self: raise ValueError('table_exists',ex.name)
+        if ex.name in self:
+          if ex.nexists: return
+          raise ValueError('table_exists',ex.name)
         if any(c.pkey for c in ex.cols): raise NotImplementedError('inline pkey')
         self[ex.name]=Table(ex.name,ex.cols,ex.pkey.fields if ex.pkey else [])
       elif isinstance(ex,sqparse2.IndexX): pass
@@ -84,7 +86,13 @@ class TablesDict:
       elif isinstance(ex,sqparse2.StartX): self.trans_start(lockref)
       elif isinstance(ex,sqparse2.CommitX): self.trans_commit()
       elif isinstance(ex,sqparse2.RollbackX): self.trans_rollback()
-      elif isinstance(ex,sqparse2.DropX): del self[ex.name]
+      elif isinstance(ex,sqparse2.DropX):
+        if ex.cascade:
+          raise NotImplementedError('drop with cascade')
+        if ex.name not in self:
+          if ex.ifexists: return
+          raise KeyError(ex.name)
+        del self[ex.name]
       else: raise TypeError(type(ex)) # pragma: no cover
 
 
@@ -119,10 +127,13 @@ def toliteral(probably_literal):
   # todo: among the exception cases are Missing, str. go through cases and make this cleaner. the test suite alone has multiple types here.
   if probably_literal==sqparse2.NameX('null'): return None
   return probably_literal.toliteral() if hasattr(probably_literal,'toliteral') else probably_literal
+
 class Table:
   def __init__(self,name,fields,pkey):
     self.name,self.fields,self.pkey=name,fields,(pkey or [])
     self.rows=[]
+    self.child_tables=[] # tables that inherit from this one
+    self.parent_table=None # table this inherits from
   def pkey_get(self,row):
     if len(self.pkey):
       indexes=[i for i,f in enumerate(self.fields) if f.name in self.pkey]

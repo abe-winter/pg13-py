@@ -24,8 +24,6 @@ def test_create_table():
   ebuns=prepmock(Model)
   assert 4==len(ebuns.pool.tables['model'].fields)
   assert ['userid','id2']==ebuns.pool.tables['model'].pkey
-  with pytest.raises(ValueError) as e: Model.create_table(ebuns.pool)
-  assert e.value.args==('table_exists','model')
 def test_get(): assert 'a'==Model(0,1,'a','[]')['content']
 def test_get_jsonfields(): assert []==Model(0,1,'a',[])['arr']
 def test_index(): assert all(i==Model.index(name) for i,(name,tp) in enumerate(Model.FIELDS))
