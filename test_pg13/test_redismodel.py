@@ -1,6 +1,8 @@
 "test_redismodel.py. some of these are marked integration and redis"
 
-import pytest, redis
+import pytest
+try: import redis
+except ImportError: pass # this needs to be survivable on travis-ci because we don't install redis
 from pg13 import redismodel
 
 # travis should skip this because the redis install is expensive
