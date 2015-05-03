@@ -1,6 +1,6 @@
 "dbapi2 interface to pgmock"
 
-import functools, contextlib
+import functools, contextlib, collections
 from . import pgmock, sqparse2, pg
 
 # globals
@@ -30,24 +30,81 @@ class InternalError(DatabaseError): pass
 class ProgrammingError(DatabaseError): pass
 class NotSupportedError(DatabaseError): pass
 
+# types
+class PGMockType(object): "base"
+class Date(PGMockType):
+  def __init__(year,month,day): pass
+class Time(PGMockType):
+  def __init__(hour,minute,second): pass
+class Timestamp(PGMockType):
+  def __init__(year,month,day,hour,minute,second): pass
+class DateFromTicks(PGMockType):
+  def __init__(ticks): pass
+class TimeFromTicks(PGMockType):
+  def __init__(ticks): pass
+class TimestampFromTicks(PGMockType):
+  def __init__(ticks): pass
+class Binary(PGMockType):
+  def __init__(string): pass
+class STRING(PGMockType): pass
+class BINARY(PGMockType): pass
+class NUMBER(PGMockType): pass
+class DATETIME(PGMockType): pass
+class ROWID(PGMockType): pass
+
+def expression_type(con, topx, ex):
+  "take a BaseX descendant from sqparse2, return a type class from above"
+  if isinstance(ex,sqparse2.Literal):
+    if isinstance(ex.val,basestring): return STRING
+    else: raise NotImplementedError('literal', type(ex.val))
+  elif isinstance(ex,sqparse2.AttrX):
+    if ex.parent.name in con.db: # warning: what if it's not a table? what if it's aliased?
+      return expression_type(con, topx, con.db[ex.parent.name].get_column(ex.attr.name).coltp)
+    else:
+      raise NotImplementedError(ex.parent)
+  elif isinstance(ex,sqparse2.TypeX):
+    return dict(
+      integer=NUMBER,
+      text=STRING,
+    )[ex.type.lower()]
+  else:
+    raise NotImplementedError('unk type', type(ex))
+
+Description = collections.namedtuple('Description','name type_code display_size internal_size precision scale null_ok')
+def description_from_colx(con, ex, colx):
+  if isinstance(colx,sqparse2.AliasX):
+    return Description(colx.alias,expression_type(con, ex, colx.name),*(None,)*5)
+  elif isinstance(colx,sqparse2.NameX):
+    raise NotImplementedError
+    # return Description(,*(None,)*5)
+  else: raise NotImplementedError(ex) # probably math expressions and anonymous fields
+
 class Cursor(pg.Cursor):
   def __init__(self, connection):
     self.connection = connection
     self.arraysize = 1
     self.rows = None
     self.rownumber = None
+    self.lastx = None
+    # todo: self.lastrowid. SQLAlchemy uses it.
   @property
   def rowcount(self): return -1 if self.rows is None else len(self.rows)
   @property
   def description(self):
     "this is only a property so it can raise; make it an attr once it works"
-    if self.rows is None: return None
-    raise NotImplementedError
+    if self.lastx is None: return
+    if type(self.lastx) not in (sqparse2.SelectX,sqparse2.UpdateX,sqparse2.InsertX): return
+    if type(self.lastx) in (sqparse2.UpdateX,sqparse2.InsertX) and self.lastx.ret is None: return
+    # at this point we know this is an operation that returns rows
+    if type(self.lastx) in (sqparse2.UpdateX,sqparse2.InsertX):
+      raise NotImplementedError('todo: Cursor.description for non-select')
+    else: # select case
+      return [description_from_colx(self.connection,self.lastx,colx) for colx in self.lastx.cols.children]
   def callproc(self, procname, parameters=None): raise NotImplementedError("pgmock doesn't support stored procs yet")
   def __del__(self): self.close()
   def close(self): pass # for now pgmock doesn't have cursor resources to close
   def execute(self, operation, parameters=None):
-    ex = sqparse2.parse(operation)
+    ex = self.lastx = sqparse2.parse(operation)
     if not self.connection.transaction_open and not self.connection.autocommit:
       self.connection.begin()
     self.rows = self.connection.db.apply_sql(ex, parameters or (), self.connection)
@@ -88,13 +145,6 @@ class Connection:
     "pass None as db_id to create a new pgmock database"
     self.closed = False
     self.db_id = add_db() if db_id is None else db_id
-    if self.db_id not in DATABASES:
-      # warning: a ton can go wrong here. there's a race condition and tweaking NEXT_DB_ID feels weird.
-      #   Also not wild about allowing arbitrary type; maybe enforce that it's an int.
-      if isinstance(self.db_id,int):
-        global NEXT_DB_ID
-        NEXT_DB_ID = self.db_id + 1
-      DATABASES[db_id] = pgmock.TablesDict()
     self.db = DATABASES[self.db_id]
     print 'connected db %i' % self.db_id
     self._autocommit = False
@@ -111,7 +161,8 @@ class Connection:
     self.closed = True
     self.db_id = None
     self.db = None
-  def __del__(self): self.close() # todo: can __del__ get called twice?
+  def __del__(self):
+    if not self.closed: self.close()
   @open_only
   def begin(self):
     if self.transaction_open: raise OperationalError("can't begin() with transaction_open")

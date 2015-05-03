@@ -41,13 +41,12 @@ class PG13Dialect(sqlalchemy.engine.default.DefaultDialect):
   def _get_default_schema_name(self, connection): return 'default' # hmm; I don't support schemas, do I?
   def has_schema(self, connection, schema): raise NotImplementedError("has_schema")
   def has_table(self, connection, table_name, schema=None):
-    # todo: connection.pool.tables?
-    return table_name in connection.tables
+    print table_name in connection.connection.connection.db
   def has_sequence(self, connection, sequence_name, schema=None): raise NotImplementedError("has sequence")
   def _get_server_version_info(self, connection): return __version__
   def get_schema_names(self, connection, **kw): raise NotImplementedError("schema names")
   def get_table_names(self, connection, schema=None, **kw):
-    return connection.tables.keys()
+    return connection.connection.connection.db.keys()
   def get_view_names(self, connection, schema=None, **kw): raise NotImplementedError("view names")
   def get_view_definition(self, connection, view_name, schema=None, **kw): raise NotImplementedError("view definition")
   def get_columns(self, connection, table_name, schema=None, **kw): return connection.pool.tables[table_name].fields
@@ -67,4 +66,4 @@ class PG13DBAPI2Dialect(PG13Dialect):
   def on_connect(self): pass
 
   def create_connect_args(self, url):
-    return (),{'db_id':int(url.host)}
+    return (),{'db_id':int(url.host) if url.host else None}

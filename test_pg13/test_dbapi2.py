@@ -57,3 +57,11 @@ def test_iter():
 def test_count_after_fetch():
   # todo: look at spec; what's supposed to happen here
   raise NotImplementedError
+
+@pytest.mark.xfail
+def test_cursor_description_select():
+  raise NotImplementedError
+
+@pytest.mark.xfail
+def test_cursor_description_nonselect():
+  raise NotImplementedError

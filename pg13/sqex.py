@@ -304,7 +304,7 @@ def evalex(x,c_row,nix,tables):
       if subcall(case.when): return subcall(case.then)
     return subcall(x.elsex)
   elif isinstance(x,sqparse2.CastX):
-    if x.to_type=='text': return unicode(subcall(x.expr))
+    if x.to_type.type.lower() in ('text','varchar'): return unicode(subcall(x.expr))
     else: raise NotImplementedError('unhandled_cast_type',x.to_type)
   elif isinstance(x,(int,basestring,float,type(None))):
     return x # I think Table.insert is creating this in expand_row
