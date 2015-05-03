@@ -61,14 +61,14 @@ with pool() as dbcon, dbcon.cursor() as cur:
 ## status
 
 This is alpha software. That means you **should** use it for these reasons:
-1. you're interested in contributing to the library
-1. your organization can benefit from a tool like this and has enough developers to add features where needed
-1. your existing test suite is so slow that people aren't running it
+ 1. you're interested in contributing to the library
+ 1. your organization can benefit from a tool like this and has enough developers to add features where needed
+ 1. your existing test suite is so slow that people aren't running it
 
-And you **shouldn't** use it for these reasons:
-1. don't expect the software to be complete or reliable
-1. don't expect it to accurately mimic your prod SQL server
-1. don't expect it to 'just work'
+But you **shouldn't** use it for these reasons:
+ 1. don't expect the software to be complete or reliable
+ 1. don't expect it to accurately mimic your prod SQL server in all cases
+ 1. don't expect it to 'just work'
 
 SQL is a standard, and many implementations don't replicate the standard exactly. This one also doesn't.
 
