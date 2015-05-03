@@ -108,6 +108,14 @@ def test_insert_missing_pkey():
   tables,runsql=prep("create table t1 (a int, b int, c int, primary key (a,b))")
   runsql("insert into t1 (a) values (1)")
 
+def test_create_pkey():
+  tables,runsql = prep('create table t1 (a int, b int, primary key (a))')
+  with pytest.raises(sqparse2.SQLSyntaxError):
+    runsql('create table t2 (a int primary key, b int, primary key (a))')
+  assert tables['t1'].pkey == ['a']
+  runsql('create table t2 (a int primary key, b int)')
+  assert tables['t2'].pkey == ['a']
+
 def test_update():
   tables,runsql=prep("create table t1 (a int, b int, c int)")
   runsql("insert into t1 (a,b,c) values (1,2,3)")

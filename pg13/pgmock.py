@@ -85,7 +85,11 @@ class TablesDict:
         if ex.name in self:
           if ex.nexists: return
           raise ValueError('table_exists',ex.name)
-        if any(c.pkey for c in ex.cols): raise NotImplementedError('inline pkey')
+        if any(c.pkey for c in ex.cols):
+          if ex.pkey:
+            raise sqparse2.SQLSyntaxError("don't mix table-level and column-level pkeys",ex)
+          # todo(spec): is multi pkey permitted when defined per column?
+          ex.pkey = sqparse2.PKeyX([c.name for c in ex.cols if c.pkey])
         if ex.inherits:
           # todo: what if child table specifies constraints etc? this needs work.
           if len(ex.inherits) > 1: raise NotImplementedError('todo: multi-table inherit')
