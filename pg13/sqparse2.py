@@ -73,6 +73,7 @@ class CaseX(BaseX):
   ATTRS = ('cases','elsex')
   VARLEN = ('cases',)
 class AttrX(BaseX): ATTRS = ('parent','attr')
+class TypeX(BaseX): ATTRS = ('type','width') # width is e.g. 20 for VARCHAR(20), null for e.g. TEXT.
 class CastX(BaseX): ATTRS = ('expr','to_type')
 
 class CommandX(BaseX): "base class for top-level commands. probably won't ever be used."
@@ -122,7 +123,7 @@ def un_priority(op,val):
   if isinstance(val,BinX) and val.op < op: return bin_priority(val.op,UnX(op,val.left),val.right)
   else: return UnX(op,val)
 
-KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group inherits check constraint start transaction commit rollback left right full inner outer using drop cascade'.split()}
+KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group inherits check constraint start transaction commit rollback left right full inner outer using drop cascade cast'.split()}
 class SqlGrammar:
   # todo: adhere more closely to the spec. http://www.postgresql.org/docs/9.1/static/sql-syntax-lexical.html
   t_STRLIT = "'((?<=\\\\)'|[^'])+'"
@@ -158,7 +159,14 @@ class SqlGrammar:
   def p_unop(self,t): "unop : '-' \n | kw_not"; t[0] = OpX(t[1])
   def p_isnot(self,t): "isnot : kw_is kw_not"; t[0] = 'is not'
   def p_boolop(self,t): "boolop : kw_and \n | kw_or \n | kw_in"; t[0] = t[1]
-  def p_castx(self,t): "expression : expression CAST NAME"; t[0] = CastX(t[1],t[3])
+  def p_typename(self,t):
+    "typename : NAME \n | NAME '(' INTLIT ')'"
+    t[0] = TypeX(t[1],None) if len(t) == 2 else TypeX(t[1],int(t[3]))
+  def p_castx(self,t): "expression : expression CAST typename"; t[0] = CastX(t[1],t[3])
+  def p_castx2(self,t):
+    "expression : kw_cast '(' expression kw_as typename ')'"
+    # the second expression should be some kind of type spec. use it in createx and 'x cast y' also
+    t[0] = CastX(t[3],t[5])
   def p_binop(self,t):
     "binop : ARITH \n | CMP \n | boolop \n | isnot \n | '=' \n | '-' \n | '*' \n | kw_is"
     t[0] = OpX(t[1])
@@ -260,7 +268,10 @@ class SqlGrammar:
   def p_isnotnull(self,t): "is_notnull : kw_not kw_null \n | "; t[0] = len(t) > 1
   def p_default(self,t): "default : kw_default expression \n | "; t[0] = t[2] if len(t) > 1 else None
   def p_ispkey(self,t): "is_pkey : kw_primary kw_key \n | "; t[0] = len(t) > 1
-  def p_colspec(self,t): "col_spec : NAME NAME is_array is_notnull default is_pkey"; t[0] = ColX(*t[1:])
+  def p_colspec(self,t):
+    "col_spec : NAME typename is_array is_notnull default is_pkey"
+    # todo: integrate is_array into typename
+    t[0] = ColX(*t[1:])
   def p_namelist(self,t):
     "namelist : namelist ',' NAME \n | NAME"
     if len(t)==2: t[0] = [t[1]]

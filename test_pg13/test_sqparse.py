@@ -35,18 +35,18 @@ def test_parse_select():
 
 def test_parse_create():
   # todo: real tests here instead of repr comparison
-  from pg13.sqparse2 import Literal,NameX,CreateX,ColX,PKeyX,NullX,CheckX,BinX,Literal,OpX
+  from pg13.sqparse2 import Literal,NameX,CreateX,ColX,PKeyX,NullX,CheckX,BinX,Literal,OpX,TypeX
   assert sqparse2.parse('create table tbl (a int, b int, c text[])')==CreateX(
     False, 'tbl', [
-      ColX('a','int',False,False,None,False),
-      ColX('b','int',False,False,None,False),
-      ColX('c','text',True,False,None,False),
+      ColX('a',TypeX('int',None),False,False,None,False),
+      ColX('b',TypeX('int',None),False,False,None,False),
+      ColX('c',TypeX('text',None),True,False,None,False),
     ], None, [], None
   )
   assert sqparse2.parse('create table tbl (a int, b int, primary key (a,b))')==CreateX(
     False, 'tbl', [
-      ColX('a','int',False,False,None,False),
-      ColX('b','int',False,False,None,False),
+      ColX('a',TypeX('int',None),False,False,None,False),
+      ColX('b',TypeX('int',None),False,False,None,False),
     ], PKeyX(['a','b']), [], None
   )
   ex=sqparse2.parse('create table t1 (a int default 7, b int default null, d int primary key)')
@@ -58,6 +58,8 @@ def test_parse_create():
   )
   # test duplicate primary key
   with pytest.raises(sqparse2.SQLSyntaxError): sqparse2.parse('create table t (primary key (a,b),primary key (c,d))')
+  # test varchar
+  assert sqparse2.parse('create table t1 (a varchar(10))').cols[0].coltp == TypeX('varchar',10)
 
 def test_parse_insert():
   from pg13.sqparse2 import InsertX,NameX,CommaX,Literal,ReturnX,AsterX

@@ -125,7 +125,7 @@ def emergency_cast(colx, value):
   """ugly: this is a huge hack. get serious about where this belongs in the architecture.
   For now, most types rely on being fed in as SubbedLiteral.
   """
-  if colx.coltp.lower()=='boolean':
+  if colx.coltp.type.lower()=='boolean':
     if isinstance(value,sqparse2.NameX): value = value.name
     if isinstance(value,bool): return value
     return dict(true=True, false=False)[value.lower()] # keyerror if other
@@ -134,7 +134,7 @@ def emergency_cast(colx, value):
 
 def field_default(colx, table_name, tables_dict):
   "takes sqparse2.ColX, Table"
-  if colx.coltp.lower() == 'serial':
+  if colx.coltp.type.lower() == 'serial':
     x = sqparse2.parse('select coalesce(max(%s),-1)+1 from %s' % (colx.name, table_name))
     return sqex.run_select(x, tables_dict, Table)[0]
   elif colx.not_null: raise NotImplementedError('todo: not_null error')
@@ -152,6 +152,10 @@ class Table:
     self.rows=[]
     self.child_tables=[] # tables that inherit from this one
     self.parent_table=None # table this inherits from
+  def get_column(self,name):
+    col = next((f for f in self.fields if f.name==name), None)
+    if col is None: raise KeyError(name)
+    return col
   def pkey_get(self,row):
     if len(self.pkey):
       indexes=[i for i,f in enumerate(self.fields) if f.name in self.pkey]

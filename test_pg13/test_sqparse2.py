@@ -89,10 +89,11 @@ def test_call_as():
   from pg13.sqparse2 import AliasX,CallX,CommaX,NameX
   assert sqparse2.parse('select unnest(a) as b from t1').cols.children[0]==AliasX(CallX('unnest',CommaX([NameX('a')])),'b')
 
-def test_cast_op():
-  from pg13.sqparse2 import CommaX,CastX,Literal
-  assert sqparse2.parse('select 12345::text').cols == CommaX([CastX(Literal(12345),'text')])
+def test_cast():
+  from pg13.sqparse2 import CommaX,CastX,Literal,TypeX
+  assert sqparse2.parse('12345::text') == CastX(Literal(12345),TypeX('text',None))
   # todo: what happens when a more complicated expression is before the cast? read specs and do more tests
+  assert sqparse2.parse('cast(12345 as text)') == CastX(Literal(12345), TypeX('text',None))
 
 def test_parse_transactions():
   from pg13.sqparse2 import StartX,CommitX,RollbackX
