@@ -1,5 +1,6 @@
 # pg13 [![Build Status](https://travis-ci.org/abe-winter/pg13-py.svg?branch=master)](https://travis-ci.org/abe-winter/pg13-py)
 
+- [intro](#intro)
 - [examples](#examples)
 - [status](#status)
 - [sql implementation](#pure-python-implementation-of-sql)
@@ -8,27 +9,23 @@
 
 **docs** at http://pg13.readthedocs.org/en/latest/
 
-pg13 is a SQL ORM for python designed with first-class support for mocking & test. Normally when you want to test an application with database dependencies, you have three dangerous options:
+## intro
 
-1. **artisanal mocking**: standard mocking frameworks make you specify the output of every DB call
- * bad because it's extra work, tough to maintain, and you're feeding the test the right answer
-2. **local db**: have a running copy of the database
- * but your tests gain an external dependency (the DB)
- * this encourages hidden inter-test data dependencies
- * this can interfere with local integration environments
-3. **everything but**: test everything but the DB interaction
- * bad because you're not testing a big part of your app
+pg13 is an in-memory SQL engine for python designed for fast & isolated tests (i.e. each test gets its own database).
 
-pg13 takes a different approach:
-* SQL is simulated in python
-* every test can create and populate its own lightweight database
-* tests are deterministic (at least with respect to database reuse)
-* parallelizing your test suite is safe (because each test gets a fresh DB)
-* performance: ~200 tests per second on my laptop
+There are three ways to use pg13 in your code:
+* normal DBAPI
+* pg13 implements a SQLAlchemy dialect. For now, it's incomplete and not well-tested.
+* there's a small built-in ORM in the pg13 library
 
-The ORM is optional; the underlying SQL evaluator has a DBAPI2 interface and can be used directly (see the last line of the examples section).
+You should consider using pg13 in your own software if:
+* you spend a lot of time manually specifying the behavior of database mocks
+* your test suite interacts with an external DB and that causes problems
+* your database layer has no tests because integration environments are too painful to set up
 
-Drop me a line if you're using this. `@gmail: awinter.public` (hint: turn it around)
+But beware: this is alpha software.
+
+Drop me a line if you're using the library. `@gmail: awinter.public`
 
 ## examples
 
@@ -59,9 +56,19 @@ with pool() as dbcon, dbcon.cursor() as cur:
   assert cur.fetchall()==[[1,2]]
 ```
 
+**todo:** SQLAlchemy example
+
 ## status
 
-Very very new. Don't use it to run your nuclear facility. Probably don't use the mocking engine as a live database.
+This is alpha software. That means you **should** use it for these reasons:
+1. you're interested in contributing to the library
+1. your organization can benefit from a tool like this and has enough developers to add features where needed
+1. your existing test suite is so slow that people aren't running it
+
+And you **shouldn't** use it for these reasons:
+1. don't expect the software to be complete or reliable
+1. don't expect it to accurately mimic your prod SQL server
+1. don't expect it to 'just work'
 
 SQL is a standard, and many implementations don't replicate the standard exactly. This one also doesn't.
 
