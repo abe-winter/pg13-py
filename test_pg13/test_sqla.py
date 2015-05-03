@@ -11,10 +11,12 @@ pytestmark = pytest.mark.travis_skip
 
 @pytest.fixture(scope='session')
 def sqla_dialect():
-  sqlalchemy.dialects.registry.register("pg13.dbapi2", "pg13.sqla", "PG13Dialect")
+  sqlalchemy.dialects.registry.register("pg13", "pg13.sqla", "PG13DBAPI2Dialect")
+  sqlalchemy.dialects.registry.register("pg13+dbapi2", "pg13.sqla", "PG13DBAPI2Dialect")
 
 def test_connect(sqla_dialect):
-  sqlalchemy.create_engine("pg13+dbapi2://")
+  engine = sqlalchemy.create_engine("pg13://3")
+  con = engine.connect()
   raise NotImplementedError
 
 def test_create_table(sqla_dialect):

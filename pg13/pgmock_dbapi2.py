@@ -88,6 +88,13 @@ class Connection:
     "pass None as db_id to create a new pgmock database"
     self.closed = False
     self.db_id = add_db() if db_id is None else db_id
+    if self.db_id not in DATABASES:
+      # warning: a ton can go wrong here. there's a race condition and tweaking NEXT_DB_ID feels weird.
+      #   Also not wild about allowing arbitrary type; maybe enforce that it's an int.
+      if isinstance(self.db_id,int):
+        global NEXT_DB_ID
+        NEXT_DB_ID = self.db_id + 1
+      DATABASES[db_id] = pgmock.TablesDict()
     self.db = DATABASES[self.db_id]
     print 'connected db %i' % self.db_id
     self._autocommit = False
