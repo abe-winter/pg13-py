@@ -125,6 +125,7 @@ class VDString(SyncableString):
     if changes and ucrc(VDString(changes).generate())!=changes[-1].crc32: raise ValidationFail('bad_hash')
   @classmethod
   def des(clas,underlying,validate=True):
+    if not isinstance(underlying,list): raise TypeError('expected list, got %s' % type(underlying))
     changes=[Change2(utc,[diff.Delta(*d) for d in deltas],crc) for utc,deltas,crc in underlying]
     if validate: clas.validate(changes)
     return clas(changes)
@@ -144,7 +145,8 @@ class VHString(SyncableString):
     if not all(isinstance(c.deltas,basestring) for c in changes): raise ValidationFail('nonstring_deltas')
   @classmethod
   def des(clas,underlying,validate=True):
-    changes=[Change2(*tup) for tup in ujson.loads(underlying)]
+    if not isinstance(underlying,list): raise TypeError('expected list, got %s' % type(underlying))
+    changes=[Change2(*tup) for tup in underlying]
     if validate: clas.validate(changes)
     return clas(changes)
   @classmethod
@@ -175,9 +177,10 @@ class VDList(Syncable):
       raise TypeError('non-increment or non-delta')
   def ser(self,validate=True):
     if validate: self.validate(self.increments)
-    return ujson.dumps(self.increments)
+    return self.increments
   @staticmethod
   def des(underlying,validate=True):
+    if not isinstance(underlying,list): raise TypeError('expected list, got %s' % type(underlying))
     incs=[Increment(utc,[diff.Delta(*so) for so in val]) for utc,val in underlying]
     if validate: VDList.validate(incs)
     return VDList(incs)

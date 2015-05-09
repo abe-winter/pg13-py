@@ -7,6 +7,8 @@ from . import pg,errors
 
 class PgCursorPsyco(pg.Cursor):
   "this is *only* necessary for error-wrapping"
+  JSON_WRITE = True
+  JSON_READ = False
   def __init__(self, psyco_cursor): self.cursor = psyco_cursor
   def execute(self, qstring, vals=()):
     try: return self.cursor.execute(qstring,vals)
@@ -17,6 +19,9 @@ class PgCursorPsyco(pg.Cursor):
 
 class PgPoolPsyco(pg.Pool):
   "see pg.PgPool class for tutorial"
+  # JSON_WRITE/JSON_READ are used to configure the psycopg2 JSONB behavior; it requires json when storing, converts to python types when loading.
+  JSON_WRITE = True
+  JSON_READ = False
   def __init__(self,dbargs):
     # http://stackoverflow.com/questions/12650048/how-can-i-pool-connections-using-psycopg-and-gevent
     self.pool = psycopg2.pool.ThreadedConnectionPool(5,10,dbargs) # I think that this is safe combined with psycogreen patching

@@ -184,3 +184,7 @@ def test_specialfield_nullhandling():
 def test_refkeys():
   # todo(PREOPENSOURCE): write this. for now, this is handled by test_syncapi.test_doc_refkeys in the oes codebase.
   raise NotImplementedError
+
+def test_json_write():
+  "make sure JSON_WRITE toggle in cursor/pool works as advertised"
+  raise NotImplementedError
