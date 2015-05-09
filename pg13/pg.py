@@ -62,7 +62,7 @@ def is_serdes(x):
 
 def transform_specialfield((f,v)):
   "helper for serialize_row"
-  return f.ser(v) if is_serdes(f) else v
+  return v if isinstance(f, basestring) else ujson.dumps(f.ser(v) if is_serdes(f) else v)
 
 def dirty(field,ttl=None):
   "decorator to cache the result of a function until a field changes"
@@ -138,7 +138,6 @@ class Row(object):
     .. warning:: this uses 'if not exists' so if you've updated your model, you need to delete the old table first.
     (even better, increment the TABLE member from 'mymodel' to 'mymodel2')
     """
-    print clas.__name__,'create_table'
     def mkfield((name,tp)): return name,(tp if isinstance(tp,basestring) else 'jsonb')
     fields = ','.join(map(' '.join,map(mkfield,clas.FIELDS)))
     base = 'create table if not exists %s (%s'%(clas.TABLE,fields)
@@ -164,7 +163,7 @@ class Row(object):
     val = self.values[index]
     field = self.FIELDS[index][1]
     # todo: typecheck val on readback
-    return field.des(val) if is_serdes(field) else val
+    return field.des(ujson.loads(val)) if is_serdes(field) else val if isinstance(field,basestring) else ujson.loads(val)
   @classmethod
   def index(class_,name): "helper; returns index of field name in row"; return class_.names().index(name)
   @classmethod

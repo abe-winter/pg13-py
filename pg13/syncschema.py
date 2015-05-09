@@ -94,7 +94,7 @@ class SyncableString(Syncable):
   def __init__(self,changes=None): self.changes=changes or []
   def ser(self,validate=True):
     if validate: self.validate(self.changes)
-    return ujson.dumps(self.changes)
+    return self.changes
   @staticmethod
   def validate_base(changes):
     if not isinstance(changes,list): raise ValidationFail('non_list')
@@ -125,7 +125,7 @@ class VDString(SyncableString):
     if changes and ucrc(VDString(changes).generate())!=changes[-1].crc32: raise ValidationFail('bad_hash')
   @classmethod
   def des(clas,underlying,validate=True):
-    changes=[Change2(utc,[diff.Delta(*d) for d in deltas],crc) for utc,deltas,crc in ujson.loads(underlying)]
+    changes=[Change2(utc,[diff.Delta(*d) for d in deltas],crc) for utc,deltas,crc in underlying]
     if validate: clas.validate(changes)
     return clas(changes)
   @classmethod
@@ -178,7 +178,7 @@ class VDList(Syncable):
     return ujson.dumps(self.increments)
   @staticmethod
   def des(underlying,validate=True):
-    incs=[Increment(utc,[diff.Delta(*so) for so in val]) for utc,val in ujson.loads(underlying)]
+    incs=[Increment(utc,[diff.Delta(*so) for so in val]) for utc,val in underlying]
     if validate: VDList.validate(incs)
     return VDList(incs)
   @classmethod

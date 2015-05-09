@@ -185,3 +185,10 @@ def test_missing_fields():
 def test_check_missing():
   "figure out what to do when model lookup fails"
   assert [['missing']]==check_helper(mkdict(0,pkey=(0,'2'))).values()
+
+def test_detect_change_mode():
+  # warning: 'corpus corpus corpus ' >> 'corpus corpus ' is treated as deleting the first word, not the last, because of how the diffing algo works. maybe not important in real life.
+  base='corpus corpus dorpus ' # todo: remove final space when final_space_diffing bug is fixed
+  new_text=['corpus corpus dorpus more','corpus corpus ','corpus CHANGE dorpus ','corpus CHANGE dorpus add']
+  modes=[syncschema.detect_change_mode(base,syncschema.mkchange(base,t,0,0)) for t in new_text]
+  assert modes==['add','delete','internal','internal']
