@@ -183,14 +183,16 @@ def test_specialfield_nullhandling():
 @pytest.mark.xfail
 def test_refkeys():
   # todo(PREOPENSOURCE): write this. for now, this is handled by test_syncapi.test_doc_refkeys in the oes codebase.
-  raise NotImplementedError
+  raise NotImplementedError('todo')
 
+@pytest.mark.xfail
 def test_json_write():
   "make sure JSON_WRITE toggle in cursor/pool works as advertised"
-  raise NotImplementedError
+  raise NotImplementedError('todo')
 
+@pytest.mark.xfail
 def test_special_serialize():
   "serialization for insert_all and kwinsert_mk is tricky, relies on JSON_READ, JSON_WRITE"
   # for insert_all
   # for kwinsert_mk
-  raise NotImplementedError
+  raise NotImplementedError('todo')

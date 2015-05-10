@@ -15,8 +15,9 @@ def test_vdstring():
 
 def test_vdstring_serdes():
   from pg13.syncschema import VDString
-  (utc,deltas,crc),=ujson.loads(VDString.create('hello').ser()) # ser
-  assert deltas==[[0,0,'hello']]
+  from pg13.diff import Delta
+  (utc,deltas,crc),=VDString.create('hello').ser() # ser
+  assert deltas==[(0,0,'hello')]
   vds=VDString.des(VDString.create('whatsup').ser()) # des
   assert vds.version()==1 and vds.generate()=='whatsup'
   with pytest.raises(StandardError): VDString.des('"garbage"') # des fail
@@ -28,7 +29,7 @@ def test_vhstring():
   with pytest.raises(syncschema.BadBaseV): vhs.apply(0,'fail')
   assert vhs.generate()=='hello'
   assert vhs.version()==1
-  (utc,val,crc),=ujson.loads(vhs.ser())
+  (utc,val,crc),=vhs.ser()
   assert isinstance(utc,int) and val=='hello' and crc is None
   assert VHString.create('hello2').generate()=='hello2'
 
