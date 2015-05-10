@@ -135,7 +135,6 @@ class Row(object):
     val = self.values[index]
     field = self.FIELDS[index][1]
     # todo: typecheck val on readback
-    print 'JSON_READ', self.JSON_READ
     parsed_val = ujson.loads(val) if isinstance(field,basestring) and self.JSON_READ else val
     return field.des(parsed_val) if is_serdes(field) else parsed_val
   @classmethod
@@ -271,7 +270,7 @@ class Row(object):
     if raw_keys:
       for k,v in zip(raw_keys,rawvals): self.values[self.index(k)]=v # this is necessary because raw_keys can contain expressions
       map(self.dirty_cache.pop,[k for k in raw_keys if k in self.dirty_cache])
-    escape_keys=dict(zip(escape_keys,self.serialize_row(pool_or_cursor,escape_keys,escape_keys.values()))) # ugly; doing it in pkey_update and this
+    escape_keys=dict(zip(escape_keys,self.serialize_row(pool_or_cursor,escape_keys,escape_keys.values(),for_read=True))) # ugly; doing it in pkey_update and this
     for k,v in escape_keys.items(): self.values[self.index(k)]=v
     map(self.dirty_cache.pop,[k for k in escape_keys if k in self.dirty_cache])
   @classmethod

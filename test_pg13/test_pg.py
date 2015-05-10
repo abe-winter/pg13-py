@@ -188,3 +188,9 @@ def test_refkeys():
 def test_json_write():
   "make sure JSON_WRITE toggle in cursor/pool works as advertised"
   raise NotImplementedError
+
+def test_special_serialize():
+  "serialization for insert_all and kwinsert_mk is tricky, relies on JSON_READ, JSON_WRITE"
+  # for insert_all
+  # for kwinsert_mk
+  raise NotImplementedError
