@@ -108,3 +108,5 @@ If you're looking for a pure-python SQL engine (an evaluator, not just a parser)
 See also:
 * http://gadfly.sourceforge.net/gadfly.html
 * https://pypi.python.org/pypi/engine
+* https://github.com/itissid/pypgTAP
+* cautionary note: [don't test with sqlite when you use postgres](http://michael.robellard.com/2015/07/dont-test-with-sqllite-when-you-use.html)
