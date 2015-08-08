@@ -41,7 +41,9 @@ class SubLit(object): pass
 class NameX(BaseX): ATTRS = ('name',)
 class AsterX(BaseX): pass
 class NullX(BaseX): pass
-class AliasX(BaseX): ATTRS = ('name','alias')
+class AliasX(BaseX):
+  "warning: 'name' attr is actually an expression"
+  ATTRS = ('name','alias')
 
 class JoinTypeX(BaseX):
   ATTRS = ('side','outer','natural')

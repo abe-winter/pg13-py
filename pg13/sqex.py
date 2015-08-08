@@ -304,7 +304,8 @@ class Evaluator:
         elif exp.f=='unnest': return self.eval(exp.args)[0] # note: run_select does some work in this case too
         elif exp.f in ('to_tsquery','to_tsvector'): return set(self.eval(exp.args.children[0]).split())
         else: raise NotImplementedError('unk_function',exp.f) # pragma: no cover
-    elif isinstance(exp,sqparse2.SelectX): raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
+    elif isinstance(exp,sqparse2.SelectX):
+      raise NotImplementedError('subqueries should have been evaluated earlier') # todo: specific error class
     elif isinstance(exp,sqparse2.AttrX):return self.nix.rowget(self.tables,self.c_row,exp)
     elif isinstance(exp,sqparse2.CaseX):
       for case in exp.cases:
