@@ -1,6 +1,7 @@
 "weval -- where-clause evaluation"
 
 import collections
+from . import sqparse2
 
 class RowType(list):
   "ctor takes list of (name, type)"
@@ -26,14 +27,22 @@ class Row:
 SingleTableCond = collections.namedtuple('SingleTableCond', 'table exp')
 CartesianCond = collections.namedtuple('MultiTableCond', 'exp')
 
-def classify_wherex(wherex):
+def classify_wherex(fromx, wherex):
   "helper for wherex_to_rowlist. returns [SingleTableCond,...], [CartesianCond,...]"
   single_conds = []
   cartesian_conds = []
+  for exp in fromx:
+    if isinstance(exp, sqparse2.JoinX):
+      raise NotImplementedError('join')
+  if isinstance(wherex, sqparse2.BinX) and wherex.op.op == 'and':
+    raise NotImplementedError
+  else:
+    raise NotImplementedError
   raise NotImplementedError
 
-def wherex_to_rowlist(scope, wherex):
+def wherex_to_rowlist(scope, fromx, wherex):
   """return a RowList with the rows included from scope by the wherex.
+  fromx is used to determine join conditions.
   When the scope has more than one name in it, the output will be a list of composite row
     (i.e. a row whose field types are themselves RowType).
   """

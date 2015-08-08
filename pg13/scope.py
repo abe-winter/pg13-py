@@ -23,6 +23,7 @@ def lazy_subselect(scope, exp):
   raise NotImplementedError
 
 class Scope:
+  "bundle for all the tables that are going to be used in a query, and their aliases"
   def __init__(self, expression, tables, parent=None):
     self.tables, self.expression, self.parent = tables, expression, parent
     self.aliases = {} # names that map to other names
@@ -47,8 +48,11 @@ class Scope:
 
   def get(self, name):
     """Get name from scope, walking up parents if necessary, preferring local to global.
+    Resolve column names from tables and fail when columns are ambiguous.
     If the target is an instance of Lazy, this returns target.val.
     """
+    # if this is going to return a value it needs to take a row as well
+    # >> instead, maybe return (canonical_table, column)
     if name not in self:
       raise ScopeUnkError('Scope.get unk', name)
     raise NotImplementedError
@@ -69,6 +73,8 @@ class Scope:
         raise NotImplementedError
       elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, sqparse2.SelectX):
         scope.add_object(exp.alias, Lazy(lazy_subselect, (scope, exp.name)))
+      elif isinstance(exp, sqparse2.JoinX):
+        raise NotImplementedError('todo: join')
       else:
         raise TypeError('bad fromx type', type(exp), exp)
     return scope

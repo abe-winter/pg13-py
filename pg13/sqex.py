@@ -329,23 +329,27 @@ class Evaluator:
     elif isinstance(exp,sqparse2.AliasX): return self.eval(exp.name) # todo: rename AliasX 'name' to 'expr'
     else: raise NotImplementedError(type(exp),exp) # pragma: no cover
 
-def sub_slots(x,match_fn,path=(),arr=None,match=False): # todo: rename match to topmatch for clarity
+def sub_slots(x,match_fn,path=(),arr=None,match=False,recurse_into_matches=True):
   """given a BaseX in x, explore its ATTRS (doing the right thing for VARLEN).
   return a list of tree-paths (i.e. tuples) for tree children that match match_fn. The root elt won't match.
   """
+  # todo: rename match to topmatch for clarity
   # todo: profiling suggests this getattr-heavy recursive process is the next bottleneck
   if arr is None: arr=[]
-  if match and match_fn(x): arr.append(path)
+  if match and match_fn(x):
+    arr.append(path)
+    if not recurse_into_matches:
+      return arr
   if isinstance(x,sqparse2.BaseX):
     for attr in x.ATTRS:
       val = getattr(x,attr)
       if attr in x.VARLEN:
         for i,elt in enumerate(val or ()):
           nextpath = path + ((attr,i),)
-          sub_slots(elt,match_fn,nextpath,arr,True)
+          sub_slots(elt,match_fn,nextpath,arr,True,recurse_into_matches)
       else:
         nextpath = path + (attr,)
-        sub_slots(val,match_fn,nextpath,arr,True)
+        sub_slots(val,match_fn,nextpath,arr,True,recurse_into_matches)
   return arr
 
 def depth_first_sub(expr,values):

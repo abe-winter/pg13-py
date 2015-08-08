@@ -22,6 +22,7 @@ You should consider using pg13 in your own software if:
 * you spend a lot of time manually specifying the behavior of database mocks
 * your test suite interacts with an external DB and that causes problems
 * your database layer has no tests because integration environments are too painful to set up
+* you need SQL semantics on top of non-sql data (i.e. python lists) (note: sqlite has a foreign data plugin that will also do this)
 
 But beware: this is alpha software.
 
@@ -110,3 +111,4 @@ See also:
 * https://pypi.python.org/pypi/engine
 * https://github.com/itissid/pypgTAP
 * cautionary note: [don't test with sqlite when you use postgres](http://michael.robellard.com/2015/07/dont-test-with-sqllite-when-you-use.html)
+* (todo: link to the rust SQL evaluator)

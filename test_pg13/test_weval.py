@@ -13,3 +13,9 @@ def test_scope_from_fromx():
   run('create table t_sub (a int, b text)')
   with pytest.raises(scope.ScopeCollisionError):
     scope.Scope.from_fromx(tables, EXP.tables)
+
+def test_classify_wherex():
+  raise NotImplementedError
+
+def test_wherex_to_rowlist():
+  raise NotImplementedError

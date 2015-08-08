@@ -35,6 +35,15 @@ def test_sub_stmt():
   x2 = sqparse2.parse('coalesce(max(col),0)')
   assert sqex.contains(x2,sqex.consumes_rows) # checking that sub_slots can descend into CallX.args
 
+def test_sub_recurse():
+  exp = sqparse2.parse('select a + b + c + d from t1')
+  def matchfn(exp):
+    return isinstance(exp, sqparse2.BinX) and exp.op.op == '+'
+  recurse_paths = sqex.sub_slots(exp, matchfn, recurse_into_matches=True)
+  norecurse_paths = sqex.sub_slots(exp, matchfn, recurse_into_matches=False)
+  assert len(recurse_paths) == 3
+  assert len(norecurse_paths) == 1
+
 def test_decompose_select():
   # basics
   nix,where = sqex.decompose_select(sqparse2.parse('select * from t1, t2'))
