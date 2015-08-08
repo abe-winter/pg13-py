@@ -181,7 +181,8 @@ def decompose_select(selectx):
 def eval_where(where_list,composite_row,nix,tables_dict):
   "join-friendly whereclause evaluator. composite_row is a list or tuple of row lists. where_list is the thing from decompose_select."
   # todo: do I need to use 3vl instead of all() to merge where_list?
-  return all(evalex(w,composite_row,nix,tables_dict) for w in where_list)
+  evaluator = Evaluator(composite_row,nix,tables_dict)
+  return all(evaluator.eval(w) for w in where_list)
 
 def flatten_scalar(whatever):
   "warning: there's a systematic way to do this and I'm doing it blindly. In particular, this will screw up arrays."
@@ -218,7 +219,7 @@ def run_select(ex,tables,table_ctor):
     tables.update(nix.aonly)
     composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
     if ex.order: # note: order comes before limit / offset
-      composite_rows.sort(key=lambda c_row:evalex(ex.order,c_row,nix,tables))
+      composite_rows.sort(key=lambda c_row:Evaluator(c_row,nix,tables).eval(ex.order))
     if ex.limit or ex.offset: # pragma: no cover
       print ex.limit, ex.offset
       raise NotImplementedError('notimp: limit,offset,group')
@@ -231,17 +232,17 @@ def run_select(ex,tables,table_ctor):
       if contains(ex.cols,returns_rows): raise NotImplementedError('todo: unnest with grouping')
       groups = collections.OrderedDict()
       for row in composite_rows:
-        k = evalex(ex.group,row,nix,tables)
+        k = Evaluator(row,nix,tables).eval(ex.group)
         if k not in groups: groups[k] = []
         groups[k].append(row)
-      return [collapse_group_expr(ex.group, ex.cols, evalex(ex.cols,g_rows,nix,tables)) for g_rows in groups.values()]
+      return [collapse_group_expr(ex.group, ex.cols, Evaluator(g_rows,nix,tables).eval(ex.cols)) for g_rows in groups.values()]
     if contains(ex.cols,consumes_rows):
       if not all(contains(col,consumes_rows) for col in ex.cols.children):
         # todo: this isn't good enough. what about nesting cases like max(min(whatever))
         raise sqparse2.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
-      return evalex(ex.cols,composite_rows,nix,tables)
+      return Evaluator(composite_rows,nix,tables).eval(ex.cols)
     else:
-      ret = [evalex(ex.cols,r,nix,tables) for r in composite_rows]
+      ret = [Evaluator(r,nix,tables).eval(ex.cols) for r in composite_rows]
       return sum((unnest_helper(ex.cols,row) for row in ret),[]) if contains(ex.cols,returns_rows) else ret
 
 def starlike(x):
@@ -249,77 +250,83 @@ def starlike(x):
   # todo: is '* as name' a thing?
   return isinstance(x,sqparse2.AsterX) or isinstance(x,sqparse2.AttrX) and isinstance(x.attr,sqparse2.AsterX)
 
-# todo: evalex should use intermediate types: Scalar, Row, RowList, Table.
-#   Row and Table might be able to bundle into RowList. RowList should know the type and names of its columns.
-#   This will solve a lot of cardinality confusion.
-def evalex(x,c_row,nix,tables):
-  "c_row is a composite row, i.e. a list/tuple of rows from all the query's tables, ordered by nix.table_order"
-  def subcall(x): "helper for recursive calls"; return evalex(x,c_row,nix,tables)
-  if not isinstance(nix, NameIndexer): raise NotImplementedError # todo: remove this once Table meths are all up-to-date
-  if isinstance(x,sqparse2.BinX):
-    l,r=map(subcall,(x.left,x.right))
-    return evalop(x.op.op,l,r)
-  elif isinstance(x,sqparse2.UnX):
-    inner=subcall(x.val)
-    if x.op.op=='+': return inner
-    elif x.op.op=='-': return -inner
-    elif x.op.op=='not': return threevl.ThreeVL.nein(inner)
-    else: raise NotImplementedError('unk_op',x.op) # pragma: no cover
-  elif isinstance(x,sqparse2.NameX): return nix.rowget(tables,c_row,x)
-  elif isinstance(x,sqparse2.AsterX):
-    # todo doc: how does this get disassembled by caller?
-    return sum(c_row,[])
-  elif isinstance(x,sqparse2.ArrayLit): return map(subcall,x.vals)
-  elif isinstance(x,(sqparse2.Literal,sqparse2.ArrayLit)): return x.toliteral()
-  elif isinstance(x,sqparse2.CommaX):
-    # todo: think about getting rid of CommaX everywhere; it complicates syntax tree navigation.
-    ret = []
-    for child in x.children:
-      (ret.extend if starlike(child) else ret.append)(subcall(child))
-    return ret
-  elif isinstance(x,sqparse2.CallX):
-    if consumes_rows(x): # this isn't contains(x,consumes_row) -- it's just checking the current expression
-      if not isinstance(c_row,list): raise TypeError('aggregate function expected a list of rows')
-      if len(x.args.children)!=1: raise ValueError('aggregate function expected a single value',x.args)
-      arg,=x.args.children # intentional: error if len!=1
-      vals=[evalex(arg,c_r,nix,tables) for c_r in c_row]
-      if not vals: return None
-      if x.f=='min': return min(vals)
-      elif x.f=='max': return max(vals)
-      elif x.f=='count': return len(vals)
-      else: raise NotImplementedError('unk_func',x.f) # pragma: no cover
-    else:
-      # todo: get more concrete about argument counts
-      args=subcall(x.args)
-      if x.f=='coalesce':
-        a,b=args # todo: does coalesce take more than 2 args?
-        return b if a is None else a
-      elif x.f=='unnest': return subcall(x.args)[0] # note: run_select does some work in this case too
-      elif x.f in ('to_tsquery','to_tsvector'): return set(subcall(x.args.children[0]).split())
-      else: raise NotImplementedError('unk_function',x.f) # pragma: no cover
-  elif isinstance(x,sqparse2.SelectX): raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
-  elif isinstance(x,sqparse2.AttrX):return nix.rowget(tables,c_row,x)
-  elif isinstance(x,sqparse2.CaseX):
-    for case in x.cases:
-      if subcall(case.when): return subcall(case.then)
-    return subcall(x.elsex)
-  elif isinstance(x,sqparse2.CastX):
-    if x.to_type.type.lower() in ('text','varchar'): return unicode(subcall(x.expr))
-    else: raise NotImplementedError('unhandled_cast_type',x.to_type)
-  elif isinstance(x,(int,basestring,float,type(None))):
-    return x # I think Table.insert is creating this in expand_row
-  # todo: why tuple, list, dict below? throw some asserts in here and see where these are coming from.
-  elif isinstance(x,tuple): return tuple(map(subcall, x))
-  elif isinstance(x,list): return map(subcall, x)
-  elif isinstance(x,dict): return x
-  elif isinstance(x,sqparse2.NullX): return None
-  elif isinstance(x,sqparse2.ReturnX):
-    # todo: I think ReturnX is *always* CommaX now; revisit this
-    ret=subcall(x.expr)
-    print "warning: not sure what I'm doing here with cardinality tweak on CommaX"
-    return [ret] if isinstance(x.expr,(sqparse2.CommaX,sqparse2.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
-  elif isinstance(x,sqparse2.AliasX): return subcall(x.name) # todo: rename AliasX 'name' to 'expr'
-  else: raise NotImplementedError(type(x),x) # pragma: no cover
+class Evaluator:
+  # todo: use intermediate types: Scalar, Row, RowList, Table.
+  #   Row and Table might be able to bundle into RowList. RowList should know the type and names of its columns.
+  #   This will solve a lot of cardinality confusion.
+  def __init__(self, c_row, nix, tables):
+    "c_row is a composite row, i.e. a list/tuple of rows from all the query's tables, ordered by nix.table_order"
+    if not isinstance(nix, NameIndexer):
+      # todo: remove this once Table meths are all up-to-date
+      raise NotImplementedError
+    self.c_row, self.nix, self.tables = c_row, nix, tables
+  
+  def eval(self, exp):
+    ""
+    if isinstance(exp,sqparse2.BinX):
+      l,r=map(self.eval,(exp.left,exp.right))
+      return evalop(exp.op.op,l,r)
+    elif isinstance(exp,sqparse2.UnX):
+      inner=self.eval(exp.val)
+      if exp.op.op=='+': return inner
+      elif exp.op.op=='-': return -inner
+      elif exp.op.op=='not': return threevl.ThreeVL.nein(inner)
+      else: raise NotImplementedError('unk_op',exp.op) # pragma: no cover
+    elif isinstance(exp,sqparse2.NameX): return self.nix.rowget(self.tables,self.c_row,exp)
+    elif isinstance(exp,sqparse2.AsterX):
+      # todo doc: how does this get disassembled by caller?
+      return sum(self.c_row,[])
+    elif isinstance(exp,sqparse2.ArrayLit): return map(self.eval,exp.vals)
+    elif isinstance(exp,(sqparse2.Literal,sqparse2.ArrayLit)): return exp.toliteral()
+    elif isinstance(exp,sqparse2.CommaX):
+      # todo: think about getting rid of CommaX everywhere; it complicates syntax tree navigation.
+      ret = []
+      for child in exp.children:
+        (ret.extend if starlike(child) else ret.append)(self.eval(child))
+      return ret
+    elif isinstance(exp,sqparse2.CallX):
+      if consumes_rows(exp): # this isn't contains(exp,consumes_row) -- it's just checking the current expression
+        if not isinstance(self.c_row,list): raise TypeError('aggregate function expected a list of rows')
+        if len(exp.args.children)!=1: raise ValueError('aggregate function expected a single value',exp.args)
+        arg,=exp.args.children # intentional: error if len!=1
+        vals=[Evaluator(c_r,self.nix,self.tables).eval(arg) for c_r in self.c_row]
+        if not vals: return None
+        if exp.f=='min': return min(vals)
+        elif exp.f=='max': return max(vals)
+        elif exp.f=='count': return len(vals)
+        else: raise NotImplementedError('unk_func',exp.f) # pragma: no cover
+      else:
+        # todo: get more concrete about argument counts
+        args=self.eval(exp.args)
+        if exp.f=='coalesce':
+          a,b=args # todo: does coalesce take more than 2 args?
+          return b if a is None else a
+        elif exp.f=='unnest': return self.eval(exp.args)[0] # note: run_select does some work in this case too
+        elif exp.f in ('to_tsquery','to_tsvector'): return set(self.eval(exp.args.children[0]).split())
+        else: raise NotImplementedError('unk_function',exp.f) # pragma: no cover
+    elif isinstance(exp,sqparse2.SelectX): raise NotImplementedError('subqueries should have been evaluated earlier') # todo: better error class
+    elif isinstance(exp,sqparse2.AttrX):return self.nix.rowget(self.tables,self.c_row,exp)
+    elif isinstance(exp,sqparse2.CaseX):
+      for case in exp.cases:
+        if self.eval(case.when): return self.eval(case.then)
+      return self.eval(exp.elsex)
+    elif isinstance(exp,sqparse2.CastX):
+      if exp.to_type.type.lower() in ('text','varchar'): return unicode(self.eval(exp.expr))
+      else: raise NotImplementedError('unhandled_cast_type',exp.to_type)
+    elif isinstance(exp,(int,basestring,float,type(None))):
+      return exp # I think Table.insert is creating this in expand_row
+    # todo: why tuple, list, dict below? throw some asserts in here and see where these are coming from.
+    elif isinstance(exp,tuple): return tuple(map(self.eval, exp))
+    elif isinstance(exp,list): return map(self.eval, exp)
+    elif isinstance(exp,dict): return exp
+    elif isinstance(exp,sqparse2.NullX): return None
+    elif isinstance(exp,sqparse2.ReturnX):
+      # todo: I think ReturnX is *always* CommaX now; revisit this
+      ret=self.eval(exp.expr)
+      print "warning: not sure what I'm doing here with cardinality tweak on CommaX"
+      return [ret] if isinstance(exp.expr,(sqparse2.CommaX,sqparse2.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
+    elif isinstance(exp,sqparse2.AliasX): return self.eval(exp.name) # todo: rename AliasX 'name' to 'expr'
+    else: raise NotImplementedError(type(exp),exp) # pragma: no cover
 
 def sub_slots(x,match_fn,path=(),arr=None,match=False): # todo: rename match to topmatch for clarity
   """given a BaseX in x, explore its ATTRS (doing the right thing for VARLEN).

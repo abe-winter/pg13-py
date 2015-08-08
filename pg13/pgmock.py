@@ -183,12 +183,12 @@ class Table:
     # todo: check ColX.not_null here. figure out what to do about null pkey field
     for i,elt in enumerate(row):
       # todo(awinter): think about dependency model if one field relies on another. (what do I mean? 'insert into t1 (a,b) values (10,a+5)'? is that valid?)
-      row[i]=sqex.evalex(elt,row,nix,tables_dict)
+      row[i]=sqex.Evaluator(row,nix,tables_dict).eval(elt)
     if self.pkey_get(row): raise pg.DupeInsert(row)
     self.rows.append(row)
-    if returning: return sqex.evalex(returning,(row,),nix,tables_dict)
+    if returning: return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
   def match(self,where,tables,nix):
-    return [r for r in self.rows if not where or threevl.ThreeVL.test(sqex.evalex(where,(r,),nix,tables))]
+    return [r for r in self.rows if not where or threevl.ThreeVL.test(sqex.Evaluator((r,),nix,tables).eval(where))]
   def lookup(self,name):
     if isinstance(name,sqparse2.NameX): name = name.name # this is horrible; be consistent
     try: return FieldLookup(*next((i,f) for i,f in enumerate(self.fields) if f.name==name))
@@ -199,11 +199,12 @@ class Table:
     if not all(isinstance(x,sqparse2.AssignX) for x in setx): raise TypeError('not_xassign',map(type,setx))
     match_rows=self.match(where,tables_dict,nix) if where else self.rows
     for row in match_rows:
-      for x in setx: row[self.lookup(x.col).index]=sqex.evalex(x.expr,(row,),nix,tables_dict)
-    if returning: return sqex.evalex(returning,(row,),nix,tables_dict)
+      for x in setx: row[self.lookup(x.col).index]=sqex.Evaluator((row,),nix,tables_dict).eval(x.expr)
+    if returning: return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
   def delete(self,where,tables_dict):
     # todo: what's the deal with nested selects in delete. does it get evaluated once to a scalar before running the delete?
     # todo: this will crash with empty where clause
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
-    self.rows=[r for r in self.rows if not sqex.evalex(where,(r,),nix,tables_dict)]
+    # todo(doc): why 'not' below?
+    self.rows=[r for r in self.rows if not sqex.Evaluator((r,),nix,tables_dict).eval(where)]
