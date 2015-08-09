@@ -14,15 +14,13 @@ def names_from_exp(exp):
   return [exp[path] for path in paths]
 
 def classify_wherex(scope_, fromx, wherex):
-  "helper for wherex_to_rowlist. returns [SingleTableCond,...], [CartesianCond,...]"
+  "helper for wherex_to_rowlist. returns table_names_set, [SingleTableCond,...], [CartesianCond,...]"
   exprs = []
   for exp in fromx:
     if isinstance(exp, sqparse2.JoinX):
-      # todo: probably just add exp.on_stmt as a CartesianCond. don't write this until tests are ready.
       # todo: do join-on clauses get special scoping w.r.t. column names? check spec.
-      raise NotImplementedError('join')
-    elif isinstance(exp, basestring):
-      exprs.append(exp)
+      exprs.append(exp.on_stmt)
+    elif isinstance(exp, basestring): exprs.append(exp)
   def test_and(exp):
     return isinstance(exp, sqparse2.BinX) and exp.op.op == 'and'
   def binx_splitter(exp):
@@ -30,17 +28,17 @@ def classify_wherex(scope_, fromx, wherex):
   exprs += treepath.flatten_tree(test_and, binx_splitter, wherex) if wherex else [] # wherex is None if not given
   single_conds = []
   cartesian_conds = []
+  table_names = set()
   for exp in exprs:
-    if isinstance(exp, basestring):
-      # note: bare table names need their own case because they don't work with resolve_column
-      single_conds.append(SingleTableCond(exp, exp))
+    if isinstance(exp, basestring): table_names.add(exp) # but don't store to either conds list
     else:
       tables = zip(*map(scope_.resolve_column, names_from_exp(exp)))[0]
+      table_names.update(tables)
       if len(tables) > 1:
         cartesian_conds.append(CartesianCond(exp))
       else:
         single_conds.append(SingleTableCond(tables[0], exp))
-  return single_conds, cartesian_conds
+  return table_names, single_conds, cartesian_conds
 
 def table_to_rowlist(table_):
   "helper for wherex_to_rowlist. (table.Table, [exp, ...]) -> [Row, ...]"
@@ -52,10 +50,7 @@ def table_to_rowlist(table_):
 
 def conds_on_row(scope_, row, conds):
   evaluator = sqex.Evaluator2(row, scope_)
-  # note below: we exclude string conds because they're just table names from fromx
-  real_conds = [exp for exp in conds if not isinstance(exp, basestring)]
-  # note: all([]) is True, which is the desired result here. empties are introduced by filtering out strings above.
-  return all(evaluator.eval(exp) for exp in real_conds)
+  return all(evaluator.eval(exp) for exp in conds)
 
 def filter_rowlist(scope_, rowlist, conds):
   # todo: an analyzer can put the cheapest cond first
@@ -74,17 +69,21 @@ def wherex_to_rowlist(scope_, fromx, wherex):
   When the scope has more than one name in it, the output will be a list of composite row
     (i.e. a row whose field types are themselves RowType).
   """
-  single, multi = classify_wherex(scope_, fromx, wherex)
+  table_names, single, multi = classify_wherex(scope_, fromx, wherex)
   # note: we filter single before multi for performance -- the product of the tables is smaller if we can reduce the inputs
   single_rowlists = {
     tablename: filter_rowlist(scope_, table_to_rowlist(scope_[tablename]), conds)
     for tablename, conds in misc.multimap(single).items() # i.e. {cond.table:[cond.exp, ...]}
   }
-  if len(single_rowlists) == 1 and not multi:
-    return single_rowlists.values()[0]
+  rowlists = {
+    table_name: single_rowlists.get(table_name) or table_to_rowlist(scope_[table_name])
+    for table_name in table_names
+  }
+  if len(rowlists) == 1 and not multi:
+    return rowlists.values()[0]
   else:
     return filter_rowlist(
       scope_,
-      make_composite_rows(single_rowlists.values()),
+      make_composite_rows(rowlists.values()),
       [cond.exp for cond in multi]
     )

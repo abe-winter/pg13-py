@@ -33,8 +33,8 @@ def test_classify_wherex():
   tables, run = prep('create table t1 (a int, b text)')
   run('create table t2 (a int, b text)')
   scope_ = scope.Scope.from_fromx(tables, EXP.tables)
-  print weval.classify_wherex(scope_, EXP.tables, EXP.where)
-  (_, single), (cart,) = weval.classify_wherex(scope_, EXP.tables, EXP.where)
+  names, (single,), (cart,) = weval.classify_wherex(scope_, EXP.tables, EXP.where)
+  assert names == {'t1', 't_sub'}
   assert isinstance(single, weval.SingleTableCond) and single.table == 't1' and isinstance(single.exp, sqparse2.BinX)
   assert isinstance(cart, weval.CartesianCond) and isinstance(cart.exp, sqparse2.BinX)
 
@@ -60,7 +60,6 @@ def test_wherex_to_rowlist_multi():
   tables['t1'].rows = [[1], [2], [3]]
   tables['t2'].rows = [[1], [3]]
   exp = sqparse2.parse('select * from t1, t2 where t1.a = t2.a')
-  print weval.wherex_to_rowlist(scope.Scope.from_fromx(tables, exp.tables), exp.tables, exp.where)
+  assert 2 == len(weval.wherex_to_rowlist(scope.Scope.from_fromx(tables, exp.tables), exp.tables, exp.where))
   exp = sqparse2.parse('select * from t1 join t2 on t1.a = t2.a')
-  print weval.wherex_to_rowlist(scope.Scope.from_fromx(tables, exp.tables), exp.tables, exp.where)
-  raise NotImplementedError
+  assert 2 == len(weval.wherex_to_rowlist(scope.Scope.from_fromx(tables, exp.tables), exp.tables, exp.where))

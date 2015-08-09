@@ -86,7 +86,8 @@ class Scope:
       elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, sqparse2.SelectX):
         scope_.add(exp.alias, SyntheticTable(exp.name))
       elif isinstance(exp, sqparse2.JoinX):
-        raise NotImplementedError('todo: join')
+        scope_.add(exp.a, tables[exp.a])
+        scope_.add(exp.b, tables[exp.b])
       else:
         raise TypeError('bad fromx type', type(exp), exp)
     return scope_

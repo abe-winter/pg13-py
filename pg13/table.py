@@ -3,6 +3,8 @@
 import collections
 from . import pg, threevl, sqparse2
 
+class UnkTableError(StandardError): "for lookup failures in composite rows"
+
 class Composite: "use this for RowSource.table when a Row is composite"
 
 class RowSource:
@@ -40,6 +42,8 @@ class Row:
 
   def __getitem__(self, (table_name, column_name)):
     actual_row = self.get_table(table_name)
+    if not actual_row:
+      raise UnkTableError(table_name, self)
     return actual_row.vals[actual_row.index(column_name)]
 
   def __repr__(self): return '<Row %s:%i %r>' % (self.source.name or 'composite', self.source.index, self.vals)
