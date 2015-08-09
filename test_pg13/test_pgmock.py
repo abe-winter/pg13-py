@@ -425,3 +425,25 @@ def test_drop_inherit():
 @pytest.mark.xfail
 def test_drop_fkey_cascade():
   raise NotImplementedError
+
+@pytest.mark.xfail
+def test_alias_product():
+  raise NotImplementedError
+  """
+  create table t1 (a int, b int);
+  create table t2 (a int, b int);
+  insert into t1 values (1);
+  insert into t1 values (2);
+  insert into t2 values (1,0);
+  insert into t2 values (0,2);
+
+  # it outputs this:
+  testjoin=# select t1.a, t2.a as a2, t2.b as b2, t3.a as a3, t3.b as b3 from t1, t2, t2 as t3 where t1.a = t2.a or t1.a = t3.b;
+   a | a2 | b2 | a3 | b3 
+  ---+----+----+----+----
+   1 |  1 |  0 |  1 |  0
+   1 |  1 |  0 |  0 |  2
+   2 |  1 |  0 |  0 |  2
+   2 |  0 |  2 |  0 |  2
+  (4 rows)
+  """

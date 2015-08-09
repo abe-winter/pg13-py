@@ -2,33 +2,32 @@
 
 from . import sqparse2
 
-class WevalError(StandardError): "base"
-class ScopeCollisionError(WevalError): pass
-class ScopeUnkError(WevalError): pass
+class ScopeError(StandardError): "base"
+class ScopeCollisionError(ScopeError): pass
+class ScopeUnkError(ScopeError): pass
 
-class Lazy:
-  "wrapper for expressions we want to evaluate as-needed"
-  def __init__(self, action, args=(), kwargs={}):
-    self.args, self.kwargs, self.action = args, kwargs, action
-    self.computed, self.output = False, None
+def col2name(col_item):
+  "helper for SyntheticTable.columns. takes something from SelectX.cols, returns a string column name"
+  if isinstance(col_item, sqparse2.NameX): return col_item.name
+  elif isinstance(col_item, sqparse2.AliasX): return col_item.alias
+  else: raise TypeError(type(col_item), col_item)
 
-  @property
-  def val(self):
-    if not self.computed:
-      self.output = self.action(*self.args, **self.kwargs)
-      self.computed = True
-    return self.output
+class SyntheticTable:
+  def __init__(self, exp):
+    if not isinstance(exp, sqparse2.SelectX):
+      raise TypeError('expected SelectX for', type(exp), exp)
+    self.exp = exp
 
-def lazy_subselect(scope, exp):
-  raise NotImplementedError
+  def columns(self, scope):
+    "return list of column names. needs scope for resolving asterisks."
+    return map(col2name, self.exp.cols.children)
 
 class Scope:
   "bundle for all the tables that are going to be used in a query, and their aliases"
   def __init__(self, expression, tables, parent=None):
     self.tables, self.expression, self.parent = tables, expression, parent
     self.aliases = {} # names that map to other names
-    self.objects = {} # names that map to objects
-    self.children = [] # sub-scopes; this probably will go away
+    self.objects = {} # names that map to objects -- I think this is always SyntheticTable
 
   def __contains__(self, name):
     return (name in self.tables) or (name in self.aliases) or (name in self.objects)
@@ -46,16 +45,29 @@ class Scope:
       raise ScopeCollisionError('scope already has', alias)
     self.objects[alias] = object
 
-  def get(self, name):
-    """Get name from scope, walking up parents if necessary, preferring local to global.
-    Resolve column names from tables and fail when columns are ambiguous.
-    If the target is an instance of Lazy, this returns target.val.
-    """
-    # if this is going to return a value it needs to take a row as well
-    # >> instead, maybe return (canonical_table, column)
-    if name not in self:
-      raise ScopeUnkError('Scope.get unk', name)
+  def get_table(self, name):
     raise NotImplementedError
+
+  def resolve_column(self, ref):
+    "ref is a NameX or AttrX. return (canonical_table_name, column_name)."
+    if isinstance(ref, sqparse2.AttrX):
+      raise NotImplementedError
+    elif isinstance(ref, sqparse2.NameX):
+      matches = set()
+      for key, val in self.objects.items():
+        if not isinstance(val, SyntheticTable):
+          raise TypeError('expected SyntheticTable', type(val), val)
+        if ref.name in val.columns(self):
+          matches.add(key)
+      for key, table in self.tables.items():
+        try: table.get_column(ref.name)
+        except: pass
+        else: matches.add(key)
+      if not matches: raise ScopeUnkError(ref)
+      elif len(matches) > 1: raise ScopeCollisionError(matches, ref)
+      else: return list(matches)[0], ref.name
+    else:
+      raise TypeError('unexpected', type(ref), ref)
 
   @classmethod
   def from_fromx(class_, tables, fromx, ctes=()):
@@ -68,11 +80,13 @@ class Scope:
     if ctes: raise NotImplementedError # note: I don't think any other part of the program supports CTEs yet either
     scope = class_(fromx, tables)
     for exp in fromx:
-      if isinstance(exp, basestring): pass
+      if isinstance(exp, basestring):
+        print 'warning: I should be adding named tables instead of uatomatically reading from scope.tables. scope.tables might not be necessary'
+        pass
       elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, basestring):
         raise NotImplementedError
       elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, sqparse2.SelectX):
-        scope.add_object(exp.alias, Lazy(lazy_subselect, (scope, exp.name)))
+        scope.add_object(exp.alias, SyntheticTable(exp.name))
       elif isinstance(exp, sqparse2.JoinX):
         raise NotImplementedError('todo: join')
       else:

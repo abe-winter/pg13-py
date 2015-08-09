@@ -1,7 +1,7 @@
 "weval -- where-clause evaluation"
 
 import collections
-from . import sqparse2
+from . import sqparse2, sqex
 
 class RowType(list):
   "ctor takes list of (name, type)"
@@ -27,18 +27,37 @@ class Row:
 SingleTableCond = collections.namedtuple('SingleTableCond', 'table exp')
 CartesianCond = collections.namedtuple('MultiTableCond', 'exp')
 
-def classify_wherex(fromx, wherex):
+def flatten_tree(test, enumerator, exp):
+  """test is function(exp) >> bool.
+  mapper is function(expression) >> list of subexpressions.
+  returns [subexpression, ...].
+  """
+  return sum((flatten_tree(test, enumerator, subx) for subx in enumerator(exp)), []) if test(exp) else [exp]
+
+def names_from_exp(exp):
+  "Return all the AttrX and NameX (i.e. variable names) from the expression."
+  def match(exp):
+    return isinstance(exp, (sqparse2.NameX, sqparse2.AttrX))
+  paths = sqex.sub_slots(exp, match, match=True, recurse_into_matches=False)
+  return [exp[path] for path in paths]
+
+def classify_wherex(scope, fromx, wherex):
   "helper for wherex_to_rowlist. returns [SingleTableCond,...], [CartesianCond,...]"
-  single_conds = []
-  cartesian_conds = []
+  exprs = []
   for exp in fromx:
     if isinstance(exp, sqparse2.JoinX):
+      # exp.on_stmt
       raise NotImplementedError('join')
-  if isinstance(wherex, sqparse2.BinX) and wherex.op.op == 'and':
-    raise NotImplementedError
-  else:
-    raise NotImplementedError
-  raise NotImplementedError
+  def test(exp):
+    return isinstance(exp, sqparse2.BinX) and exp.op.op == 'and'
+  def enumerator(exp):
+    return [exp.left, exp.right]
+  exprs += flatten_tree(test, enumerator, wherex)
+  for exp in exprs:
+    names = names_from_exp(exp)
+    scope. ...
+  print 'exprs', exprs
+  raise NotImplementedError('return single / cart split')
 
 def wherex_to_rowlist(scope, fromx, wherex):
   """return a RowList with the rows included from scope by the wherex.

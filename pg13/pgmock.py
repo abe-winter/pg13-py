@@ -27,6 +27,7 @@ class TablesDict:
   def __iter__(self): return iter(self.levels[-1])
   def keys(self): return self.levels[-1].keys()
   def values(self): return self.levels[-1].values()
+  def items(self): return self.levels[-1].items()
   @contextlib.contextmanager
   def tempkeys(self):
     """Add a new level to make new keys temporary. Used instead of copy in sqex.
@@ -174,7 +175,10 @@ class Table:
     return map(toliteral,row)
   def apply_defaults(self, row, tables_dict):
     "apply defaults to missing cols for a row that's being inserted"
-    return [emergency_cast(colx, field_default(colx, self.name, tables_dict) if v is Missing else v) for colx,v in zip(self.fields,row)]
+    return [
+      emergency_cast(colx, field_default(colx, self.name, tables_dict) if v is Missing else v)
+      for colx,v in zip(self.fields,row)
+    ]
   def insert(self,fields,values,returning,tables_dict):
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
