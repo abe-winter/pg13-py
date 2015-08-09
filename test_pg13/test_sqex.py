@@ -1,10 +1,10 @@
 import pytest
-from pg13 import sqex,pgmock,sqparse2
+from pg13 import sqex, pgmock, sqparse2, treepath
 
 def test_sub_arraylit():
   from pg13.sqparse2 import ArrayLit,Literal,SubLit
   arlit=ArrayLit([Literal('a'),SubLit,Literal('b')])
-  path,=sqex.sub_slots(arlit, lambda x:x is sqparse2.SubLit)
+  path,=treepath.sub_slots(arlit, lambda x:x is sqparse2.SubLit)
   assert path==(('vals',1),)
   arlit[path] = Literal('hello')
   assert arlit.vals==[Literal('a'),Literal('hello'),Literal('b')] # this is checking that the setter closure didn't capture the end of the loop
@@ -14,7 +14,7 @@ def test_sub_assignx():
   # todo: test the rest of the SUBSLOT_ATTRS classes
   from pg13.sqparse2 import SubLit,AssignX,Literal
   asx=AssignX(None,SubLit)
-  path,=sqex.sub_slots(asx, lambda x:x is sqparse2.SubLit)
+  path,=treepath.sub_slots(asx, lambda x:x is sqparse2.SubLit)
   assert path==('expr',)
   asx[path] = Literal('hello')
   assert asx.expr==Literal('hello')
@@ -23,12 +23,12 @@ def test_sub_stmt():
   # warning: a thorough test of this needs to exercise every syntax type. yikes. test_subslot_classes isn't enough.
   from pg13.sqparse2 import Literal,CommaX
   xsel=sqparse2.parse('select *,z-%s from t1 where x=%s')
-  p1,p2=sqex.sub_slots(xsel, lambda x:x is sqparse2.SubLit)
+  p1,p2=treepath.sub_slots(xsel, lambda x:x is sqparse2.SubLit)
   xsel[p1] = Literal(9)
   xsel[p2] = Literal(10)
   assert xsel.cols.children[1].right==Literal(9) and xsel.where.right==Literal(10)
   xins=sqparse2.parse('insert into t1 values (%s,%s)')
-  p1,p2=sqex.sub_slots(xins, lambda x:x is sqparse2.SubLit)
+  p1,p2=treepath.sub_slots(xins, lambda x:x is sqparse2.SubLit)
   xins[p1] = Literal('a')
   xins[p2] = Literal('b')
   assert xins.values==[Literal('a'), Literal('b')]
@@ -39,8 +39,8 @@ def test_sub_recurse():
   exp = sqparse2.parse('select a + b + c + d from t1')
   def matchfn(exp):
     return isinstance(exp, sqparse2.BinX) and exp.op.op == '+'
-  recurse_paths = sqex.sub_slots(exp, matchfn, recurse_into_matches=True)
-  norecurse_paths = sqex.sub_slots(exp, matchfn, recurse_into_matches=False)
+  recurse_paths = treepath.sub_slots(exp, matchfn, recurse_into_matches=True)
+  norecurse_paths = treepath.sub_slots(exp, matchfn, recurse_into_matches=False)
   assert len(recurse_paths) == 3
   assert len(norecurse_paths) == 1
 
@@ -68,7 +68,7 @@ def test_nix_aonly():
 
 def test_eliminateseqchildren():
   def get_paths(ex):
-    return sqex.sub_slots(ex, lambda x:isinstance(x,(sqparse2.AttrX,sqparse2.NameX)), match=True)
+    return treepath.sub_slots(ex, lambda x:isinstance(x,(sqparse2.AttrX,sqparse2.NameX)), match=True)
   def transform(string):
     return sqex.eliminate_sequential_children(get_paths(sqparse2.parse(string)))
   assert [()]==transform('a.b')

@@ -1,7 +1,7 @@
 "weval -- where-clause evaluation"
 
 import collections
-from . import sqparse2, sqex, misc, scope, table
+from . import sqparse2, sqex, misc, scope, table, treepath
 
 class RowType(list):
   "ctor takes list of (name, type). name is string, type is a sqparse2.ColX."
@@ -28,18 +28,11 @@ class Row:
 SingleTableCond = collections.namedtuple('SingleTableCond', 'table exp')
 CartesianCond = collections.namedtuple('CartesianCond', 'exp')
 
-def flatten_tree(test, enumerator, exp):
-  """test is function(exp) >> bool.
-  mapper is function(expression) >> list of subexpressions.
-  returns [subexpression, ...].
-  """
-  return sum((flatten_tree(test, enumerator, subx) for subx in enumerator(exp)), []) if test(exp) else [exp]
-
 def names_from_exp(exp):
   "Return a list of AttrX and NameX from the expression."
   def match(exp):
     return isinstance(exp, (sqparse2.NameX, sqparse2.AttrX))
-  paths = sqex.sub_slots(exp, match, match=True, recurse_into_matches=False)
+  paths = treepath.sub_slots(exp, match, match=True, recurse_into_matches=False)
   return [exp[path] for path in paths]
 
 def classify_wherex(scope_, fromx, wherex):
@@ -56,7 +49,7 @@ def classify_wherex(scope_, fromx, wherex):
     return isinstance(exp, sqparse2.BinX) and exp.op.op == 'and'
   def binx_splitter(exp):
     return [exp.left, exp.right]
-  exprs += flatten_tree(test_and, binx_splitter, wherex) if wherex else [] # wherex is None if not given
+  exprs += treepath.flatten_tree(test_and, binx_splitter, wherex) if wherex else [] # wherex is None if not given
   single_conds = []
   cartesian_conds = []
   for exp in exprs:

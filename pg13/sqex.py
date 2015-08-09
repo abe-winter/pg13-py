@@ -1,8 +1,8 @@
 "expression evaluation helpers for pgmock. has duck-dependencies on pgmock's Table class, needs redesign."
 # todo: most of the heavy lifting happens here. profile and identify candidates for Cython port.
 
-import itertools,collections
-from . import sqparse2,threevl,misc
+import itertools, collections
+from . import sqparse2, threevl, misc, treepath
 
 # todo: derive errors below from something pg13-specific
 class ColumnNameError(StandardError): "name not in any tables or name matches too many tables"
@@ -11,7 +11,7 @@ class TableNameError(StandardError): "expression referencing unk table"
 # todo doc: explain why it's not necessary to do these checks on the whereclause
 def consumes_rows(ex): return isinstance(ex,sqparse2.CallX) and ex.f in ('min','max','count')
 def returns_rows(ex): return isinstance(ex,sqparse2.CallX) and ex.f in ('unnest',)
-def contains(ex,f): return bool(sub_slots(ex,f,match=True))
+def contains(ex,f): return bool(treepath.sub_slots(ex,f,match=True))
 
 def evalop(op,left,right):
   "this takes evaluated left and right (i.e. values not expressions)"
@@ -77,7 +77,7 @@ def infer_columns(selectx,tables_dict):
       for t in table_order:
         cols.extend(table2fields[t])
     elif isinstance(col,sqparse2.BaseX):
-      all_paths = sub_slots(col, lambda x:isinstance(x,(sqparse2.AttrX,sqparse2.NameX,sqparse2.AliasX)), match=True)
+      all_paths = treepath.sub_slots(col, lambda x:isinstance(x,(sqparse2.AttrX,sqparse2.NameX,sqparse2.AliasX)), match=True)
       paths = eliminate_sequential_children(all_paths) # this eliminates NameX under AttrX
       for p in paths:
         x = col[p]
@@ -197,7 +197,7 @@ def replace_subqueries(ex,tables,table_ctor):
   # see here for subquery conditions that *do* use multi-rows. ug. http://www.postgresql.org/docs/9.1/static/functions-subquery.html
   if isinstance(ex,sqparse2.SelectX):
     old_tables, ex.tables = ex.tables, [] # we *don't* recurse into tables because selects in here get transformed into tables
-  for path in sub_slots(ex, lambda x:isinstance(x,sqparse2.SelectX)):
+  for path in treepath.sub_slots(ex, lambda x:isinstance(x,sqparse2.SelectX)):
     ex[path] = sqparse2.Literal(flatten_scalar(run_select(ex[path], tables, table_ctor)))
   if isinstance(ex,sqparse2.SelectX): ex.tables = old_tables
   return ex # but it was modified in place, too
@@ -329,32 +329,9 @@ class Evaluator:
     elif isinstance(exp,sqparse2.AliasX): return self.eval(exp.name) # todo: rename AliasX 'name' to 'expr'
     else: raise NotImplementedError(type(exp),exp) # pragma: no cover
 
-def sub_slots(x,match_fn,path=(),arr=None,match=False,recurse_into_matches=True):
-  """given a BaseX in x, explore its ATTRS (doing the right thing for VARLEN).
-  return a list of tree-paths (i.e. tuples) for tree children that match match_fn. The root elt won't match.
-  """
-  # todo: rename match to topmatch for clarity
-  # todo: profiling suggests this getattr-heavy recursive process is the next bottleneck
-  if arr is None: arr=[]
-  if match and match_fn(x):
-    arr.append(path)
-    if not recurse_into_matches:
-      return arr
-  if isinstance(x,sqparse2.BaseX):
-    for attr in x.ATTRS:
-      val = getattr(x,attr)
-      if attr in x.VARLEN:
-        for i,elt in enumerate(val or ()):
-          nextpath = path + ((attr,i),)
-          sub_slots(elt,match_fn,nextpath,arr,True,recurse_into_matches)
-      else:
-        nextpath = path + (attr,)
-        sub_slots(val,match_fn,nextpath,arr,True,recurse_into_matches)
-  return arr
-
 def depth_first_sub(expr,values):
   "replace SubLit with literals in expr. (expr is mutated)."
-  arr=sub_slots(expr,lambda elt:elt is sqparse2.SubLit)
+  arr=treepath.sub_slots(expr,lambda elt:elt is sqparse2.SubLit)
   if len(arr)!=len(values): raise ValueError('len',len(arr),len(values))
   for path,val in zip(arr,values):
     # todo: does ArrayLit get us anything? tree traversal?
