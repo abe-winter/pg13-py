@@ -3,28 +3,6 @@
 import collections
 from . import sqparse2, sqex, misc, scope, table, treepath
 
-class RowType(list):
-  "ctor takes list of (name, type). name is string, type is a sqparse2.ColX."
-  def index(self, name):
-    # todo: when a name isn't found, this should look in any children that have type=RowType
-    return zip(*self)[0].index(name)
-
-class RowSource:
-  "for things like update and delete we need to know where a row came from. this stores that."
-  def __init__(self, table, index):
-    "table is a table.Table or a scope.SyntheticTable"
-    self.table, self.index = table, index
-
-class Row:
-  def __init__(self, source, type, vals):
-    "source is a RowSource or None if it isn't from a table"
-    if len(type) != len(vals):
-      raise ValueError('type/vals length mismatch', len(type), len(vals))
-    self.source, self.type, self.vals = source, type, vals
-
-  def __getitem__(self, name):
-    return self.vals[self.type.index(name)]
-
 SingleTableCond = collections.namedtuple('SingleTableCond', 'table exp')
 CartesianCond = collections.namedtuple('CartesianCond', 'exp')
 
@@ -64,28 +42,25 @@ def classify_wherex(scope_, fromx, wherex):
         single_conds.append(SingleTableCond(tables[0], exp))
   return single_conds, cartesian_conds
 
-def table_to_rowlist(table_, conds):
+def table_to_rowlist(table_):
   "helper for wherex_to_rowlist. (table.Table, [exp, ...]) -> [Row, ...]"
   if isinstance(table_, scope.SyntheticTable):
     raise NotImplementedError('todo: synthetic tables to Row[]')
-  elif isinstance(table_, table.Table):
-    rowtype = RowType([(colx.name, colx) for colx in table_.fields])
-    rows = [
-      Row(RowSource(table_, i), rowtype, row)
-      for i, row in enumerate(table_.rows)
-    ]
-    raise NotImplementedError # how does filtering work?
+  elif isinstance(table_, table.Table): return table_.to_rowlist()
   else:
     raise TypeError('bad type for table', type(table), table)
 
+def filter_rowlist(rowlist, conds):
+  raise NotImplementedError
+
 def wherex_to_rowlist(scope_, fromx, wherex):
-  """return a RowList with the rows included from scope by the fromx and wherex.
+  """return a rowlist with the rows included from scope by the fromx and wherex.
   When the scope has more than one name in it, the output will be a list of composite row
     (i.e. a row whose field types are themselves RowType).
   """
   single, multi = classify_wherex(scope_, fromx, wherex)
   single_rowlists = {
-    tablename: table_to_rowlist(scope_[tablename], conds)
+    tablename: filter_rowlist(table_to_rowlist(scope_[tablename]), conds)
     for tablename, conds in misc.multimap(single).items() # i.e. {cond.table:[cond.exp, ...]}
   }
   raise NotImplementedError

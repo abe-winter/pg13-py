@@ -1,7 +1,44 @@
 "table -- Table class"
 
 import collections
-from . import pg, threevl, sqparse2, sqex
+from . import pg, threevl, sqparse2
+
+class Composite: "use this for RowSource.table when a Row is composite"
+
+class RowSource:
+  "for things like update and delete we need to know where a row came from. this stores that."
+  def __init__(self, table, index):
+    "table is a table.Table or a scope.SyntheticTable"
+    self.table, self.index = table, index
+
+  @property
+  def name(self):
+    if isinstance(self.table, Table): return self.table.name
+    elif self.table is Composite: return None
+    else: raise TypeError(type(self.table), self.table)
+
+class Row:
+  """this is used for intermediate representation of a row during computation.
+  Table.rows are stored as lists or tuples or something.
+  """
+  def __init__(self, source, vals):
+    "source is a RowSource or None if it isn't from a table"
+    self.source, self.vals = source, vals
+
+  def get_table(self, name):
+    "a Row can be composite (i.e. nest others under itself). This returns the nested Row (or self) with matching name."
+    if self.source.name == name: return self
+    return next(
+      (val.get_table(name) for val in self.vals if isinstance(val, Row) and val.get_table(name) is not None),
+      None
+    )
+
+  def index(self, column_name):
+    [f.name for f in self.table.fields].index(column_name)
+
+  def __getitem__(self, (table_name, column_name)):
+    actual_row = self.get_table(table_name)
+    return self.get_table(table_name).vals[self.index(column_name)]
 
 # errors
 class PgExecError(sqparse2.PgMockError): "base class for errors during table execution"
@@ -30,6 +67,7 @@ def emergency_cast(colx, value):
 
 def field_default(colx, table_name, tables_dict):
   "takes sqparse2.ColX, Table"
+  raise NotImplementedError("this can't import sqex")
   if colx.coltp.type.lower() == 'serial':
     x = sqparse2.parse('select coalesce(max(%s),-1)+1 from %s' % (colx.name, table_name))
     return sqex.run_select(x, tables_dict, Table)[0]
@@ -50,6 +88,11 @@ class Table:
     self.child_tables=[] # tables that inherit from this one
     self.parent_table=None # table this inherits from
   
+  def to_rowlist(self):
+    "return [Row, ...] for intermediate computations"
+    rowtype = RowType([(colx.name, colx) for colx in self.fields])
+    return [Row(RowSource(self, i), rowtype, row) for i, row in enumerate(self.rows)]
+
   def get_column(self,name):
     col = next((f for f in self.fields if f.name==name), None)
     if col is None: raise KeyError(name)
@@ -77,6 +120,7 @@ class Table:
     ]
   
   def insert(self,fields,values,returning,tables_dict):
+    raise NotImplementedError("this can't import sqex")
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
     expanded_row=self.fix_rowtypes(expand_row(self.fields,fields,values) if fields else values)
@@ -90,6 +134,8 @@ class Table:
     if returning: return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
   
   def match(self,where,tables,nix):
+    raise NotImplementedError("this can't import sqex")
+    raise NotImplementedError('is this used?')
     return [r for r in self.rows if not where or threevl.ThreeVL.test(sqex.Evaluator((r,),nix,tables).eval(where))]
   
   def lookup(self,name):
@@ -97,7 +143,10 @@ class Table:
     try: return FieldLookup(*next((i,f) for i,f in enumerate(self.fields) if f.name==name))
     except StopIteration: raise BadFieldName(name)
   
-  def update(self,setx,where,returning,tables_dict):
+  def update(self, rowlist):
+    "replace rows from rowlist using indexes"
+    raise NotImplementedError('todo')
+    raise NotImplementedError("delete old code below")
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
     if not all(isinstance(x,sqparse2.AssignX) for x in setx): raise TypeError('not_xassign',map(type,setx))
@@ -106,7 +155,10 @@ class Table:
       for x in setx: row[self.lookup(x.col).index]=sqex.Evaluator((row,),nix,tables_dict).eval(x.expr)
     if returning: return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
   
-  def delete(self,where,tables_dict):
+  def delete(self, rowlist):
+    "use indexes from rowlist to delete"
+    raise NotImplementedError('todo')
+    raise NotImplementedError("delete old code below")
     # todo: what's the deal with nested selects in delete. does it get evaluated once to a scalar before running the delete?
     # todo: this will crash with empty where clause
     nix = sqex.NameIndexer.ctor_name(self.name)

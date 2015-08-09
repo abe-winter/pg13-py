@@ -13,6 +13,7 @@ def col2name(col_item):
   else: raise TypeError(type(col_item), col_item)
 
 class SyntheticTable:
+  # todo: get rid of this -- just create an actual table in the scope
   def __init__(self, exp):
     if not isinstance(exp, sqparse2.SelectX):
       raise TypeError('expected SelectX for', type(exp), exp)

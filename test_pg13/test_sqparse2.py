@@ -83,8 +83,8 @@ def test_operator_order():
   raise NotImplementedError
 
 def test_select_from_as():
-  fromx=sqparse2.parse("select * from (select a as alias from t1 where userid=1) as sub group by tag").tables[0]
-  assert isinstance(fromx,sqparse2.AliasX) and isinstance(fromx.name,sqparse2.SelectX) and fromx.alias=='sub'
+  from0 = sqparse2.parse("select * from (select a as alias from t1 where userid=1) as sub group by tag").tables[0]
+  assert isinstance(from0,sqparse2.AliasX) and isinstance(from0.name,sqparse2.SelectX) and from0.alias=='sub'
 def test_call_as():
   from pg13.sqparse2 import AliasX,CallX,CommaX,NameX
   assert sqparse2.parse('select unnest(a) as b from t1').cols.children[0]==AliasX(CallX('unnest',CommaX([NameX('a')])),'b')

@@ -250,16 +250,17 @@ def starlike(x):
   # todo: is '* as name' a thing?
   return isinstance(x,sqparse2.AsterX) or isinstance(x,sqparse2.AttrX) and isinstance(x.attr,sqparse2.AsterX)
 
-class Evaluator:
+class Evaluator2:
   # todo: use intermediate types: Scalar, Row, RowList, Table.
   #   Row and Table might be able to bundle into RowList. RowList should know the type and names of its columns.
   #   This will solve a lot of cardinality confusion.
-  def __init__(self, c_row, nix, tables):
-    "c_row is a composite row, i.e. a list/tuple of rows from all the query's tables, ordered by nix.table_order"
-    self.c_row, self.nix, self.tables = c_row, nix, tables
+  def __init__(self, row, scope_):
+    "row is a weval.Row, scope_ a scope.Scope"
+    self.row, self.scope = row, scope
   
   def eval_agg_call(self, exp):
     "helper for eval_callx; evaluator for CallX that consume multiple rows"
+    raise NotImplementedError('uses c_row, nix')
     if not isinstance(self.c_row,list): raise TypeError('aggregate function expected a list of rows')
     if len(exp.args.children)!=1: raise ValueError('aggregate function expected a single value',exp.args)
     arg,=exp.args.children # intentional: error if len!=1
@@ -299,8 +300,13 @@ class Evaluator:
     # todo: this needs an AST-assert that all BaseX descendants are being handled
     if isinstance(exp,sqparse2.BinX): return evalop(exp.op.op, *map(self.eval, (exp.left, exp.right)))
     elif isinstance(exp,sqparse2.UnX): return self.eval_unx(exp)
-    elif isinstance(exp,sqparse2.NameX): return self.nix.rowget(self.tables,self.c_row,exp)
-    elif isinstance(exp,sqparse2.AsterX): return sum(self.c_row,[]) # todo doc: how does this get disassembled by caller?
+    elif isinstance(exp,sqparse2.NameX):
+      #
+      raise NotImplementedError('nix and c_row')
+      return self.nix.rowget(self.tables,self.c_row,exp)
+    elif isinstance(exp,sqparse2.AsterX):
+      raise NotImplementedError('nix and c_row')
+      return sum(self.c_row,[]) # todo doc: how does this get disassembled by caller?
     elif isinstance(exp,sqparse2.ArrayLit): return map(self.eval,exp.vals)
     elif isinstance(exp,(sqparse2.Literal,sqparse2.ArrayLit)): return exp.toliteral()
     elif isinstance(exp,sqparse2.CommaX):
@@ -313,7 +319,9 @@ class Evaluator:
     elif isinstance(exp,sqparse2.CallX): return self.eval_callx(exp)
     elif isinstance(exp,sqparse2.SelectX):
       raise NotImplementedError('subqueries should have been evaluated earlier') # todo: specific error class
-    elif isinstance(exp,sqparse2.AttrX):return self.nix.rowget(self.tables,self.c_row,exp)
+    elif isinstance(exp,sqparse2.AttrX):
+      raise NotImplementedError('nix and c_row')
+      return self.nix.rowget(self.tables,self.c_row,exp)
     elif isinstance(exp,sqparse2.CaseX):
       for case in exp.cases:
         if self.eval(case.when): return self.eval(case.then)
