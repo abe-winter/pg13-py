@@ -70,6 +70,7 @@ But you **shouldn't** use it for these reasons:
  1. don't expect the software to be complete or reliable
  1. don't expect it to accurately mimic your prod SQL server in all cases
  1. don't expect it to 'just work'
+ 1. you rely on complicated join behavior
 
 SQL is a standard, and many implementations don't replicate the standard exactly. This one also doesn't.
 

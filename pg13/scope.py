@@ -46,6 +46,8 @@ class Scope:
   def resolve_column(self, ref):
     "ref is a NameX or AttrX. return (canonical_table_name, column_name)."
     if isinstance(ref, sqparse2.AttrX):
+      if ref.parent.name not in self:
+        raise ScopeUnkError('unk table or table alias', ref.parent.name)
       return ref.parent.name, ref.attr.name
     elif isinstance(ref, sqparse2.NameX):
       matches = set()

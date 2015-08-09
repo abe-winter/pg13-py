@@ -25,7 +25,7 @@ class Row:
     return self.vals[self.type.index(name)]
 
 SingleTableCond = collections.namedtuple('SingleTableCond', 'table exp')
-CartesianCond = collections.namedtuple('MultiTableCond', 'exp')
+CartesianCond = collections.namedtuple('CartesianCond', 'exp')
 
 def flatten_tree(test, enumerator, exp):
   """test is function(exp) >> bool.
@@ -35,29 +35,33 @@ def flatten_tree(test, enumerator, exp):
   return sum((flatten_tree(test, enumerator, subx) for subx in enumerator(exp)), []) if test(exp) else [exp]
 
 def names_from_exp(exp):
-  "Return all the AttrX and NameX (i.e. variable names) from the expression."
+  "Return a list of AttrX and NameX from the expression."
   def match(exp):
     return isinstance(exp, (sqparse2.NameX, sqparse2.AttrX))
   paths = sqex.sub_slots(exp, match, match=True, recurse_into_matches=False)
   return [exp[path] for path in paths]
 
-def classify_wherex(scope, fromx, wherex):
+def classify_wherex(scope_, fromx, wherex):
   "helper for wherex_to_rowlist. returns [SingleTableCond,...], [CartesianCond,...]"
   exprs = []
   for exp in fromx:
     if isinstance(exp, sqparse2.JoinX):
       # exp.on_stmt
       raise NotImplementedError('join')
-  def test(exp):
+  def test_and(exp):
     return isinstance(exp, sqparse2.BinX) and exp.op.op == 'and'
-  def enumerator(exp):
+  def binx_splitter(exp):
     return [exp.left, exp.right]
-  exprs += flatten_tree(test, enumerator, wherex)
+  exprs += flatten_tree(test_and, binx_splitter, wherex)
+  single_conds = []
+  cartesian_conds = []
   for exp in exprs:
-    names = names_from_exp(exp)
-    # scope. ...
-  print 'exprs', exprs
-  raise NotImplementedError('return single / cart split')
+    tables = zip(*map(scope_.resolve_column, names_from_exp(exp)))[0]
+    if len(tables) > 1:
+      cartesian_conds.append(CartesianCond(exp))
+    else:
+      single_conds.append(SingleTableCond(tables[0], exp))
+  return single_conds, cartesian_conds
 
 def wherex_to_rowlist(scope, fromx, wherex):
   """return a RowList with the rows included from scope by the wherex.
@@ -65,4 +69,5 @@ def wherex_to_rowlist(scope, fromx, wherex):
   When the scope has more than one name in it, the output will be a list of composite row
     (i.e. a row whose field types are themselves RowType).
   """
+  # group SingleTableCond into tables
   raise NotImplementedError

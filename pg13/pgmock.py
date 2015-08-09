@@ -100,6 +100,7 @@ class TablesDict:
       elif isinstance(ex,sqparse2.CommitX): self.trans_commit()
       elif isinstance(ex,sqparse2.RollbackX): self.trans_rollback()
       elif isinstance(ex,sqparse2.DropX):
+        # todo: factor out inheritance logic (for readability)
         if ex.name not in self:
           if ex.ifexists: return
           raise KeyError(ex.name)

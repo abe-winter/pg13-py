@@ -1,6 +1,8 @@
 import pytest
-from pg13 import weval, sqparse2
+from pg13 import weval, sqparse2, scope
 from .test_pgmock import prep
+
+EXP = sqparse2.parse("select * from t1, (select a as alias from t2 where userid=1) as t_sub where a = alias and t1.a = 0")
 
 def test_flatten_tree():
   from pg13.sqparse2 import BinX, NameX, OpX, Literal
@@ -26,7 +28,13 @@ def test_names_from_exp():
   ]
 
 def test_classify_wherex():
-  raise NotImplementedError
+  # def classify_wherex(scope_, fromx, wherex):
+  tables, run = prep('create table t1 (a int, b text)')
+  run('create table t2 (a int, b text)')
+  scope_ = scope.Scope.from_fromx(tables, EXP.tables)
+  (single,), (cart,) = weval.classify_wherex(scope_, EXP.tables, EXP.where)
+  assert isinstance(single, weval.SingleTableCond) and single.table == 't1' and isinstance(single.exp, sqparse2.BinX)
+  assert isinstance(cart, weval.CartesianCond) and isinstance(cart.exp, sqparse2.BinX)
 
 def test_wherex_to_rowlist():
   raise NotImplementedError
