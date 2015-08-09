@@ -1,6 +1,6 @@
 "misc whatever"
 
-import time,os,collections,sys,functools
+import time,os,collections,sys,functools,itertools
 
 def utcnow(): return int(time.time())
 
@@ -13,6 +13,17 @@ def tbfuncs(frames):
   'this takes the frames array returned by tbframes'
   return ['%s:%s:%s'%(os.path.split(f.f_code.co_filename)[-1],f.f_code.co_name,f.f_lineno) for f in frames]
 def trace(): return tbfuncs(tbframes(sys.exc_info()[2]))
+
+def key_from_pair((k, v)):
+  "helper for multimap"
+  return k
+
+def multimap(kv_pairs):
+  # note: sort is on just key, not k + v, because sorting on both would require sortable value type
+  return {
+    key: [v for _,v in pairs]
+    for key, pairs in itertools.groupby(sorted(kv_pairs, key=key_from_pair), key_from_pair)
+  }
 
 # warning: EnvBundle is too specific to the applications that spawned pg13. ok to release to OSS, but make a more general way to pass stuff around.
 EnvBundle=collections.namedtuple('EnvBundle','pool redis sesh userid chanid apicon') # environment bundle; convenient capsule for passing this stuff around
