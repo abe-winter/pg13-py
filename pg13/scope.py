@@ -24,26 +24,20 @@ class SyntheticTable:
 
 class Scope:
   "bundle for all the tables that are going to be used in a query, and their aliases"
-  def __init__(self, expression, tables, parent=None):
-    self.tables, self.expression, self.parent = tables, expression, parent
-    self.aliases = {} # names that map to other names
-    self.objects = {} # names that map to objects -- I think this is always SyntheticTable
+  def __init__(self, expression):
+    self.expression = expression
+    self.names = {}
 
   def __contains__(self, name):
-    return (name in self.tables) or (name in self.aliases) or (name in self.objects)
+    return name in self.names
 
-  def add_alias(self, alias, target):
-    if alias in self:
+  def add(self, name, target):
+    "target should be a Table or SyntheticTable"
+    # todo: I'm not checking types because of dep structure; move Table class out of pgmock so this is easier to get right
+    if name in self:
       # note: this is critical for avoiding cycles
-      raise ScopeCollisionError('scope already has', alias)
-    # note: we don't check that target exists
-    raise NotImplementedError
-
-  def add_object(self, alias, object):
-    if alias in self:
-      # note: this is critical for avoiding cycles
-      raise ScopeCollisionError('scope already has', alias)
-    self.objects[alias] = object
+      raise ScopeCollisionError('scope already has', name)
+    self.names[name] = target
 
   def get_table(self, name):
     raise NotImplementedError
@@ -51,18 +45,19 @@ class Scope:
   def resolve_column(self, ref):
     "ref is a NameX or AttrX. return (canonical_table_name, column_name)."
     if isinstance(ref, sqparse2.AttrX):
-      raise NotImplementedError
+      return ref.parent.name, ref.attr.name
     elif isinstance(ref, sqparse2.NameX):
       matches = set()
-      for key, val in self.objects.items():
-        if not isinstance(val, SyntheticTable):
-          raise TypeError('expected SyntheticTable', type(val), val)
-        if ref.name in val.columns(self):
-          matches.add(key)
-      for key, table in self.tables.items():
-        try: table.get_column(ref.name)
-        except: pass
-        else: matches.add(key)
+      for name, target in self.names.items():
+        if isinstance(target, SyntheticTable):
+          if ref.name in target.columns(self):
+            matches.add(name)
+        elif target.__class__.__name__ == 'Table': # todo: move Table class, use isinstance here
+          try: target.get_column(ref.name)
+          except KeyError: pass
+          else: matches.add(name)
+        else:
+          raise TypeError('expected SyntheticTable', type(target), target)
       if not matches: raise ScopeUnkError(ref)
       elif len(matches) > 1: raise ScopeCollisionError(matches, ref)
       else: return list(matches)[0], ref.name
@@ -78,17 +73,16 @@ class Scope:
       3. AliasX(name as name)
     """
     if ctes: raise NotImplementedError # note: I don't think any other part of the program supports CTEs yet either
-    scope = class_(fromx, tables)
+    scope_ = class_(fromx)
     for exp in fromx:
       if isinstance(exp, basestring):
-        print 'warning: I should be adding named tables instead of uatomatically reading from scope.tables. scope.tables might not be necessary'
-        pass
-      elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, basestring):
-        raise NotImplementedError
+        scope_.add(exp, tables[exp])
+      elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, sqparse2.NameX):
+        scope_.add(exp.alias, tables[exp.name.name])
       elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, sqparse2.SelectX):
-        scope.add_object(exp.alias, SyntheticTable(exp.name))
+        scope_.add(exp.alias, SyntheticTable(exp.name))
       elif isinstance(exp, sqparse2.JoinX):
         raise NotImplementedError('todo: join')
       else:
         raise TypeError('bad fromx type', type(exp), exp)
-    return scope
+    return scope_
