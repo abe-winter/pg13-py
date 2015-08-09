@@ -181,6 +181,7 @@ def decompose_select(selectx):
 def eval_where(where_list,composite_row,nix,tables_dict):
   "join-friendly whereclause evaluator. composite_row is a list or tuple of row lists. where_list is the thing from decompose_select."
   # todo: do I need to use 3vl instead of all() to merge where_list?
+  raise NotImplementedError('port old Evaluator')
   evaluator = Evaluator(composite_row,nix,tables_dict)
   return all(evaluator.eval(w) for w in where_list)
 
@@ -219,6 +220,7 @@ def run_select(ex,tables,table_ctor):
     tables.update(nix.aonly)
     composite_rows = [c_row for c_row in itertools.product(*(tables[t].rows for t in nix.table_order)) if eval_where(where,c_row,nix,tables)]
     if ex.order: # note: order comes before limit / offset
+      raise NotImplementedError('port old Evaluator')
       composite_rows.sort(key=lambda c_row:Evaluator(c_row,nix,tables).eval(ex.order))
     if ex.limit or ex.offset: # pragma: no cover
       print ex.limit, ex.offset
@@ -231,6 +233,7 @@ def run_select(ex,tables,table_ctor):
       if badcols: raise ValueError('illegal_cols_in_group',badcols)
       if contains(ex.cols,returns_rows): raise NotImplementedError('todo: unnest with grouping')
       groups = collections.OrderedDict()
+      raise NotImplementedError('port old Evaluator')
       for row in composite_rows:
         k = Evaluator(row,nix,tables).eval(ex.group)
         if k not in groups: groups[k] = []
@@ -240,8 +243,10 @@ def run_select(ex,tables,table_ctor):
       if not all(contains(col,consumes_rows) for col in ex.cols.children):
         # todo: this isn't good enough. what about nesting cases like max(min(whatever))
         raise sqparse2.SQLSyntaxError('not_all_aggregate') # is this the way real PG works? aim at giving PG error codes
+      raise NotImplementedError('port old Evaluator')
       return Evaluator(composite_rows,nix,tables).eval(ex.cols)
     else:
+      raise NotImplementedError('port old Evaluator')
       ret = [Evaluator(r,nix,tables).eval(ex.cols) for r in composite_rows]
       return sum((unnest_helper(ex.cols,row) for row in ret),[]) if contains(ex.cols,returns_rows) else ret
 
@@ -251,12 +256,9 @@ def starlike(x):
   return isinstance(x,sqparse2.AsterX) or isinstance(x,sqparse2.AttrX) and isinstance(x.attr,sqparse2.AsterX)
 
 class Evaluator2:
-  # todo: use intermediate types: Scalar, Row, RowList, Table.
-  #   Row and Table might be able to bundle into RowList. RowList should know the type and names of its columns.
-  #   This will solve a lot of cardinality confusion.
   def __init__(self, row, scope_):
     "row is a weval.Row, scope_ a scope.Scope"
-    self.row, self.scope = row, scope
+    self.row, self.scope = row, scope_
   
   def eval_agg_call(self, exp):
     "helper for eval_callx; evaluator for CallX that consume multiple rows"
@@ -300,10 +302,7 @@ class Evaluator2:
     # todo: this needs an AST-assert that all BaseX descendants are being handled
     if isinstance(exp,sqparse2.BinX): return evalop(exp.op.op, *map(self.eval, (exp.left, exp.right)))
     elif isinstance(exp,sqparse2.UnX): return self.eval_unx(exp)
-    elif isinstance(exp,sqparse2.NameX):
-      #
-      raise NotImplementedError('nix and c_row')
-      return self.nix.rowget(self.tables,self.c_row,exp)
+    elif isinstance(exp,sqparse2.NameX): return self.row[self.scope.resolve_column(exp)]
     elif isinstance(exp,sqparse2.AsterX):
       raise NotImplementedError('nix and c_row')
       return sum(self.c_row,[]) # todo doc: how does this get disassembled by caller?

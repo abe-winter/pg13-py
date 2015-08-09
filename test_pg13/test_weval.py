@@ -40,10 +40,16 @@ def test_classify_wherex():
 
 def test_wherex_to_rowlist():
   tables, run = prep('create table t1 (a int, b text)')
+  tables['t1'].rows = [[1,'one'], [2,'two'], [3, 'three']]
   exp = sqparse2.parse('select * from t1')
-  print weval.wherex_to_rowlist(
+  assert 3 == len(weval.wherex_to_rowlist(
     scope.Scope.from_fromx(tables, exp.tables),
     exp.tables,
     exp.where
-  )
-  raise NotImplementedError
+  ))
+  exp2 = sqparse2.parse('select * from t1 where a < 3')
+  assert 2 == len(weval.wherex_to_rowlist(
+    scope.Scope.from_fromx(tables, exp.tables),
+    exp2.tables,
+    exp2.where
+  ))

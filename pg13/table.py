@@ -34,7 +34,9 @@ class Row:
     )
 
   def index(self, column_name):
-    [f.name for f in self.table.fields].index(column_name)
+    if self.source.table is Composite:
+      raise TypeError("can't index into composite row")
+    return [f.name for f in self.source.table.fields].index(column_name)
 
   def __getitem__(self, (table_name, column_name)):
     actual_row = self.get_table(table_name)
@@ -90,8 +92,7 @@ class Table:
   
   def to_rowlist(self):
     "return [Row, ...] for intermediate computations"
-    rowtype = RowType([(colx.name, colx) for colx in self.fields])
-    return [Row(RowSource(self, i), rowtype, row) for i, row in enumerate(self.rows)]
+    return [Row(RowSource(self, i), row) for i, row in enumerate(self.rows)]
 
   def get_column(self,name):
     col = next((f for f in self.fields if f.name==name), None)
@@ -127,7 +128,7 @@ class Table:
     row=self.apply_defaults(expanded_row, tables_dict)
     # todo: check ColX.not_null here. figure out what to do about null pkey field
     for i,elt in enumerate(row):
-      # todo(awinter): think about dependency model if one field relies on another. (what do I mean? 'insert into t1 (a,b) values (10,a+5)'? is that valid?)
+      raise NotImplementedError('port old Evaluator')
       row[i]=sqex.Evaluator(row,nix,tables_dict).eval(elt)
     if self.pkey_get(row): raise pg.DupeInsert(row)
     self.rows.append(row)
@@ -136,6 +137,7 @@ class Table:
   def match(self,where,tables,nix):
     raise NotImplementedError("this can't import sqex")
     raise NotImplementedError('is this used?')
+    raise NotImplementedError('port old Evaluator')
     return [r for r in self.rows if not where or threevl.ThreeVL.test(sqex.Evaluator((r,),nix,tables).eval(where))]
   
   def lookup(self,name):
@@ -151,6 +153,7 @@ class Table:
     nix.resolve_aonly(tables_dict,Table)
     if not all(isinstance(x,sqparse2.AssignX) for x in setx): raise TypeError('not_xassign',map(type,setx))
     match_rows=self.match(where,tables_dict,nix) if where else self.rows
+    raise NotImplementedError('port old Evaluator')
     for row in match_rows:
       for x in setx: row[self.lookup(x.col).index]=sqex.Evaluator((row,),nix,tables_dict).eval(x.expr)
     if returning: return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
@@ -164,4 +167,5 @@ class Table:
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
     # todo(doc): why 'not' below?
+    raise NotImplementedError('port old Evaluator')
     self.rows=[r for r in self.rows if not sqex.Evaluator((r,),nix,tables_dict).eval(where)]

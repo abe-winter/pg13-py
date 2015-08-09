@@ -50,8 +50,16 @@ def table_to_rowlist(table_):
   else:
     raise TypeError('bad type for table', type(table), table)
 
-def filter_rowlist(rowlist, conds):
-  raise NotImplementedError
+def conds_on_row(scope_, row, conds):
+  evaluator = sqex.Evaluator2(row, scope_)
+  return all(evaluator.eval(exp) for exp in conds)
+
+def filter_rowlist(scope_, rowlist, conds):
+  # todo: an analyzer can put the cheapest cond first
+  return [
+    row for row in rowlist
+    if conds_on_row(scope_, row, conds)
+  ]
 
 def wherex_to_rowlist(scope_, fromx, wherex):
   """return a rowlist with the rows included from scope by the fromx and wherex.
@@ -59,8 +67,11 @@ def wherex_to_rowlist(scope_, fromx, wherex):
     (i.e. a row whose field types are themselves RowType).
   """
   single, multi = classify_wherex(scope_, fromx, wherex)
+  # note: we filter single before multi for performance -- the product of the tables is smaller if we can reduce the inputs
   single_rowlists = {
-    tablename: filter_rowlist(table_to_rowlist(scope_[tablename]), conds)
+    tablename: filter_rowlist(scope_, table_to_rowlist(scope_[tablename]), conds)
     for tablename, conds in misc.multimap(single).items() # i.e. {cond.table:[cond.exp, ...]}
   }
-  raise NotImplementedError
+  if len(single_rowlists) == 1 and not multi:
+    return single_rowlists.values()[0]
+  raise NotImplementedError('build composite_rows, apply composite conditions, return filtered composite_rows')
