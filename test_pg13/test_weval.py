@@ -38,6 +38,7 @@ def test_classify_wherex():
   assert isinstance(single, weval.SingleTableCond) and single.table == 't1' and isinstance(single.exp, sqparse2.BinX)
   assert isinstance(cart, weval.CartesianCond) and isinstance(cart.exp, sqparse2.BinX)
 
+@pytest.mark.xfail
 def test_wherex_to_rowlist():
   tables, run = prep('create table t1 (a int, b text)')
   exp = sqparse2.parse('select * from t1')
