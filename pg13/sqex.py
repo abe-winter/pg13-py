@@ -256,9 +256,6 @@ class Evaluator:
   #   This will solve a lot of cardinality confusion.
   def __init__(self, c_row, nix, tables):
     "c_row is a composite row, i.e. a list/tuple of rows from all the query's tables, ordered by nix.table_order"
-    if not isinstance(nix, NameIndexer):
-      # todo: remove this once Table meths are all up-to-date
-      raise NotImplementedError
     self.c_row, self.nix, self.tables = c_row, nix, tables
   
   def eval_agg_call(self, exp):
@@ -299,15 +296,11 @@ class Evaluator:
 
   def eval(self, exp):
     "main dispatch for expression evaluation"
-    if isinstance(exp,sqparse2.BinX):
-      l,r=map(self.eval,(exp.left,exp.right))
-      return evalop(exp.op.op,l,r)
-    elif isinstance(exp,sqparse2.UnX):
-      return self.eval_unx(exp)
+    # todo: this needs an AST-assert that all BaseX descendants are being handled
+    if isinstance(exp,sqparse2.BinX): return evalop(exp.op.op, *map(self.eval, (exp.left, exp.right)))
+    elif isinstance(exp,sqparse2.UnX): return self.eval_unx(exp)
     elif isinstance(exp,sqparse2.NameX): return self.nix.rowget(self.tables,self.c_row,exp)
-    elif isinstance(exp,sqparse2.AsterX):
-      # todo doc: how does this get disassembled by caller?
-      return sum(self.c_row,[])
+    elif isinstance(exp,sqparse2.AsterX): return sum(self.c_row,[]) # todo doc: how does this get disassembled by caller?
     elif isinstance(exp,sqparse2.ArrayLit): return map(self.eval,exp.vals)
     elif isinstance(exp,(sqparse2.Literal,sqparse2.ArrayLit)): return exp.toliteral()
     elif isinstance(exp,sqparse2.CommaX):
@@ -317,8 +310,7 @@ class Evaluator:
       for child in exp.children:
         (ret.extend if starlike(child) else ret.append)(self.eval(child))
       return ret
-    elif isinstance(exp,sqparse2.CallX):
-      return self.eval_callx(exp)
+    elif isinstance(exp,sqparse2.CallX): return self.eval_callx(exp)
     elif isinstance(exp,sqparse2.SelectX):
       raise NotImplementedError('subqueries should have been evaluated earlier') # todo: specific error class
     elif isinstance(exp,sqparse2.AttrX):return self.nix.rowget(self.tables,self.c_row,exp)
@@ -342,7 +334,7 @@ class Evaluator:
       print "warning: not sure what I'm doing here with cardinality tweak on CommaX"
       return [ret] if isinstance(exp.expr,(sqparse2.CommaX,sqparse2.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
     elif isinstance(exp,sqparse2.AliasX): return self.eval(exp.name) # todo: rename AliasX 'name' to 'expr'
-    else: raise NotImplementedError(type(exp),exp) # pragma: no cover
+    else: raise NotImplementedError(type(exp), exp) # pragma: no cover
 
 def depth_first_sub(expr,values):
   "replace SubLit with literals in expr. (expr is mutated)."
