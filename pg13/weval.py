@@ -1,6 +1,6 @@
 "weval -- where-clause evaluation"
 
-import collections
+import collections, itertools
 from . import sqparse2, sqex, misc, scope, table, treepath
 
 SingleTableCond = collections.namedtuple('SingleTableCond', 'table exp')
@@ -52,7 +52,10 @@ def table_to_rowlist(table_):
 
 def conds_on_row(scope_, row, conds):
   evaluator = sqex.Evaluator2(row, scope_)
-  return all(evaluator.eval(exp) for exp in conds)
+  # note below: we exclude string conds because they're just table names from fromx
+  real_conds = [exp for exp in conds if not isinstance(exp, basestring)]
+  # note: all([]) is True, which is the desired result here. empties are introduced by filtering out strings above.
+  return all(evaluator.eval(exp) for exp in real_conds)
 
 def filter_rowlist(scope_, rowlist, conds):
   # todo: an analyzer can put the cheapest cond first
@@ -60,6 +63,11 @@ def filter_rowlist(scope_, rowlist, conds):
     row for row in rowlist
     if conds_on_row(scope_, row, conds)
   ]
+
+def make_composite_rows(rowlists):
+  "take list of lists of Row. return generator of Row with source=Composite by creating the product of the lists"
+  for i, rows in enumerate(itertools.product(*rowlists)):
+    yield table.Row(table.RowSource(table.Composite, i), rows)
 
 def wherex_to_rowlist(scope_, fromx, wherex):
   """return a rowlist with the rows included from scope by the fromx and wherex.
@@ -74,4 +82,9 @@ def wherex_to_rowlist(scope_, fromx, wherex):
   }
   if len(single_rowlists) == 1 and not multi:
     return single_rowlists.values()[0]
-  raise NotImplementedError('build composite_rows, apply composite conditions, return filtered composite_rows')
+  else:
+    return filter_rowlist(
+      scope_,
+      make_composite_rows(single_rowlists.values()),
+      [cond.exp for cond in multi]
+    )

@@ -40,7 +40,9 @@ class Row:
 
   def __getitem__(self, (table_name, column_name)):
     actual_row = self.get_table(table_name)
-    return self.get_table(table_name).vals[self.index(column_name)]
+    return actual_row.vals[actual_row.index(column_name)]
+
+  def __repr__(self): return '<Row %s:%i %r>' % (self.source.name or 'composite', self.source.index, self.vals)
 
 # errors
 class PgExecError(sqparse2.PgMockError): "base class for errors during table execution"

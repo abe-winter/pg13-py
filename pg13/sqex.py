@@ -318,9 +318,7 @@ class Evaluator2:
     elif isinstance(exp,sqparse2.CallX): return self.eval_callx(exp)
     elif isinstance(exp,sqparse2.SelectX):
       raise NotImplementedError('subqueries should have been evaluated earlier') # todo: specific error class
-    elif isinstance(exp,sqparse2.AttrX):
-      raise NotImplementedError('nix and c_row')
-      return self.nix.rowget(self.tables,self.c_row,exp)
+    elif isinstance(exp,sqparse2.AttrX): return self.row[exp.parent.name, exp.attr.name]
     elif isinstance(exp,sqparse2.CaseX):
       for case in exp.cases:
         if self.eval(case.when): return self.eval(case.then)
