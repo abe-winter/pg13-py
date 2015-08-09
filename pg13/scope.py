@@ -1,6 +1,6 @@
 "scope -- storage class for managing an expression's tables and aliases"
 
-from . import sqparse2
+from . import sqparse2, table
 
 class ScopeError(StandardError): "base"
 class ScopeCollisionError(ScopeError): pass
@@ -33,7 +33,8 @@ class Scope:
 
   def add(self, name, target):
     "target should be a Table or SyntheticTable"
-    # todo: I'm not checking types because of dep structure; move Table class out of pgmock so this is easier to get right
+    if not isinstance(target, (table.Table, SyntheticTable)):
+      raise TypeError(type(target), target)
     if name in self:
       # note: this is critical for avoiding cycles
       raise ScopeCollisionError('scope already has', name)
@@ -52,7 +53,7 @@ class Scope:
         if isinstance(target, SyntheticTable):
           if ref.name in target.columns(self):
             matches.add(name)
-        elif target.__class__.__name__ == 'Table': # todo: move Table class, use isinstance here
+        elif isinstance(target, table.Table):
           try: target.get_column(ref.name)
           except KeyError: pass
           else: matches.add(name)

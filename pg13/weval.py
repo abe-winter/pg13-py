@@ -55,7 +55,7 @@ def classify_wherex(scope, fromx, wherex):
   exprs += flatten_tree(test, enumerator, wherex)
   for exp in exprs:
     names = names_from_exp(exp)
-    scope. ...
+    # scope. ...
   print 'exprs', exprs
   raise NotImplementedError('return single / cart split')
 

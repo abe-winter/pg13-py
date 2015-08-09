@@ -1,5 +1,5 @@
 import pytest
-from pg13 import pgmock,sqparse2,pg,sqex,pgmock_dbapi2
+from pg13 import pgmock, sqparse2, pg, sqex, pgmock_dbapi2, table
 
 def prep(create_stmt):
   "helper for table setup"
@@ -215,7 +215,7 @@ def test_table_as():
 
 def test_join_attr():
   tables,runsql = setup_join_test()
-  with pytest.raises(pgmock.BadFieldName): runsql('select t1.* from t1 join t2 on t1.a=t2.a') # todo: this deserves its own test
+  with pytest.raises(table.BadFieldName): runsql('select t1.* from t1 join t2 on t1.a=t2.a') # todo: this deserves its own test
   assert [[1,2]]==runsql('select t1.* from t1 join t2 on t1.a=t2.c')
 
 # todo: test_name_indexer should be in test_sqex except for reliance on tables_dict. move Table to its own file.
@@ -226,7 +226,7 @@ def test_name_indexer():
   assert ni.table_order==['t1','t2']
   tables,runsql=prep('create table t1 (a int,b int)')
   runsql('create table t2 (a int,c int)')
-  ni.resolve_aonly(tables,pgmock.Table)
+  ni.resolve_aonly(tables,table.Table)
   assert (0,1)==ni.index_tuple(tables,'b',False)
   assert (0,1)==ni.index_tuple(tables,sqparse2.NameX('b'),False) # make sure NameX handling works
   assert (1,1)==ni.index_tuple(tables,'c',False)
@@ -409,7 +409,7 @@ def test_drop_inherit():
   with ppm.withcur() as cursor:
     cursor.execute('create table t1 (a int)')
     cursor.execute('create table t1a inherits (t1)')
-    with pytest.raises(pgmock.IntegrityError) as e: # drop parent fails without cascade
+    with pytest.raises(table.IntegrityError) as e: # drop parent fails without cascade
       cursor.execute('drop table t1')
     assert 't1a' in ppm.tables and 't1' in ppm.tables
     cursor.execute('drop table t1 cascade') # drop succeeds with cascade
