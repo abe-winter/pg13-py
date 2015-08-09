@@ -42,17 +42,18 @@ def toliteral(probably_literal):
   if probably_literal==sqparse2.NameX('null'): return None
   return probably_literal.toliteral() if hasattr(probably_literal,'toliteral') else probably_literal
 
-
 class Table:
   def __init__(self,name,fields,pkey):
     self.name,self.fields,self.pkey=name,fields,(pkey or [])
     self.rows=[]
     self.child_tables=[] # tables that inherit from this one
     self.parent_table=None # table this inherits from
+  
   def get_column(self,name):
     col = next((f for f in self.fields if f.name==name), None)
     if col is None: raise KeyError(name)
     return col
+  
   def pkey_get(self,row):
     if len(self.pkey):
       indexes=[i for i,f in enumerate(self.fields) if f.name in self.pkey]
@@ -62,15 +63,18 @@ class Table:
     else:
       # warning: is this right? it's saying that if not given, the pkey is the whole row. test dupe inserts on a real DB.
       return row if row in self.rows else None
+  
   def fix_rowtypes(self,row):
     if len(row)!=len(self.fields): raise ValueError
     return map(toliteral,row)
+  
   def apply_defaults(self, row, tables_dict):
     "apply defaults to missing cols for a row that's being inserted"
     return [
       emergency_cast(colx, field_default(colx, self.name, tables_dict) if v is Missing else v)
       for colx,v in zip(self.fields,row)
     ]
+  
   def insert(self,fields,values,returning,tables_dict):
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
@@ -83,12 +87,15 @@ class Table:
     if self.pkey_get(row): raise pg.DupeInsert(row)
     self.rows.append(row)
     if returning: return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
+  
   def match(self,where,tables,nix):
     return [r for r in self.rows if not where or threevl.ThreeVL.test(sqex.Evaluator((r,),nix,tables).eval(where))]
+  
   def lookup(self,name):
     if isinstance(name,sqparse2.NameX): name = name.name # this is horrible; be consistent
     try: return FieldLookup(*next((i,f) for i,f in enumerate(self.fields) if f.name==name))
     except StopIteration: raise BadFieldName(name)
+  
   def update(self,setx,where,returning,tables_dict):
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
@@ -97,6 +104,7 @@ class Table:
     for row in match_rows:
       for x in setx: row[self.lookup(x.col).index]=sqex.Evaluator((row,),nix,tables_dict).eval(x.expr)
     if returning: return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
+  
   def delete(self,where,tables_dict):
     # todo: what's the deal with nested selects in delete. does it get evaluated once to a scalar before running the delete?
     # todo: this will crash with empty where clause
