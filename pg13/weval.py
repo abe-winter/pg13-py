@@ -1,10 +1,10 @@
 "weval -- where-clause evaluation"
 
 import collections
-from . import sqparse2, sqex
+from . import sqparse2, sqex, misc, scope, table
 
 class RowType(list):
-  "ctor takes list of (name, type)"
+  "ctor takes list of (name, type). name is string, type is a sqparse2.ColX."
   def index(self, name):
     # todo: when a name isn't found, this should look in any children that have type=RowType
     return zip(*self)[0].index(name)
@@ -12,6 +12,7 @@ class RowType(list):
 class RowSource:
   "for things like update and delete we need to know where a row came from. this stores that."
   def __init__(self, table, index):
+    "table is a table.Table or a scope.SyntheticTable"
     self.table, self.index = table, index
 
 class Row:
@@ -46,28 +47,52 @@ def classify_wherex(scope_, fromx, wherex):
   exprs = []
   for exp in fromx:
     if isinstance(exp, sqparse2.JoinX):
-      # exp.on_stmt
+      # todo: probably just add exp.on_stmt as a CartesianCond. don't write this until tests are ready.
+      # todo: do join-on clauses get special scoping w.r.t. column names? check spec.
       raise NotImplementedError('join')
+    elif isinstance(exp, basestring):
+      exprs.append(exp)
   def test_and(exp):
     return isinstance(exp, sqparse2.BinX) and exp.op.op == 'and'
   def binx_splitter(exp):
     return [exp.left, exp.right]
-  exprs += flatten_tree(test_and, binx_splitter, wherex)
+  exprs += flatten_tree(test_and, binx_splitter, wherex) if wherex else [] # wherex is None if not given
   single_conds = []
   cartesian_conds = []
   for exp in exprs:
-    tables = zip(*map(scope_.resolve_column, names_from_exp(exp)))[0]
-    if len(tables) > 1:
-      cartesian_conds.append(CartesianCond(exp))
+    if isinstance(exp, basestring):
+      # note: bare table names need their own case because they don't work with resolve_column
+      single_conds.append(SingleTableCond(exp, exp))
     else:
-      single_conds.append(SingleTableCond(tables[0], exp))
+      tables = zip(*map(scope_.resolve_column, names_from_exp(exp)))[0]
+      if len(tables) > 1:
+        cartesian_conds.append(CartesianCond(exp))
+      else:
+        single_conds.append(SingleTableCond(tables[0], exp))
   return single_conds, cartesian_conds
 
-def wherex_to_rowlist(scope, fromx, wherex):
-  """return a RowList with the rows included from scope by the wherex.
-  fromx is used to determine join conditions.
+def table_to_rowlist(table_, conds):
+  "helper for wherex_to_rowlist. (table.Table, [exp, ...]) -> [Row, ...]"
+  if isinstance(table_, scope.SyntheticTable):
+    raise NotImplementedError('todo: synthetic tables to Row[]')
+  elif isinstance(table_, table.Table):
+    rowtype = RowType([(colx.name, colx) for colx in table_.fields])
+    rows = [
+      Row(RowSource(table_, i), rowtype, row)
+      for i, row in enumerate(table_.rows)
+    ]
+    raise NotImplementedError # how does filtering work?
+  else:
+    raise TypeError('bad type for table', type(table), table)
+
+def wherex_to_rowlist(scope_, fromx, wherex):
+  """return a RowList with the rows included from scope by the fromx and wherex.
   When the scope has more than one name in it, the output will be a list of composite row
     (i.e. a row whose field types are themselves RowType).
   """
-  # group SingleTableCond into tables
+  single, multi = classify_wherex(scope_, fromx, wherex)
+  single_rowlists = {
+    tablename: table_to_rowlist(scope_[tablename], conds)
+    for tablename, conds in misc.multimap(single).items() # i.e. {cond.table:[cond.exp, ...]}
+  }
   raise NotImplementedError

@@ -44,6 +44,7 @@ def toliteral(probably_literal):
 
 class Table:
   def __init__(self,name,fields,pkey):
+    "fields is a list of sqparse2.ColX"
     self.name,self.fields,self.pkey=name,fields,(pkey or [])
     self.rows=[]
     self.child_tables=[] # tables that inherit from this one

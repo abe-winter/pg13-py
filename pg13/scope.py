@@ -40,8 +40,8 @@ class Scope:
       raise ScopeCollisionError('scope already has', name)
     self.names[name] = target
 
-  def get_table(self, name):
-    raise NotImplementedError
+  def __getitem__(self, table_name):
+    return self.names[table_name]
 
   def resolve_column(self, ref):
     "ref is a NameX or AttrX. return (canonical_table_name, column_name)."

@@ -7,6 +7,7 @@ from . import pg,threevl,sqparse2,sqex,table
 
 class TablesDict:
   "dictionary wrapper that knows about transactions"
+  # todo: bite the bullet and rename this Database
   def __init__(self):
     self.lock = threading.Lock()
     self.levels = [{}]

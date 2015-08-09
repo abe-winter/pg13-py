@@ -37,4 +37,11 @@ def test_classify_wherex():
   assert isinstance(cart, weval.CartesianCond) and isinstance(cart.exp, sqparse2.BinX)
 
 def test_wherex_to_rowlist():
+  tables, run = prep('create table t1 (a int, b text)')
+  exp = sqparse2.parse('select * from t1')
+  print weval.wherex_to_rowlist(
+    scope.Scope.from_fromx(tables, exp.tables),
+    exp.tables,
+    exp.where
+  )
   raise NotImplementedError
