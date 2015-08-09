@@ -261,17 +261,49 @@ class Evaluator:
       raise NotImplementedError
     self.c_row, self.nix, self.tables = c_row, nix, tables
   
+  def eval_agg_call(self, exp):
+    "helper for eval_callx; evaluator for CallX that consume multiple rows"
+    if not isinstance(self.c_row,list): raise TypeError('aggregate function expected a list of rows')
+    if len(exp.args.children)!=1: raise ValueError('aggregate function expected a single value',exp.args)
+    arg,=exp.args.children # intentional: error if len!=1
+    vals=[Evaluator(c_r,self.nix,self.tables).eval(arg) for c_r in self.c_row]
+    if not vals: return None
+    if exp.f=='min': return min(vals)
+    elif exp.f=='max': return max(vals)
+    elif exp.f=='count': return len(vals)
+    else: raise NotImplementedError('unk_func',exp.f) # pragma: no cover
+  
+  def eval_nonagg_call(self, exp):
+    "helper for eval_callx; evaluator for CallX that consume a single value"
+    # todo: get more concrete about argument counts
+    args=self.eval(exp.args)
+    if exp.f=='coalesce':
+      a,b=args # todo: does coalesce take more than 2 args?
+      return b if a is None else a
+    elif exp.f=='unnest': return self.eval(exp.args)[0] # note: run_select does some work in this case too
+    elif exp.f in ('to_tsquery','to_tsvector'): return set(self.eval(exp.args.children[0]).split())
+    else: raise NotImplementedError('unk_function',exp.f) # pragma: no cover
+
+  def eval_callx(self, exp):
+    "dispatch for CallX"
+    # below: this isn't contains(exp,consumes_row) -- it's just checking the current expression
+    return (self.eval_agg_call if consumes_rows(exp) else self.eval_nonagg_call)(exp)
+
+  def eval_unx(self, exp):
+    "unary expressions"
+    inner=self.eval(exp.val)
+    if exp.op.op=='+': return inner
+    elif exp.op.op=='-': return -inner
+    elif exp.op.op=='not': return threevl.ThreeVL.nein(inner)
+    else: raise NotImplementedError('unk_op',exp.op) # pragma: no cover
+
   def eval(self, exp):
-    ""
+    "main dispatch for expression evaluation"
     if isinstance(exp,sqparse2.BinX):
       l,r=map(self.eval,(exp.left,exp.right))
       return evalop(exp.op.op,l,r)
     elif isinstance(exp,sqparse2.UnX):
-      inner=self.eval(exp.val)
-      if exp.op.op=='+': return inner
-      elif exp.op.op=='-': return -inner
-      elif exp.op.op=='not': return threevl.ThreeVL.nein(inner)
-      else: raise NotImplementedError('unk_op',exp.op) # pragma: no cover
+      return self.eval_unx(exp)
     elif isinstance(exp,sqparse2.NameX): return self.nix.rowget(self.tables,self.c_row,exp)
     elif isinstance(exp,sqparse2.AsterX):
       # todo doc: how does this get disassembled by caller?
@@ -280,30 +312,13 @@ class Evaluator:
     elif isinstance(exp,(sqparse2.Literal,sqparse2.ArrayLit)): return exp.toliteral()
     elif isinstance(exp,sqparse2.CommaX):
       # todo: think about getting rid of CommaX everywhere; it complicates syntax tree navigation.
+      #   a lot of things that are CommaX now should become weval.Row.
       ret = []
       for child in exp.children:
         (ret.extend if starlike(child) else ret.append)(self.eval(child))
       return ret
     elif isinstance(exp,sqparse2.CallX):
-      if consumes_rows(exp): # this isn't contains(exp,consumes_row) -- it's just checking the current expression
-        if not isinstance(self.c_row,list): raise TypeError('aggregate function expected a list of rows')
-        if len(exp.args.children)!=1: raise ValueError('aggregate function expected a single value',exp.args)
-        arg,=exp.args.children # intentional: error if len!=1
-        vals=[Evaluator(c_r,self.nix,self.tables).eval(arg) for c_r in self.c_row]
-        if not vals: return None
-        if exp.f=='min': return min(vals)
-        elif exp.f=='max': return max(vals)
-        elif exp.f=='count': return len(vals)
-        else: raise NotImplementedError('unk_func',exp.f) # pragma: no cover
-      else:
-        # todo: get more concrete about argument counts
-        args=self.eval(exp.args)
-        if exp.f=='coalesce':
-          a,b=args # todo: does coalesce take more than 2 args?
-          return b if a is None else a
-        elif exp.f=='unnest': return self.eval(exp.args)[0] # note: run_select does some work in this case too
-        elif exp.f in ('to_tsquery','to_tsvector'): return set(self.eval(exp.args.children[0]).split())
-        else: raise NotImplementedError('unk_function',exp.f) # pragma: no cover
+      return self.eval_callx(exp)
     elif isinstance(exp,sqparse2.SelectX):
       raise NotImplementedError('subqueries should have been evaluated earlier') # todo: specific error class
     elif isinstance(exp,sqparse2.AttrX):return self.nix.rowget(self.tables,self.c_row,exp)
