@@ -55,13 +55,6 @@ class IntegrityError(PgExecError): pass # careful: pgmock_dbapi also defines thi
 
 class Missing: "for distinguishing missing columns vs passed-in null"
 
-def expand_row(table_fields,fields,values):
-  "helper for insert. turn (field_names, values) into the full-width, properly-ordered row"
-  table_fieldnames=[f.name for f in table_fields]
-  reverse_indexes={table_fieldnames.index(f):i for i,f in enumerate(fields)}
-  indexes=[reverse_indexes.get(i) for i in range(len(table_fields))]
-  return [(Missing if i is None else values[i]) for i in indexes]
-
 def emergency_cast(colx, value):
   """ugly: this is a huge hack. get serious about where this belongs in the architecture.
   For now, most types rely on being fed in as SubbedLiteral.
@@ -89,7 +82,7 @@ def toliteral(probably_literal):
   return probably_literal.toliteral() if hasattr(probably_literal,'toliteral') else probably_literal
 
 class Table:
-  def __init__(self,name,fields,pkey):
+  def __init__(self, name, fields, pkey):
     "fields is a list of sqparse2.ColX"
     self.name,self.fields,self.pkey=name,fields,(pkey or [])
     self.rows=[]
@@ -114,10 +107,18 @@ class Table:
     else:
       # warning: is this right? it's saying that if not given, the pkey is the whole row. test dupe inserts on a real DB.
       return row if row in self.rows else None
-  
-  def fix_rowtypes(self,row):
-    if len(row)!=len(self.fields): raise ValueError
-    return map(toliteral,row)
+
+  def expand_row(self, fields, values):
+    "helper for insert. turn (field_names, values) into the full-width, properly-ordered row"
+    table_fieldnames=[f.name for f in self.fields]
+    reverse_indexes={table_fieldnames.index(f):i for i, f in enumerate(fields)}
+    indexes=[reverse_indexes.get(i) for i in range(len(self.fields))]
+    return [(Missing if i is None else values[i]) for i in indexes]
+
+  def fix_rowtypes(self, row):
+    if len(row)!=len(self.fields):
+      raise ValueError('wrong # of values for table', self.name, self.fields, row)
+    return map(toliteral, row)
   
   def apply_defaults(self, row, tables_dict):
     "apply defaults to missing cols for a row that's being inserted"
@@ -126,13 +127,12 @@ class Table:
       for colx,v in zip(self.fields,row)
     ]
   
-  # ex.cols,ex.values,ex.ret,self)
   def insert(self, fields, values, returning, tables_dict):
     print fields, values, returning
     raise NotImplementedError("this can't import sqex")
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
-    expanded_row=self.fix_rowtypes(expand_row(self.fields,fields,values) if fields else values)
+    expanded_row=self.fix_rowtypes(self.expand_row(fields,values) if fields else values)
     row=self.apply_defaults(expanded_row, tables_dict)
     # todo: check ColX.not_null here. figure out what to do about null pkey field
     for i,elt in enumerate(row):

@@ -41,18 +41,14 @@ def test_classify_wherex():
 def test_planner():
   tables, run = prep('create table t1 (a int)')
   tables['t1'].rows = [[1], [2], [3]]
-  exp = sqparse2.parse('select * from t1')
-  assert 3 == len(planner.Plan.from_query(
-    scope.Scope.from_fromx(tables, exp.tables),
-    exp.tables,
-    exp.where
-  ).run(scope.Scope.from_fromx(tables, exp.tables)))
-  exp = sqparse2.parse('select * from t1 where a < 3')
-  assert 2 == len(planner.Plan.from_query(
-    scope.Scope.from_fromx(tables, exp.tables),
-    exp.tables,
-    exp.where
-  ).run(scope.Scope.from_fromx(tables, exp.tables)))
+  for stmt, length in ('select * from t1', 3), ('select * from t1 where a < 3', 2):
+    exp = sqparse2.parse(stmt)
+    scope_ = scope.Scope.from_fromx(tables, exp.tables)
+    assert length == len(planner.Plan.from_query(
+      scope_,
+      exp.tables,
+      exp.where
+    ).run(scope_))
 
 def test_planner_joins():
   tables, run = prep('create table t1 (a int)')
