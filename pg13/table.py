@@ -126,7 +126,9 @@ class Table:
       for colx,v in zip(self.fields,row)
     ]
   
-  def insert(self,fields,values,returning,tables_dict):
+  # ex.cols,ex.values,ex.ret,self)
+  def insert(self, fields, values, returning, tables_dict):
+    print fields, values, returning
     raise NotImplementedError("this can't import sqex")
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)

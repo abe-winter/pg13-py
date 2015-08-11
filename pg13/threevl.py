@@ -41,5 +41,8 @@ class ThreeVL:
   def compare(operator,a,b):
     "this could be replaced by overloading but I want == to return a bool for 'in' use"
     # todo(awinter): what about nested 3vl like "(a=b)=(c=d)". is that allowed by sql? It will choke here if there's a null involved.
+    if type(a) is not type(b) and None not in (a,b):
+      # todo(test)
+      raise TypeError('type mismatch', type(a), type(b), a, b)
     f=({'=':lambda a,b:a==b,'!=':lambda a,b:a!=b,'>':lambda a,b:a>b,'<':lambda a,b:a<b}[operator])
     return ThreeVL('u') if None in (a,b) else f(a,b)

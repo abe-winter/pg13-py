@@ -1,4 +1,4 @@
-"weval -- where-clause evaluation"
+"planner -- extract predicates and joins from queries"
 
 import collections, itertools
 from . import sqparse2, sqex, misc, scope, table, treepath
@@ -64,26 +64,37 @@ def make_composite_rows(rowlists):
   for i, rows in enumerate(itertools.product(*rowlists)):
     yield table.Row(table.RowSource(table.Composite, i), rows)
 
-def wherex_to_rowlist(scope_, fromx, wherex):
-  """return a rowlist with the rows included from scope by the fromx and wherex.
-  When the scope has more than one name in it, the output will be a list of composite row
-    (i.e. a row whose field types are themselves RowType).
-  """
-  table_names, single, multi = classify_wherex(scope_, fromx, wherex)
-  # note: we filter single before multi for performance -- the product of the tables is smaller if we can reduce the inputs
-  single_rowlists = {
-    tablename: filter_rowlist(scope_, table_to_rowlist(scope_[tablename]), conds)
-    for tablename, conds in misc.multimap(single).items() # i.e. {cond.table:[cond.exp, ...]}
-  }
-  rowlists = {
-    table_name: single_rowlists.get(table_name) or table_to_rowlist(scope_[table_name])
-    for table_name in table_names
-  }
-  if len(rowlists) == 1 and not multi:
-    return rowlists.values()[0]
-  else:
-    return filter_rowlist(
-      scope_,
-      make_composite_rows(rowlists.values()),
-      [cond.exp for cond in multi]
-    )
+class Plan:
+  ""
+  @classmethod
+  def from_query(class_, scope_, fromx, wherex):
+    return class_(*classify_wherex(scope_, fromx, wherex))
+
+  def __init__(self, table_names, predicates, joins):
+    self.table_names, self.predicates, self.joins = table_names, predicates, joins
+
+  def run(self, scope_):
+    """return a rowlist with the rows included from scope by the fromx and wherex.
+    When the scope has more than one name in it, the output will be a list of composite row
+      (i.e. a row whose field types are themselves RowType).
+    """
+    single_rowlists = {
+      table_name: filter_rowlist(scope_, table_to_rowlist(scope_[table_name]), conds)
+      for table_name, conds in misc.multimap(self.predicates).items() # i.e. {cond.table:[cond.exp, ...]}
+    }
+    rowlists = {
+      # this adds in the tables that are referenced in the fromx but have no predicate
+      table_name: single_rowlists.get(table_name) or table_to_rowlist(scope_[table_name])
+      for table_name in self.table_names
+    }
+    if len(rowlists) == 1 and not self.joins:
+      return rowlists.values()[0]
+    else:
+      return filter_rowlist(
+        scope_,
+        make_composite_rows(rowlists.values()),
+        [cond.exp for cond in self.joins]
+      )
+
+  def explain(self): raise NotImplementedError('todo')
+  def __repr__(self): return '<Plan {%s} %i predicates %i joins>' % (self.table_names, len(self.predicates), len(self.joins))

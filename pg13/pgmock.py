@@ -3,7 +3,7 @@
 # todo: type checking of literals based on column. flag-based (i.e. not all DBs do this) cast strings to unicode.
 
 import re,collections,contextlib,threading,copy
-from . import pg,threevl,sqparse2,sqex,table
+from . import pg, threevl, sqparse2, sqex, table, treepath
 
 class TablesDict:
   "dictionary wrapper that knows about transactions"
@@ -111,9 +111,11 @@ class TablesDict:
     lockref can be anything as long as it stays the same; it's used for assigning tranaction ownership.
       (safest is to make it a pgmock_dbapi2.Connection, because that will rollback on close)
     """
-    sqex.depth_first_sub(ex,values)
-    with self.lock_db(lockref, isinstance(ex,sqparse2.StartX)):
-      sqex.replace_subqueries(ex,self,table.Table)
+    sqex.depth_first_sub(ex, values)
+    with self.lock_db(lockref, isinstance(ex, sqparse2.StartX)):
+      if treepath.sub_slots(ex, lambda x:isinstance(x, sqparse2.SelectX)):
+        raise NotImplementedError('need to deal with subqueries in planner-based engine')
+        # sqex.replace_subqueries(ex,self,table.Table)
       if isinstance(ex,sqparse2.SelectX): return sqex.run_select(ex,self,table.Table)
       elif isinstance(ex,sqparse2.InsertX): return self[ex.table].insert(ex.cols,ex.values,ex.ret,self)
       elif isinstance(ex,sqparse2.UpdateX):
