@@ -1,5 +1,5 @@
 import pytest
-from pg13 import sqex, pgmock, sqparse2, treepath
+from pg13 import sqex, sqparse2, treepath
 
 def test_sub_arraylit():
   from pg13.sqparse2 import ArrayLit,Literal,SubLit

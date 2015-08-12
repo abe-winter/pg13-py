@@ -1,7 +1,7 @@
 "this includes tests for syncmessage"
 
 import pytest,ujson,binascii
-from pg13 import syncschema,syncmessage,pg,pgmock,diff,misc,pgmock_dbapi2
+from pg13 import syncschema,syncmessage,pg,diff,misc,pgmock_dbapi2
 
 def test_vdstring():
   # Syncable subclasses should test: apply, generate, validate, ser, des, create, version

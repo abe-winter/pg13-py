@@ -1,4 +1,4 @@
-"expression evaluation helpers for pgmock. has duck-dependencies on pgmock's Table class, needs redesign."
+"expression evaluation helpers for mockdb. has duck-dependencies on table.Table, needs redesign."
 # todo: most of the heavy lifting happens here. profile and identify candidates for Cython port.
 
 import itertools, collections
@@ -132,7 +132,7 @@ class NameIndexer:
     self.aonly_resolved=False
   @misc.meth_once
   def resolve_aonly(self,tables_dict,table_ctor):
-    "circular depends on pgmock.Table. refactor."
+    "circular depends on table.Table. refactor."
     for alias,selectx in self.aonly.items():
       table = table_ctor(alias,infer_columns(selectx,tables_dict),None)
       table.rows = run_select(selectx,tables_dict,table_ctor)

@@ -5,9 +5,8 @@
 import re,collections,contextlib,threading,copy
 from . import pg, threevl, sqparse2, sqex, table, treepath
 
-class TablesDict:
-  "dictionary wrapper that knows about transactions"
-  # todo: bite the bullet and rename this Database
+class Database:
+  "table collection with layering for transactions"
   def __init__(self):
     self.lock = threading.Lock()
     self.levels = [{}]
@@ -103,7 +102,7 @@ class TablesDict:
     """call the stmt in tree with values subbed on the tables in t_d.
     ex is a parsed statement returned by parse_expression.
     values is the tuple of %s replacements.
-    lockref can be anything as long as it stays the same; it's used for assigning tranaction ownership.
+    lockref can be anything as long as it stays the same; it's used for assigning transaction ownership.
       (safest is to make it a pgmock_dbapi2.Connection, because that will rollback on close)
     """
     sqex.depth_first_sub(ex, values)

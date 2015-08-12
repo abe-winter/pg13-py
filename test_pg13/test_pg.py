@@ -1,7 +1,7 @@
-"pg.Row tests using pgmock"
+"pg.Row tests"
 
 import pytest,collections,ujson
-from pg13 import pg,pgmock,misc,pgmock_dbapi2
+from pg13 import pg, mockdb, misc, pgmock_dbapi2
 
 class Model(pg.Row):
   FIELDS = [('userid','int'),('id2','int'),('content','text'),('arr',list)]
@@ -19,7 +19,7 @@ def prepmock(*schemas):
   return misc.EnvBundle(pool,None,None,USERID,None,None)
 
 @pytest.mark.xfail
-def test_create_indexes(): raise NotImplementedError # ignoring; no support for indexes in pgmock
+def test_create_indexes(): raise NotImplementedError # ignoring; no support for indexes in dbmock
 def test_create_table():
   ebuns=prepmock(Model)
   assert 4==len(ebuns.pool.tables['model'].fields)
@@ -73,7 +73,7 @@ def test_kwinsert():
   assert ebuns.pool.tables['model'].rows==[[0,1,None,[]]]
   # todo: test 'returning' feature
 @pytest.mark.xfail
-def test_checkdb(): raise NotImplementedError # todo: find out what PG supports and implement it for pgmock
+def test_checkdb(): raise NotImplementedError # todo: find out what PG supports and implement it for dbmock
 def test_insert_mtac():
   ebuns=prepmock(Model)
   # todo: edit pg.Row.insert_mtac docs re raw_value -- this works with int but not 'userid':'0'

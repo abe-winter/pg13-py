@@ -1,11 +1,11 @@
-"dbapi2 interface to pgmock"
+"dbapi2 interface to mockdb"
 
 import functools, contextlib, collections
-from . import pgmock, sqparse2, pg
+from . import mockdb, sqparse2, pg
 
 # globals
 apilevel = '2.0'
-threadsafety = 1 # 1 means module-level. I think pgmock with transaction locking as-is is fully threadsafe, so write tests and bump this to 3.
+threadsafety = 1 # 1 means module-level. I think db with transaction locking as-is is fully threadsafe, so write tests and bump this to 3.
 paramstyle = 'format'
 
 # global dictionary of databases (necessary so different connections can access the same DB)
@@ -15,11 +15,11 @@ NEXT_DB_ID = 0
 def add_db():
   global NEXT_DB_ID
   db_id, NEXT_DB_ID = NEXT_DB_ID, NEXT_DB_ID + 1
-  DATABASES[db_id] = pgmock.TablesDict()
+  DATABASES[db_id] = mockdb.Database()
   print 'created db %i' % db_id
   return db_id
 
-# todo: catch pgmock errors and raise these
+# todo: catch mockdb errors and raise these
 class Error(StandardError): pass
 class InterfaceError(Error): pass
 class DatabaseError(Error): pass
@@ -100,9 +100,9 @@ class Cursor(pg.Cursor):
       raise NotImplementedError('todo: Cursor.description for non-select')
     else: # select case
       return [description_from_colx(self.connection,self.lastx,colx) for colx in self.lastx.cols.children]
-  def callproc(self, procname, parameters=None): raise NotImplementedError("pgmock doesn't support stored procs yet")
+  def callproc(self, procname, parameters=None): raise NotImplementedError("pg13 doesn't support stored procs yet")
   def __del__(self): self.close()
-  def close(self): pass # for now pgmock doesn't have cursor resources to close
+  def close(self): pass # for now we don't have cursor resources to close
   def execute(self, operation, parameters=None):
     ex = self.lastx = sqparse2.parse(operation)
     if not self.connection.transaction_open and not self.connection.autocommit:
@@ -142,7 +142,7 @@ def open_only(f):
 class Connection:
   # todo: does this need autocommit and begin()?
   def __init__(self, db_id=None):
-    "pass None as db_id to create a new pgmock database"
+    "pass None as db_id to create a new mockdb.Database"
     self.closed = False
     self.db_id = add_db() if db_id is None else db_id
     self.db = DATABASES[self.db_id]

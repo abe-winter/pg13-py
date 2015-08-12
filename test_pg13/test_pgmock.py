@@ -1,9 +1,9 @@
 import pytest
-from pg13 import pgmock, sqparse2, pg, sqex, pgmock_dbapi2, table
+from pg13 import mockdb, sqparse2, pg, sqex, pgmock_dbapi2, table
 
 def prep(create_stmt):
   "helper for table setup"
-  tables=pgmock.TablesDict()
+  tables=mockdb.Database()
   tables.apply_sql(sqparse2.parse(create_stmt),(),None)
   def runsql(stmt,vals=()): return tables.apply_sql(sqparse2.parse(stmt),vals,None)
   return tables,runsql
@@ -210,7 +210,7 @@ def test_implicit_join():
 def test_table_as():
   tables,runsql = setup_join_test()
   assert [[1,2],[3,4]]==runsql('select * from t1 as t')
-  # todo below: make sure this is what real SQL does. or more generally, run all tests against postgres as well as pgmock.
+  # todo below: make sure this is what real SQL does. or more generally, run all tests against postgres as well as mockdb.
   assert [[1,2,1,3]]==runsql('select * from t1 as t,t2 where t.a=t2.c')
 
 def test_join_attr():
@@ -329,7 +329,7 @@ def test_default():
   assert tables['t1'].rows == [[0, False]]
 
 def test_tempkeys():
-  td = pgmock.TablesDict()
+  td = mockdb.Database()
   td['a'] = [1,2,3]
   with td.tempkeys():
     td['b'] = td['a']

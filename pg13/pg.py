@@ -157,7 +157,7 @@ class Row(object):
   def select(clas,pool_or_cursor,**kwargs):
     "note: This returns a generator, not a list. All your expectations will be violated"
     columns = kwargs.pop('columns','*')
-    # todo(awinter): write a test for whether eqexpr matters; figure out pg behavior and apply to pgmock
+    # todo(awinter): write a test for whether eqexpr matters; figure out pg behavior and apply to mockdb
     query="select %s from %s"%(columns,clas.TABLE)
     if kwargs: query+=' where %s'%' and '.join('%s=%%s'%k for k in kwargs)
     return select_or_execute(pool_or_cursor,query,tuple(kwargs.values()))
@@ -191,7 +191,7 @@ class Row(object):
     try: commit_or_execute(pool_or_cursor, query, serialized_vals)
     except errors.PgPoolError as e:
       # todo: need cross-db, cross-version, cross-driver testing to get this right
-      raise DupeInsert(clas.TABLE,e) # note: pgmock raises DupeInsert directly, so catching this works in caller. (but args are different)
+      raise DupeInsert(clas.TABLE,e) # note: mockdb raises DupeInsert directly, so catching this works in caller. (but args are different)
     return set_options(
       pool_or_cursor,
       clas(*clas.serialize_row(pool_or_cursor,clas.names(),vals,for_read=True))
@@ -284,7 +284,7 @@ class Row(object):
     vals = tuple(update_keys.values()+where_keys.values())
     commit_or_execute(pool_or_cursor,q,vals)
   def delete(self,pool_or_cursor):
-    ".. warning:: pgmock doesn't support delete yet, so this isn't tested"
+    ".. warning:: mockdb doesn't support delete yet, so this isn't tested" # actually it does now
     vals=self.pkey_vals()
     whereclause=' and '.join('%s=%%s'%k for k in self.PKEY.split(','))
     q='delete from %s where %s'%(self.TABLE,whereclause)

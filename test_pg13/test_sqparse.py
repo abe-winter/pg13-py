@@ -1,5 +1,5 @@
 import pytest
-from pg13 import sqparse2,pgmock
+from pg13 import sqparse2
 
 def test_parse_arraylit():
   v=sqparse2.ArrayLit((sqparse2.Literal(1),sqparse2.Literal(2),sqparse2.Literal("three")))

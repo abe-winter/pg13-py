@@ -1,4 +1,4 @@
-"parsing for pgmock -- rewritten in PLY"
+"parsing for mockdb -- rewritten in PLY"
 
 # todo: be more consistent about CommaX vs raw tuple
 # todo: factor out the AST-path stuff to its own file
