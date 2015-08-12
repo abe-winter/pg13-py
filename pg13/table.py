@@ -111,3 +111,19 @@ class Table:
     if isinstance(name,sqparse2.NameX): name = name.name # this is horrible; be consistent
     try: return FieldLookup(*next((i,f) for i,f in enumerate(self.fields) if f.name==name))
     except StopIteration: raise BadFieldName(name)
+
+  def pkey_get(self, row):
+    """return the db row matched by the pkey values in the passed row.
+    If this returns non-null an insert would fail (i.e. there's a dupe).
+    """
+    if len(row) != len(self.fields):
+      raise ValueError("bad row length", row, self.fields)
+    if self.pkey:
+      indexes=[i for i,f in enumerate(self.fields) if f.name in self.pkey]
+      print 'indexes', indexes
+      if len(indexes) != len(self.pkey):
+        raise ValueError('pkey has unk fields', self.pkey, self.fields)
+      pkey_vals = map(row.__getitem__,indexes) 
+      return next((r for r in self.rows if pkey_vals==map(r.__getitem__,indexes)), None)
+    else:
+      return None

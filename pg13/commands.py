@@ -1,4 +1,5 @@
 "commands -- bodies for SQL commands"
+# todo: separate the special versions of commands (i.e. insert_returning)
 
 def emergency_cast(colx, value):
   """ugly: this is a huge hack. get serious about where this belongs in the architecture.
@@ -56,16 +57,6 @@ def delete(self, rowlist):
   # todo(doc): why 'not' below?
   raise NotImplementedError('port old Evaluator')
   self.rows=[r for r in self.rows if not sqex.Evaluator((r,),nix,tables_dict).eval(where)]
-
-def pkey_get(self, row):
-  if len(self.pkey):
-    indexes=[i for i,f in enumerate(self.fields) if f.name in self.pkey]
-    if len(indexes)!=len(self.pkey): raise ValueError('bad pkey')
-    pkey_vals=map(row.__getitem__,indexes)
-    return next((r for r in self.rows if pkey_vals==map(r.__getitem__,indexes)),None)
-  else:
-    # warning: is this right? it's saying that if not given, the pkey is the whole row. test dupe inserts on a real DB.
-    return row if row in self.rows else None
 
 def insert(self, fields, values, returning, tables_dict):
   print fields, values, returning
