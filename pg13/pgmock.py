@@ -69,25 +69,20 @@ class TablesDict:
       self.cascade_delete(child.name)
     del self[name]
   
-  def create(self, ex):
+  def create(self, exp):
     "helper for apply_sql in CreateX case"
-    if ex.name in self:
-      if ex.nexists: return
-      raise ValueError('table_exists',ex.name)
-    if any(c.pkey for c in ex.cols):
-      if ex.pkey:
-        raise sqparse2.SQLSyntaxError("don't mix table-level and column-level pkeys",ex)
-      # todo(spec): is multi pkey permitted when defined per column?
-      ex.pkey = sqparse2.PKeyX([c.name for c in ex.cols if c.pkey])
-    if ex.inherits:
+    if exp.name in self:
+      if exp.nexists: return
+      raise ValueError('table_exists', exp.name)
+    if exp.inherits:
       # todo: what if child table specifies constraints etc? this needs work.
-      if len(ex.inherits) > 1: raise NotImplementedError('todo: multi-table inherit')
-      parent = self[ex.inherits[0]] = copy.deepcopy(self[ex.inherits[0]]) # copy so rollback works
+      if len(exp.inherits) > 1: raise NotImplementedError('todo: multi-table inherit')
+      parent = self[exp.inherits[0]] = copy.deepcopy(self[ex.inherits[0]]) # copy so rollback works
       child = self[ex.name] = table.Table(ex.name, parent.fields, parent.pkey)
       parent.child_tables.append(child)
       child.parent_table = parent
     else:
-      self[ex.name]=table.Table(ex.name,ex.cols,ex.pkey.fields if ex.pkey else [])
+      self[exp.name] = table.Table.create(exp)
   
   def drop(self, ex):
     "helper for apply_sql in DropX case"

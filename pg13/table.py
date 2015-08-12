@@ -1,4 +1,4 @@
-"table -- Table class"
+"table -- Table & Row storage classes. operations on tables are in commands.py"
 
 import collections
 from . import pg, threevl, sqparse2
@@ -55,31 +55,24 @@ class IntegrityError(PgExecError): pass # careful: pgmock_dbapi also defines thi
 
 class Missing: "for distinguishing missing columns vs passed-in null"
 
-def emergency_cast(colx, value):
-  """ugly: this is a huge hack. get serious about where this belongs in the architecture.
-  For now, most types rely on being fed in as SubbedLiteral.
-  """
-  if colx.coltp.type.lower()=='boolean':
-    if isinstance(value,sqparse2.NameX): value = value.name
-    if isinstance(value,bool): return value
-    return dict(true=True, false=False)[value.lower()] # keyerror if other
-  else:
-    return value # todo: type check?
-
-def field_default(colx, table_name, tables_dict):
-  "takes sqparse2.ColX, Table"
-  raise NotImplementedError("this can't import sqex")
-  if colx.coltp.type.lower() == 'serial':
-    x = sqparse2.parse('select coalesce(max(%s),-1)+1 from %s' % (colx.name, table_name))
-    return sqex.run_select(x, tables_dict, Table)[0]
-  elif colx.not_null: raise NotImplementedError('todo: not_null error')
-  else: return toliteral(colx.default)
-
 FieldLookup=collections.namedtuple('FieldLookup','index type')
+
 def toliteral(probably_literal):
   # todo: among the exception cases are Missing, str. go through cases and make this cleaner. the test suite alone has multiple types here.
   if probably_literal==sqparse2.NameX('null'): return None
-  return probably_literal.toliteral() if hasattr(probably_literal,'toliteral') else probably_literal
+  return probably_literal.toliteral() if hasattr(probably_literal, 'toliteral') else probably_literal
+
+def assemble_pkey(exp):
+  "helper for Table.create. returns the pkey fields if given directly, otherwise constructs one from columns."
+  if not isinstance(exp, sqparse2.CreateX):
+    raise TypeError(type(exp), exp)
+  if any(c.pkey for c in exp.cols):
+    if exp.pkey:
+      raise sqparse2.SQLSyntaxError("don't mix table-level and column-level pkeys", exp)
+    # todo(spec): is multi pkey permitted when defined per column?
+    return [c.name for c in exp.cols if c.pkey]
+  else:
+    return exp.pkey.fields if exp.pkey else []
 
 class Table:
   def __init__(self, name, fields, pkey):
@@ -89,24 +82,23 @@ class Table:
     self.child_tables=[] # tables that inherit from this one
     self.parent_table=None # table this inherits from
   
+  @classmethod
+  def create(class_, exp):
+    "takes a CreateX, constructs a Table"
+    if not isinstance(exp, sqparse2.CreateX):
+      raise TypeError(type(exp), exp)
+    if exp.inherits:
+      raise TypeError("don't use Table.create for inherited tables", exp)
+    return Table(exp.name, exp.cols, assemble_pkey(exp))
+
   def to_rowlist(self):
     "return [Row, ...] for intermediate computations"
     return [Row(RowSource(self, i), row) for i, row in enumerate(self.rows)]
 
-  def get_column(self,name):
+  def get_column(self, name):
     col = next((f for f in self.fields if f.name==name), None)
     if col is None: raise KeyError(name)
     return col
-  
-  def pkey_get(self,row):
-    if len(self.pkey):
-      indexes=[i for i,f in enumerate(self.fields) if f.name in self.pkey]
-      if len(indexes)!=len(self.pkey): raise ValueError('bad pkey')
-      pkey_vals=map(row.__getitem__,indexes)
-      return next((r for r in self.rows if pkey_vals==map(r.__getitem__,indexes)),None)
-    else:
-      # warning: is this right? it's saying that if not given, the pkey is the whole row. test dupe inserts on a real DB.
-      return row if row in self.rows else None
 
   def expand_row(self, fields, values):
     "helper for insert. turn (field_names, values) into the full-width, properly-ordered row"
@@ -114,66 +106,8 @@ class Table:
     reverse_indexes={table_fieldnames.index(f):i for i, f in enumerate(fields)}
     indexes=[reverse_indexes.get(i) for i in range(len(self.fields))]
     return [(Missing if i is None else values[i]) for i in indexes]
-
-  def fix_rowtypes(self, row):
-    if len(row)!=len(self.fields):
-      raise ValueError('wrong # of values for table', self.name, self.fields, row)
-    return map(toliteral, row)
   
-  def apply_defaults(self, row, tables_dict):
-    "apply defaults to missing cols for a row that's being inserted"
-    return [
-      emergency_cast(colx, field_default(colx, self.name, tables_dict) if v is Missing else v)
-      for colx,v in zip(self.fields,row)
-    ]
-  
-  def insert(self, fields, values, returning, tables_dict):
-    print fields, values, returning
-    raise NotImplementedError("this can't import sqex")
-    nix = sqex.NameIndexer.ctor_name(self.name)
-    nix.resolve_aonly(tables_dict,Table)
-    expanded_row=self.fix_rowtypes(self.expand_row(fields,values) if fields else values)
-    row=self.apply_defaults(expanded_row, tables_dict)
-    # todo: check ColX.not_null here. figure out what to do about null pkey field
-    for i,elt in enumerate(row):
-      raise NotImplementedError('port old Evaluator')
-      row[i]=sqex.Evaluator(row,nix,tables_dict).eval(elt)
-    if self.pkey_get(row): raise pg.DupeInsert(row)
-    self.rows.append(row)
-    if returning: return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
-  
-  def match(self,where,tables,nix):
-    raise NotImplementedError("this can't import sqex")
-    raise NotImplementedError('is this used?')
-    raise NotImplementedError('port old Evaluator')
-    return [r for r in self.rows if not where or threevl.ThreeVL.test(sqex.Evaluator((r,),nix,tables).eval(where))]
-  
-  def lookup(self,name):
+  def lookup(self, name):
     if isinstance(name,sqparse2.NameX): name = name.name # this is horrible; be consistent
     try: return FieldLookup(*next((i,f) for i,f in enumerate(self.fields) if f.name==name))
     except StopIteration: raise BadFieldName(name)
-  
-  def update(self, rowlist):
-    "replace rows from rowlist using indexes"
-    raise NotImplementedError('todo')
-    raise NotImplementedError("delete old code below")
-    nix = sqex.NameIndexer.ctor_name(self.name)
-    nix.resolve_aonly(tables_dict,Table)
-    if not all(isinstance(x,sqparse2.AssignX) for x in setx): raise TypeError('not_xassign',map(type,setx))
-    match_rows=self.match(where,tables_dict,nix) if where else self.rows
-    raise NotImplementedError('port old Evaluator')
-    for row in match_rows:
-      for x in setx: row[self.lookup(x.col).index]=sqex.Evaluator((row,),nix,tables_dict).eval(x.expr)
-    if returning: return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
-  
-  def delete(self, rowlist):
-    "use indexes from rowlist to delete"
-    raise NotImplementedError('todo')
-    raise NotImplementedError("delete old code below")
-    # todo: what's the deal with nested selects in delete. does it get evaluated once to a scalar before running the delete?
-    # todo: this will crash with empty where clause
-    nix = sqex.NameIndexer.ctor_name(self.name)
-    nix.resolve_aonly(tables_dict,Table)
-    # todo(doc): why 'not' below?
-    raise NotImplementedError('port old Evaluator')
-    self.rows=[r for r in self.rows if not sqex.Evaluator((r,),nix,tables_dict).eval(where)]
