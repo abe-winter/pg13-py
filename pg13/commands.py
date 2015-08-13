@@ -1,6 +1,12 @@
 "commands -- bodies for SQL commands"
 # todo: separate the special versions of commands (i.e. insert_returning)
 
+from . import scope, planner, table, sqex
+
+class CommandError(StandardError): "base"
+class NotNullError(CommandError): pass
+class DuplicateInsert(CommandError): pass
+
 def emergency_cast(colx, value):
   """ugly: this is a huge hack. get serious about where this belongs in the architecture.
   For now, most types rely on being fed in as SubbedLiteral.
@@ -12,25 +18,25 @@ def emergency_cast(colx, value):
   else:
     return value # todo: type check?
 
-def field_default(colx, table_name, tables_dict):
+def rowlist2scalar(rowlist):
+  raise NotImplementedError
+
+def field_default(colx, table_name, database):
   "takes sqparse2.ColX, Table"
-  raise NotImplementedError("this can't import sqex")
+  # todo: I think this can be an expression too but it HAS to be a scalar subquery
+  # todo: DefaultX
   if colx.coltp.type.lower() == 'serial':
+    raise NotImplementedError('run planner instead')
     x = sqparse2.parse('select coalesce(max(%s),-1)+1 from %s' % (colx.name, table_name))
-    return sqex.run_select(x, tables_dict, Table)[0]
-  elif colx.not_null: raise NotImplementedError('todo: not_null error')
-  else: return toliteral(colx.default)
+    return sqex.run_select(x, database, table.Table)[0]
+  elif colx.not_null: raise NotNullError(table_name, colx)
+  else: return table.toliteral(colx.default)
 
-def fix_rowtypes(self, row):
-  if len(row)!=len(self.fields):
-    raise ValueError('wrong # of values for table', self.name, self.fields, row)
-  return map(toliteral, row)
-
-def apply_defaults(self, row, tables_dict):
+def apply_defaults(database, table_, row):
   "apply defaults to missing cols for a row that's being inserted"
   return [
-    emergency_cast(colx, field_default(colx, self.name, tables_dict) if v is Missing else v)
-    for colx,v in zip(self.fields,row)
+    emergency_cast(colx, field_default(colx, table_.name, database) if v is table.Missing else v)
+    for colx, v in zip(table_.fields, row)
   ]
 
 def update(self, rowlist):
@@ -58,17 +64,24 @@ def delete(self, rowlist):
   raise NotImplementedError('port old Evaluator')
   self.rows=[r for r in self.rows if not sqex.Evaluator((r,),nix,tables_dict).eval(where)]
 
-def insert(self, fields, values, returning, tables_dict):
-  print fields, values, returning
-  raise NotImplementedError("this can't import sqex")
-  nix = sqex.NameIndexer.ctor_name(self.name)
-  nix.resolve_aonly(tables_dict,Table)
-  expanded_row=self.fix_rowtypes(self.expand_row(fields,values) if fields else values)
-  row=self.apply_defaults(expanded_row, tables_dict)
-  # todo: check ColX.not_null here. figure out what to do about null pkey field
-  for i,elt in enumerate(row):
-    raise NotImplementedError('port old Evaluator')
-    row[i]=sqex.Evaluator(row,nix,tables_dict).eval(elt)
-  if self.pkey_get(row): raise pg.DupeInsert(row)
-  self.rows.append(row)
-  if returning: return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
+# self[ex.table].insert(ex.cols,ex.values,ex.ret,self)
+# def insert(self, fields, values, returning, tables_dict):
+def insert(database, expr):
+  scope_ = scope.Scope.from_fromx(database, [expr.table])
+  table_ = database[expr.table]
+  # def apply_defaults(database, table_, row):
+  wide_row = apply_defaults(
+    database,
+    table_,
+    table_.fix_rowtypes(
+      table_.expand_row(expr.cols, expr.values) if expr.cols else expr.values
+    )
+  )
+  for i, elt in enumerate(wide_row):
+    wide_row[i] = sqex.Evaluator2(wide_row, scope_).eval(elt)
+  if table_.pkey_get(wide_row):
+    raise DuplicateInsert(expr, wide_row)
+  table_.rows.append(wide_row)
+  if expr.ret:
+    # return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
+    raise NotImplementedError('returning')

@@ -3,7 +3,15 @@
 import collections
 from . import pg, threevl, sqparse2
 
+# errors
+class PgExecError(sqparse2.PgMockError): "base class for errors during table execution"
+class BadFieldName(PgExecError): pass
+class IntegrityError(PgExecError): pass # careful: pgmock_dbapi also defines this
 class UnkTableError(StandardError): "for lookup failures in composite rows"
+
+class Missing: "for distinguishing missing columns vs passed-in null"
+
+FieldLookup=collections.namedtuple('FieldLookup','index type')
 
 class Composite: "use this for RowSource.table when a Row is composite"
 
@@ -47,15 +55,6 @@ class Row:
     return actual_row.vals[actual_row.index(column_name)]
 
   def __repr__(self): return '<Row %s:%i %r>' % (self.source.name or 'composite', self.source.index, self.vals)
-
-# errors
-class PgExecError(sqparse2.PgMockError): "base class for errors during table execution"
-class BadFieldName(PgExecError): pass
-class IntegrityError(PgExecError): pass # careful: pgmock_dbapi also defines this
-
-class Missing: "for distinguishing missing columns vs passed-in null"
-
-FieldLookup=collections.namedtuple('FieldLookup','index type')
 
 def toliteral(probably_literal):
   # todo: among the exception cases are Missing, str. go through cases and make this cleaner. the test suite alone has multiple types here.
@@ -111,6 +110,14 @@ class Table:
     if isinstance(name,sqparse2.NameX): name = name.name # this is horrible; be consistent
     try: return FieldLookup(*next((i,f) for i,f in enumerate(self.fields) if f.name==name))
     except StopIteration: raise BadFieldName(name)
+
+  def fix_rowtypes(self, row):
+    "this should eventually do type-checking, maybe. for now it checks length and applies toliteral()"
+    if len(row) != len(self.fields):
+      raise ValueError('wrong # of values for table', self.name, self.fields, row)
+    literals = map(toliteral, row)
+    # todo: check types here
+    return literals
 
   def pkey_get(self, row):
     """return the db row matched by the pkey values in the passed row.

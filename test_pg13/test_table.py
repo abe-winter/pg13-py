@@ -58,8 +58,14 @@ def test_field_default():
   print table.field_default(tables['t1'].fields[0], 't1', tables)
   raise NotImplementedError('nextup')
 
-@pytest.mark.xfail
-def test_toliteral(): raise NotImplementedError
+def test_toliteral():
+  assert [None, 1, 's', [1, 2, 3], table.Missing] == map(table.toliteral, [
+    sqparse2.NameX('null'),
+    sqparse2.Literal(1),
+    sqparse2.Literal('s'),
+    sqparse2.ArrayLit((1,2,3)),
+    table.Missing,
+  ])
 
 def test_assemble_pkey():
   exp = sqparse2.parse('create table t1 (a int, b text)')
@@ -91,13 +97,8 @@ def test_table_pkey_get(table1):
   assert None is table1.pkey_get((1,'missing'))
   assert [3,'three'] == table1.pkey_get((-1,'three'))
 
-def test_table_fix_rowtypes(): raise NotImplementedError
-@pytest.mark.xfail
-def test_table_apply_defaults(): raise NotImplementedError
-def test_table_insert(): raise NotImplementedError
-def test_table_match(): raise NotImplementedError
-def test_table_lookup(): raise NotImplementedError
-@pytest.mark.xfail
-def test_table_update(): raise NotImplementedError
-@pytest.mark.xfail
-def test_table_delete(): raise NotImplementedError
+def test_table_lookup(table1):
+  assert table1.lookup('a').index == 0
+  assert table1.lookup('b').index == 1
+  with pytest.raises(table.BadFieldName):
+    table1.lookup('c')

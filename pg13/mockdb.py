@@ -3,7 +3,7 @@
 # todo: type checking of literals based on column. flag-based (i.e. not all DBs do this) cast strings to unicode.
 
 import re,collections,contextlib,threading,copy
-from . import pg, threevl, sqparse2, sqex, table, treepath
+from . import pg, threevl, sqparse2, sqex, table, treepath, commands
 
 class Database:
   "table collection with layering for transactions"
@@ -111,7 +111,7 @@ class Database:
         raise NotImplementedError('need to deal with subqueries in planner-based engine')
         # sqex.replace_subqueries(ex,self,table.Table)
       if isinstance(ex,sqparse2.SelectX): return sqex.run_select(ex,self,table.Table)
-      elif isinstance(ex,sqparse2.InsertX): return self[ex.table].insert(ex.cols,ex.values,ex.ret,self)
+      elif isinstance(ex,sqparse2.InsertX): return commands.insert(self, ex)
       elif isinstance(ex,sqparse2.UpdateX):
         if len(ex.tables)!=1: raise NotImplementedError('multi-table update')
         return self[ex.tables[0]].update(ex.assigns,ex.where,ex.ret,self)
