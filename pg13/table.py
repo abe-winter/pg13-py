@@ -15,6 +15,8 @@ FieldLookup=collections.namedtuple('FieldLookup','index type')
 
 class Composite: "use this for RowSource.table when a Row is composite"
 
+class RowList(list): "subclass of list; identical except for type-checking"
+
 class RowSource:
   "for things like update and delete we need to know where a row came from. this stores that."
   def __init__(self, table, index):
@@ -132,7 +134,6 @@ class Table:
       raise ValueError("bad row length", row, self.fields)
     if self.pkey:
       indexes=[i for i,f in enumerate(self.fields) if f.name in self.pkey]
-      print 'indexes', indexes
       if len(indexes) != len(self.pkey):
         raise ValueError('pkey has unk fields', self.pkey, self.fields)
       pkey_vals = map(row.__getitem__,indexes) 

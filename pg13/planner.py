@@ -54,10 +54,10 @@ def conds_on_row(scope_, row, conds):
 
 def filter_rowlist(scope_, rowlist, conds):
   # todo: an analyzer can put the cheapest cond first
-  return [
+  return table.RowList([
     row for row in rowlist
     if conds_on_row(scope_, row, conds)
-  ]
+  ])
 
 def make_composite_rows(rowlists):
   "take list of lists of Row. return generator of Row with source=Composite by creating the product of the lists"
@@ -88,7 +88,7 @@ class Plan:
       for table_name in self.table_names
     }
     if len(rowlists) == 1 and not self.joins:
-      return rowlists.values()[0]
+      return table.RowList(rowlists.values()[0])
     else:
       return filter_rowlist(
         scope_,

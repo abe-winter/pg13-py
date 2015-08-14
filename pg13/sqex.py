@@ -2,7 +2,7 @@
 # todo: most of the heavy lifting happens here. profile and identify candidates for Cython port.
 
 import itertools, collections
-from . import sqparse2, threevl, misc, treepath
+from . import sqparse2, threevl, misc, treepath, table
 
 # todo: derive errors below from something pg13-specific
 class ColumnNameError(StandardError): "name not in any tables or name matches too many tables"
@@ -263,16 +263,17 @@ class Evaluator2:
   
   def eval_agg_call(self, exp):
     "helper for eval_callx; evaluator for CallX that consume multiple rows"
-    raise NotImplementedError('uses c_row, nix')
-    if not isinstance(self.c_row,list): raise TypeError('aggregate function expected a list of rows')
+    if not isinstance(self.row, table.RowList):
+      raise TypeError('aggregate function expected a RowList')
     if len(exp.args.children)!=1: raise ValueError('aggregate function expected a single value',exp.args)
     arg,=exp.args.children # intentional: error if len!=1
-    vals=[Evaluator(c_r,self.nix,self.tables).eval(arg) for c_r in self.c_row]
-    if not vals: return None
+    vals = [Evaluator2(row, self.scope).eval(arg) for row in self.row]
+    if not vals: return None # i.e. max([]) => None
     if exp.f=='min': return min(vals)
     elif exp.f=='max': return max(vals)
     elif exp.f=='count': return len(vals)
-    else: raise NotImplementedError('unk_func',exp.f) # pragma: no cover
+    else:
+      raise NotImplementedError('unk_func', exp.f) # pragma: no cover
   
   def eval_nonagg_call(self, exp):
     "helper for eval_callx; evaluator for CallX that consume a single value"
@@ -306,10 +307,7 @@ class Evaluator2:
     # todo: need a RowList type -- just a subclass of list, only exists for type checking
     if isinstance(exp,sqparse2.BinX): return evalop(exp.op.op, *map(self.eval, (exp.left, exp.right)))
     elif isinstance(exp,sqparse2.UnX): return self.eval_unx(exp)
-    elif isinstance(exp,sqparse2.NameX):
-      print self.scope.resolve_column(exp)
-      print self.row
-      return self.row[self.scope.resolve_column(exp)]
+    elif isinstance(exp,sqparse2.NameX): return self.row[self.scope.resolve_column(exp)]
     elif isinstance(exp,sqparse2.AsterX): return self.row
     elif isinstance(exp,sqparse2.ArrayLit): return map(self.eval,exp.vals)
     elif isinstance(exp,(sqparse2.Literal,sqparse2.ArrayLit)): return exp.toliteral()

@@ -6,6 +6,7 @@ from . import scope, planner, table, sqex
 class CommandError(StandardError): "base"
 class NotNullError(CommandError): pass
 class DuplicateInsert(CommandError): pass
+class AggregationError(CommandError): pass
 
 def emergency_cast(colx, value):
   """ugly: this is a huge hack. get serious about where this belongs in the architecture.
@@ -88,5 +89,18 @@ def insert(database, expr):
   table_.rows.append(row.vals)
   if expr.ret:
     ret = sqex.Evaluator2(row, scope_).eval(expr.ret)
-    print 'ret', ret
     return [ret]
+
+def select(database, expr):
+  print 'select', expr.cols
+  if expr.group or expr.order or expr.limit or expr.offset:
+    raise NotImplementedError('expr.group or expr.order or expr.limit or expr.offset', expr)
+  scope_ = scope.Scope.from_fromx(database, expr.tables)
+  plan = planner.Plan.from_query(scope_, expr.tables, expr.where)
+  if sqex.contains(expr.cols, sqex.consumes_rows):
+    # aggregate query
+    if any(not sqex.contains(col, sqex.consumes_rows) for col in expr.cols.children):
+      raise AggregationError("can't mix aggregate and non-aggregate fields") # note: sqlite allows this and returns something weird
+    return sqex.Evaluator2(plan.run(scope_), scope_).eval(expr.cols)
+  else:
+    return [sqex.Evaluator2(row, scope_).eval(expr.cols) for row in plan.run(scope_)]
