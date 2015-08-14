@@ -5,7 +5,7 @@
 # todo: need deserialize for SELECT / RETURNING values according to JSON_WRITE, JSON_READ
 
 import sys,contextlib,ujson,functools,collections
-from . import errors
+from . import errors, commands
 
 class Select1Error(StandardError): "base for select1 error conditions"
 class Missing(Select1Error): pass
@@ -13,7 +13,7 @@ class NotUnique(Select1Error): pass
 class SchemaError(StandardError): "base for schema-related errors"
 class FieldError(SchemaError): "no such field in model"
 class NullJsonError(StandardError): pass
-class DupeInsert(StandardError): pass
+DupeInsert = commands.DuplicateInsert
 
 def eqexpr(key,value):
   "for automatic x is null vs x=value stmts"

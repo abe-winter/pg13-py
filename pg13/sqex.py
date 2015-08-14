@@ -253,6 +253,7 @@ def run_select(ex,tables,table_ctor):
 def starlike(x):
   "weird things happen to cardinality when working with * in comma-lists. this detects when to do that."
   # todo: is '* as name' a thing?
+  # todo: use sub_slots here
   return isinstance(x,sqparse2.AsterX) or isinstance(x,sqparse2.AttrX) and isinstance(x.attr,sqparse2.AsterX)
 
 class Evaluator2:
@@ -299,21 +300,29 @@ class Evaluator2:
 
   def eval(self, exp):
     "main dispatch for expression evaluation"
-    # todo: this needs an AST-assert that all BaseX descendants are being handled
+    # todo: in testing, this needs an AST-assert that all BaseX descendants are being handled
+    # todo: this needs to be split into expressions that return Row vs return scalar
+    #   (does anything return RowList? some consume it.)
+    # todo: need a RowList type -- just a subclass of list, only exists for type checking
     if isinstance(exp,sqparse2.BinX): return evalop(exp.op.op, *map(self.eval, (exp.left, exp.right)))
     elif isinstance(exp,sqparse2.UnX): return self.eval_unx(exp)
-    elif isinstance(exp,sqparse2.NameX): return self.row[self.scope.resolve_column(exp)]
-    elif isinstance(exp,sqparse2.AsterX):
-      raise NotImplementedError('nix and c_row')
-      return sum(self.c_row,[]) # todo doc: how does this get disassembled by caller?
+    elif isinstance(exp,sqparse2.NameX):
+      print self.scope.resolve_column(exp)
+      print self.row
+      return self.row[self.scope.resolve_column(exp)]
+    elif isinstance(exp,sqparse2.AsterX): return self.row
     elif isinstance(exp,sqparse2.ArrayLit): return map(self.eval,exp.vals)
     elif isinstance(exp,(sqparse2.Literal,sqparse2.ArrayLit)): return exp.toliteral()
     elif isinstance(exp,sqparse2.CommaX):
       # todo: think about getting rid of CommaX everywhere; it complicates syntax tree navigation.
       #   a lot of things that are CommaX now should become weval.Row.
-      ret = []
+      ret = [] # todo: this should be a composite row
       for child in exp.children:
-        (ret.extend if starlike(child) else ret.append)(self.eval(child))
+        if starlike(child):
+          # expect a row in this case
+          ret.extend(self.eval(child).vals)
+        else:
+          ret.append(self.eval(child))
       return ret
     elif isinstance(exp,sqparse2.CallX): return self.eval_callx(exp)
     elif isinstance(exp,sqparse2.SelectX):
@@ -334,10 +343,9 @@ class Evaluator2:
     elif isinstance(exp,dict): return exp
     elif isinstance(exp,sqparse2.NullX): return None
     elif isinstance(exp,sqparse2.ReturnX):
-      # todo: I think ReturnX is *always* CommaX now; revisit this
-      ret=self.eval(exp.expr)
-      print "warning: not sure what I'm doing here with cardinality tweak on CommaX"
-      return [ret] if isinstance(exp.expr,(sqparse2.CommaX,sqparse2.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
+      if not isinstance(exp.expr, (sqparse2.CommaX, sqparse2.AsterX)):
+        raise TypeError('expected CommaX/AsterX for ReturnX.expr', exp)
+      return self.eval(exp.expr)
     elif isinstance(exp,sqparse2.AliasX): return self.eval(exp.name) # todo: rename AliasX 'name' to 'expr'
     else: raise NotImplementedError(type(exp), exp) # pragma: no cover
 

@@ -1,7 +1,7 @@
 "table -- Table & Row storage classes. operations on tables are in commands.py"
 
 import collections
-from . import pg, threevl, sqparse2
+from . import threevl, sqparse2
 
 # errors
 class PgExecError(sqparse2.PgMockError): "base class for errors during table execution"
@@ -18,7 +18,7 @@ class Composite: "use this for RowSource.table when a Row is composite"
 class RowSource:
   "for things like update and delete we need to know where a row came from. this stores that."
   def __init__(self, table, index):
-    "table is a table.Table or a scope.SyntheticTable"
+    "table is a table.Table or a scope.SyntheticTable. index an integer or None (None for rows about to be inserted)"
     self.table, self.index = table, index
 
   @property
@@ -34,6 +34,11 @@ class Row:
   def __init__(self, source, vals):
     "source is a RowSource or None if it isn't from a table"
     self.source, self.vals = source, vals
+
+  @classmethod
+  def construct(class_, table_, index, vals):
+    if not isinstance(table_, Table): raise TypeError(type(table_), table_)
+    return class_(RowSource(table_, index), vals)
 
   def get_table(self, name):
     "a Row can be composite (i.e. nest others under itself). This returns the nested Row (or self) with matching name."
@@ -54,7 +59,7 @@ class Row:
       raise UnkTableError(table_name, self)
     return actual_row.vals[actual_row.index(column_name)]
 
-  def __repr__(self): return '<Row %s:%i %r>' % (self.source.name or 'composite', self.source.index, self.vals)
+  def __repr__(self): return '<Row %s:%s %r>' % (self.source.name or 'composite', self.source.index, self.vals)
 
 def toliteral(probably_literal):
   # todo: among the exception cases are Missing, str. go through cases and make this cleaner. the test suite alone has multiple types here.

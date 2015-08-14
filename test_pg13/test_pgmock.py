@@ -1,5 +1,5 @@
 import pytest
-from pg13 import mockdb, sqparse2, pg, sqex, pgmock_dbapi2, table
+from pg13 import mockdb, sqparse2, pg, sqex, pgmock_dbapi2, table, commands
 
 def prep(create_stmt):
   "helper for table setup"
@@ -34,7 +34,7 @@ def test_insert_endcols():
 def test_insert_dupe():
   tables,runsql=prep("create table t1 (a int, b int, c int, primary key (a,b))")
   runsql("insert into t1 values (1,2,3)")
-  with pytest.raises(pg.DupeInsert): runsql("insert into t1 values (1,2,4)")
+  with pytest.raises(commands.DuplicateInsert): runsql("insert into t1 values (1,2,4)")
 
 def test_insert_sub():
   tables,runsql=prep("create table t1 (a int, b int, c int, primary key (a,b))")

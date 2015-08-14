@@ -321,7 +321,9 @@ class SqlGrammar:
   def p_returnx(self,t):
     "opt_returnx : kw_returning commalist \n | "
     # note: this gets weird because '(' commalist ')' is an expression but we need bare commalist to support non-paren returns
-    t[0] = None if len(t)==1 else ReturnX(t[2].children[0] if len(t[2].children)==1 else t[2])
+    print 'warning: types are very weird in returnx child. does SQL distinguish between returning (a,b) and returning a,b?'
+    print 'returning:', t[1:]
+    t[0] = None if len(t)==1 else ReturnX(t[2])
   def p_optparennamelist(self,t): "opt_paren_namelist : '(' namelist ')' \n | "; t[0] = t[2] if len(t)>1 else None
   def p_insertx(self,t):
     "expression : kw_insert kw_into NAME opt_paren_namelist kw_values '(' commalist ')' opt_returnx"

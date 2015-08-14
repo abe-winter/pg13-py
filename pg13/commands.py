@@ -70,18 +70,23 @@ def insert(database, expr):
   scope_ = scope.Scope.from_fromx(database, [expr.table])
   table_ = database[expr.table]
   # def apply_defaults(database, table_, row):
-  wide_row = apply_defaults(
-    database,
+  row = table.Row.construct(
     table_,
-    table_.fix_rowtypes(
-      table_.expand_row(expr.cols, expr.values) if expr.cols else expr.values
+    None,
+    apply_defaults(
+      database,
+      table_,
+      table_.fix_rowtypes(
+        table_.expand_row(expr.cols, expr.values) if expr.cols else expr.values
+      )
     )
   )
-  for i, elt in enumerate(wide_row):
-    wide_row[i] = sqex.Evaluator2(wide_row, scope_).eval(elt)
-  if table_.pkey_get(wide_row):
-    raise DuplicateInsert(expr, wide_row)
-  table_.rows.append(wide_row)
+  for i, elt in enumerate(row.vals):
+    row.vals[i] = sqex.Evaluator2(row, scope_).eval(elt)
+  if table_.pkey_get(row.vals):
+    raise DuplicateInsert(expr, row.vals)
+  table_.rows.append(row.vals)
   if expr.ret:
-    # return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
-    raise NotImplementedError('returning')
+    ret = sqex.Evaluator2(row, scope_).eval(expr.ret)
+    print 'ret', ret
+    return [ret]
