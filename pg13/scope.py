@@ -6,43 +6,20 @@ class ScopeError(StandardError): "base"
 class ScopeCollisionError(ScopeError): pass
 class ScopeUnkError(ScopeError): pass
 
-def col2name(col_item):
-  "helper for SyntheticTable.columns. takes something from SelectX.cols, returns a string column name"
-  if isinstance(col_item, sqparse2.NameX): return col_item.name
-  elif isinstance(col_item, sqparse2.AliasX): return col_item.alias
-  else: raise TypeError(type(col_item), col_item)
-
-class SyntheticTable:
-  # todo: get rid of this -- just create an actual table in the scope
-  def __init__(self, exp):
-    if not isinstance(exp, sqparse2.SelectX):
-      raise TypeError('expected SelectX for', type(exp), exp)
-    self.exp = exp
-
-  def columns(self, scope):
-    "return list of column names. needs scope for resolving asterisks."
-    return map(col2name, self.exp.cols.children)
-
-class Scope:
+class Scope(dict):
   "bundle for all the tables that are going to be used in a query, and their aliases"
   def __init__(self, expression):
     self.expression = expression
-    self.names = {}
-
-  def __contains__(self, name):
-    return name in self.names
+    super(Scope, self).__init__()
 
   def add(self, name, target):
-    "target should be a Table or SyntheticTable"
-    if not isinstance(target, (table.Table, SyntheticTable)):
+    "target should be a Table"
+    if not isinstance(target, table.Table):
       raise TypeError(type(target), target)
     if name in self:
       # note: this is critical for avoiding cycles
       raise ScopeCollisionError('scope already has', name)
-    self.names[name] = target
-
-  def __getitem__(self, table_name):
-    return self.names[table_name]
+    self[name] = target
 
   def resolve_column(self, ref):
     "ref is a NameX or AttrX. return (canonical_table_name, column_name)."
@@ -52,16 +29,10 @@ class Scope:
       return ref.parent.name, ref.attr.name
     elif isinstance(ref, sqparse2.NameX):
       matches = set()
-      for name, target in self.names.items():
-        if isinstance(target, SyntheticTable):
-          if ref.name in target.columns(self):
-            matches.add(name)
-        elif isinstance(target, table.Table):
-          try: target.get_column(ref.name)
-          except KeyError: pass
-          else: matches.add(name)
-        else:
-          raise TypeError('expected SyntheticTable', type(target), target)
+      for name, target in self.items():
+        try: target.get_column(ref.name)
+        except KeyError: pass
+        else: matches.add(name)
       if not matches: raise ScopeUnkError(ref)
       elif len(matches) > 1: raise ScopeCollisionError(matches, ref)
       else: return list(matches)[0], ref.name
@@ -84,7 +55,7 @@ class Scope:
       elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, sqparse2.NameX):
         scope_.add(exp.alias, tables[exp.name.name])
       elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, sqparse2.SelectX):
-        scope_.add(exp.alias, SyntheticTable(exp.name))
+        raise RuntimeError('subqueries should have been replaced with rowlist before this')
       elif isinstance(exp, sqparse2.JoinX):
         scope_.add(exp.a, tables[exp.a])
         scope_.add(exp.b, tables[exp.b])

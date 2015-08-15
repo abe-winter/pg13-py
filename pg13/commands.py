@@ -56,6 +56,7 @@ def insert(database, expr):
   table_ = database[expr.table]
   # def apply_defaults(database, table_, row):
   row = table.Row.construct(
+    table_.name,
     table_,
     None,
     apply_defaults(

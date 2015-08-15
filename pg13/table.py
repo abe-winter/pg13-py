@@ -20,9 +20,12 @@ class SelectResult(list): "subclass of list; for type checking in scalar subexpr
 
 class RowSource:
   "for things like update and delete we need to know where a row came from. this stores that."
-  def __init__(self, table, index):
-    "table is a table.Table or a scope.SyntheticTable. index an integer or None (None for rows about to be inserted)"
-    self.table, self.index = table, index
+  def __init__(self, alias, table, index):
+    """alias is a string which won't always match table.name.
+    table is a table.Table.
+    index is integer or None (None for rows about to be inserted)
+    """
+    self.alias, self.table, self.index = alias, table, index
 
   @property
   def name(self):
@@ -39,13 +42,13 @@ class Row:
     self.source, self.vals = source, vals
 
   @classmethod
-  def construct(class_, table_, index, vals):
+  def construct(class_, alias, table_, index, vals):
     if not isinstance(table_, Table): raise TypeError(type(table_), table_)
-    return class_(RowSource(table_, index), vals)
+    return class_(RowSource(alias, table_, index), vals)
 
   def get_table(self, name):
     "a Row can be composite (i.e. nest others under itself). This returns the nested Row (or self) with matching name."
-    if self.source.name == name: return self
+    if self.source.alias == name: return self
     return next(
       (val.get_table(name) for val in self.vals if isinstance(val, Row) and val.get_table(name) is not None),
       None
@@ -54,7 +57,9 @@ class Row:
   def index(self, column_name):
     if self.source.table is Composite:
       raise TypeError("can't index into composite row")
-    return [f.name for f in self.source.table.fields].index(column_name)
+    try: return [f.name for f in self.source.table.fields].index(column_name)
+    except ValueError:
+      raise BadFieldName(column_name)
 
   @property
   def allvals(self):
@@ -104,9 +109,9 @@ class Table:
       raise TypeError("don't use Table.create for inherited tables", exp)
     return Table(exp.name, exp.cols, assemble_pkey(exp))
 
-  def to_rowlist(self):
+  def to_rowlist(self, alias):
     "return [Row, ...] for intermediate computations"
-    return [Row(RowSource(self, i), row) for i, row in enumerate(self.rows)]
+    return [Row(RowSource(alias, self, i), row) for i, row in enumerate(self.rows)]
 
   def get_column(self, name):
     col = next((f for f in self.fields if f.name==name), None)

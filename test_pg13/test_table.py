@@ -15,10 +15,10 @@ def table2():
 @pytest.fixture
 def composite_row(table1, table2):
   return table.Row(
-    table.RowSource(table.Composite, None),
+    table.RowSource(None, table.Composite, None),
     [
       table.Row(
-        table.RowSource(table_, 0),
+        table.RowSource(table_.name, table_, 0),
         (1, str(1))
       )
       for table_ in (table1, table2)
@@ -86,7 +86,7 @@ def test_table_expand_row(table1):
   assert table1.expand_row(['b','a'], [2, 1]) == [1, 2]
 
 def test_table_to_rowlist(table1):
-  rows = table1.to_rowlist()
+  rows = table1.to_rowlist(table1.name)
   assert [row.vals for row in rows] == table1.rows
   assert all(row.source.table is table1 for row in rows)
   assert all(i==row.source.index for i, row in enumerate(rows))

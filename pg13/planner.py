@@ -29,6 +29,8 @@ def classify_wherex(scope_, fromx, wherex):
       # todo: do join-on clauses get special scoping w.r.t. column names? check spec.
       exprs.append(exp.on_stmt)
     elif isinstance(exp, basestring): exprs.append(exp)
+    elif isinstance(exp, sqparse2.AliasX): exprs.append(exp.alias) # i.e. treat it like a table name
+    else: raise TypeError('unk type in fromx', type(exp), exp)
   def test_and(exp):
     return isinstance(exp, sqparse2.BinX) and exp.op.op == 'and'
   def binx_splitter(exp):
@@ -48,11 +50,11 @@ def classify_wherex(scope_, fromx, wherex):
         single_conds.append(SingleTableCond(tables[0], exp))
   return table_names, single_conds, cartesian_conds
 
-def table_to_rowlist(table_):
+def table_to_rowlist(table_, alias):
   "helper for wherex_to_rowlist. (table.Table, [exp, ...]) -> [Row, ...]"
-  if isinstance(table_, scope.SyntheticTable):
-    raise NotImplementedError('todo: synthetic tables to Row[]')
-  elif isinstance(table_, table.Table): return table_.to_rowlist()
+  # why no call to_rowlist directly? there may be another case on the way (SelectResult)
+  if isinstance(table_, table.Table):
+    return table_.to_rowlist(alias)
   else:
     raise TypeError('bad type for table', type(table), table)
 
@@ -70,7 +72,7 @@ def filter_rowlist(scope_, rowlist, conds):
 def make_composite_rows(rowlists):
   "take list of lists of Row. return generator of Row with source=Composite by creating the product of the lists"
   for i, rows in enumerate(itertools.product(*rowlists)):
-    yield table.Row(table.RowSource(table.Composite, i), rows)
+    yield table.Row(table.RowSource(None, table.Composite, i), rows)
 
 class Plan:
   ""
@@ -86,13 +88,14 @@ class Plan:
     When the scope has more than one name in it, the output will be a list of composite row
       (i.e. a row whose field types are themselves RowType).
     """
+    print 'run scope', scope_
     single_rowlists = {
-      table_name: filter_rowlist(scope_, table_to_rowlist(scope_[table_name]), conds)
+      table_name: filter_rowlist(scope_, table_to_rowlist(scope_[table_name], table_name), conds)
       for table_name, conds in misc.multimap(self.predicates).items() # i.e. {cond.table:[cond.exp, ...]}
     }
     rowlists = {
       # this adds in the tables that are referenced in the fromx but have no predicate
-      table_name: single_rowlists[table_name] if table_name in single_rowlists else table_to_rowlist(scope_[table_name])
+      table_name: single_rowlists[table_name] if table_name in single_rowlists else table_to_rowlist(scope_[table_name], table_name)
       for table_name in self.table_names
     }
     if len(rowlists) == 1 and not self.joins:
