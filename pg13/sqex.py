@@ -7,6 +7,7 @@ from . import sqparse2, threevl, misc, treepath, table
 # todo: derive errors below from something pg13-specific
 class ColumnNameError(StandardError): "name not in any tables or name matches too many tables"
 class TableNameError(StandardError): "expression referencing unk table"
+class ScalarSubxError(StandardError): pass
 
 # todo doc: explain why it's not necessary to do these checks on the whereclause
 def consumes_rows(ex): return isinstance(ex,sqparse2.CallX) and ex.f in ('min','max','count')
@@ -337,6 +338,17 @@ class Evaluator2:
       return exp # I think Table.insert is creating this in expand_row
     # todo: why tuple, list, dict below? throw some asserts in here and see where these are coming from.
     elif isinstance(exp,tuple): return tuple(map(self.eval, exp))
+    elif isinstance(exp,table.RowList):
+      raise NotImplementedError('todo: select should return RowList (i.e. with column annotations) instead of SelectResult')
+      if len(exp) != 1: raise ScalarSubxError('nrows != 1', len(exp))
+      row = exp[0].allvals
+      if len(row) != 1: raise ScalarSubxError('ncols != 1', len(row))
+      return row[0] # todo: as an annotated scalar
+    elif isinstance(exp,table.SelectResult):
+      if len(exp) != 1: raise ScalarSubxError('nrows != 1', len(exp))
+      row, = exp
+      if len(row) != 1: raise ScalarSubxError('ncols != 1', len(row), row)
+      return row[0]
     elif isinstance(exp,list): return map(self.eval, exp)
     elif isinstance(exp,dict): return exp
     elif isinstance(exp,sqparse2.NullX): return None

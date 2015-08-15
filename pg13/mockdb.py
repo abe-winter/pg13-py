@@ -107,14 +107,9 @@ class Database:
     """
     sqex.depth_first_sub(ex, values)
     with self.lock_db(lockref, isinstance(ex, sqparse2.StartX)):
-      sub_select = treepath.sub_slots(ex, lambda x:isinstance(x, sqparse2.SelectX))
-      if sub_select:
-        for ss in sub_select:
-          # next: distinguish scalar and non-scalar context
-          print ss
-          print ex[ss]
-        raise NotImplementedError('need to deal with subqueries in planner-based engine')
-        # sqex.replace_subqueries(ex,self,table.Table)
+      for subx_path in treepath.sub_slots(ex, lambda x:isinstance(x, sqparse2.SelectX)):
+        # todo: distinguish scalar and non-scalar context (select (subselect) as alias, insert-select)
+        ex[subx_path] = commands.select(self, ex[subx_path])
       if isinstance(ex,sqparse2.SelectX): return commands.select(self, ex)
       elif isinstance(ex,sqparse2.InsertX): return commands.insert(self, ex)
       elif isinstance(ex,sqparse2.UpdateX):

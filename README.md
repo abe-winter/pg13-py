@@ -112,4 +112,4 @@ See also:
 * https://pypi.python.org/pypi/engine
 * https://github.com/itissid/pypgTAP
 * cautionary note: [don't test with sqlite when you use postgres](http://michael.robellard.com/2015/07/dont-test-with-sqllite-when-you-use.html)
-* (todo: link to the rust SQL evaluator)
+* [llamadb, a sql engine in rust](https://github.com/nukep/llamadb)

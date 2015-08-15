@@ -91,16 +91,21 @@ def insert(database, expr):
     ret = sqex.Evaluator2(row, scope_).eval(expr.ret)
     return [ret]
 
+def query(database, fromx, wherex):
+  "helper for commands that use a RowList"
+  scope_ = scope.Scope.from_fromx(database, fromx)
+  plan = planner.Plan.from_query(scope_, fromx, wherex)
+  return scope_, plan.run(scope_)
+
 def select(database, expr):
   print 'select', expr.cols
   if expr.group or expr.order or expr.limit or expr.offset:
     raise NotImplementedError('expr.group or expr.order or expr.limit or expr.offset', expr)
-  scope_ = scope.Scope.from_fromx(database, expr.tables)
-  plan = planner.Plan.from_query(scope_, expr.tables, expr.where)
+  scope_, rowlist = query(database, expr.tables, expr.where)
   if sqex.contains(expr.cols, sqex.consumes_rows):
     # aggregate query
     if any(not sqex.contains(col, sqex.consumes_rows) for col in expr.cols.children):
       raise AggregationError("can't mix aggregate and non-aggregate fields") # note: sqlite allows this and returns something weird
-    return sqex.Evaluator2(plan.run(scope_), scope_).eval(expr.cols)
+    return table.SelectResult(sqex.Evaluator2(rowlist, scope_).eval(expr.cols))
   else:
-    return [sqex.Evaluator2(row, scope_).eval(expr.cols) for row in plan.run(scope_)]
+    return table.SelectResult([sqex.Evaluator2(row, scope_).eval(expr.cols) for row in rowlist])
