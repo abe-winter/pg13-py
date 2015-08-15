@@ -6,6 +6,14 @@ from . import sqparse2, sqex, misc, scope, table, treepath
 SingleTableCond = collections.namedtuple('SingleTableCond', 'table exp')
 CartesianCond = collections.namedtuple('CartesianCond', 'exp')
 
+class OrderedSet(list):
+  "this isn't efficient for long lists"
+  def add(self, x):
+    if x not in self:
+      super(OrderedSet, self).append(x)
+  def append(self, x): raise TypeError("no append on OrderedSet")
+  def update(self, items): map(self.add, items)
+
 def names_from_exp(exp):
   "Return a list of AttrX and NameX from the expression."
   def match(exp):
@@ -28,7 +36,7 @@ def classify_wherex(scope_, fromx, wherex):
   exprs += treepath.flatten_tree(test_and, binx_splitter, wherex) if wherex else [] # wherex is None if not given
   single_conds = []
   cartesian_conds = []
-  table_names = set()
+  table_names = OrderedSet()
   for exp in exprs:
     if isinstance(exp, basestring): table_names.add(exp) # but don't store to either conds list
     else:
@@ -90,11 +98,13 @@ class Plan:
     if len(rowlists) == 1 and not self.joins:
       return table.RowList(rowlists.values()[0])
     else:
+      if len(self.table_names) != len(rowlists):
+        raise RuntimeError("expected table_names and rowlists keys to match", self.table_names, list(rowlists))
       return filter_rowlist(
         scope_,
-        make_composite_rows(rowlists.values()),
+        make_composite_rows([rowlists[name] for name in self.table_names]),
         [cond.exp for cond in self.joins]
       )
 
   def explain(self): raise NotImplementedError('todo')
-  def __repr__(self): return '<Plan {%s} %i predicates %i joins>' % (self.table_names, len(self.predicates), len(self.joins))
+  def __repr__(self): return '<Plan %s %i predicates %i joins>' % (self.table_names, len(self.predicates), len(self.joins))

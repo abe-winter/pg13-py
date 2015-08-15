@@ -319,7 +319,7 @@ class Evaluator2:
       for child in exp.children:
         if starlike(child):
           # expect a row in this case
-          ret.extend(self.eval(child).vals)
+          ret.extend(self.eval(child).allvals)
         else:
           ret.append(self.eval(child))
       return ret

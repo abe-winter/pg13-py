@@ -59,3 +59,10 @@ def test_planner_joins():
     exp = sqparse2.parse(stmt)
     scope_ = scope.Scope.from_fromx(tables, exp.tables)
     assert 2 == len(planner.Plan.from_query(scope_, exp.tables, exp.where).run(scope_))
+
+def test_distinguish_tables_vs_columns():
+  tables, run = prep('create table t1 (a int, b int)')
+  exp = sqparse2.parse('select * from t1 where (a,b) in %s')
+  scope_ = scope.Scope.from_fromx(tables, exp.tables)
+  plan = planner.Plan.from_query(scope_, exp.tables, exp.where)
+  assert (len(plan.predicates), len(plan.joins)) == (1,0)

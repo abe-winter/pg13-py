@@ -79,6 +79,7 @@ def query(database, fromx, wherex):
   "helper for commands that use a RowList"
   scope_ = scope.Scope.from_fromx(database, fromx)
   plan = planner.Plan.from_query(scope_, fromx, wherex)
+  print 'query plan', plan
   return scope_, plan.run(scope_)
 
 def do_assign(scope_, assigns, row):
@@ -99,14 +100,16 @@ def update(database, expr):
     return table.SelectResult([sqex.Evaluator2(row, scope_).eval(expr.ret) for row in rowlist])
 
 def select(database, expr):
-  print 'select', expr.cols
-  if expr.group or expr.order or expr.limit or expr.offset:
-    raise NotImplementedError('expr.group or expr.order or expr.limit or expr.offset', expr)
   scope_, rowlist = query(database, expr.tables, expr.where)
   if sqex.contains(expr.cols, sqex.consumes_rows):
-    # aggregate query
+    # case: aggregate query
+    if expr.group or expr.order or expr.limit or expr.offset:
+      raise NotImplementedError('todo: what to do with group/order/limit/offset in aggregate query?', {'group':expr.group, 'order':expr.order, 'limit':expr.limit, 'offset':expr.offset})
     if any(not sqex.contains(col, sqex.consumes_rows) for col in expr.cols.children):
       raise AggregationError("can't mix aggregate and non-aggregate fields") # note: sqlite allows this and returns something weird
     return table.SelectResult(sqex.Evaluator2(rowlist, scope_).eval(expr.cols))
   else:
+    if expr.order:
+      rowlist.sort(key=lambda row:sqex.Evaluator2(row, scope_).eval(expr.order))
+    if expr.group or expr.limit or expr.offset: raise NotImplementedError({'group':expr.group, 'order':expr.order, 'limit':expr.limit, 'offset':expr.offset})
     return table.SelectResult([sqex.Evaluator2(row, scope_).eval(expr.cols) for row in rowlist])
