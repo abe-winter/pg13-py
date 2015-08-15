@@ -115,6 +115,7 @@ class Database:
       for subx_path in treepath.sub_slots(ex, lambda x:isinstance(x, sqparse2.SelectX)):
         # todo: distinguish scalar and non-scalar context (select (subselect) as alias, insert-select).
         #   Scalar subqueries should be cast to scalars (or errored-out) here; then remove the SelectResult case from sqex.
+        #   I think subselects are only in fromx, any other field means scalar subquery.
         ex[subx_path] = commands.select(self, ex[subx_path])
       if isinstance(ex,sqparse2.SelectX): return commands.select(self, ex)
       elif isinstance(ex,sqparse2.InsertX): return commands.insert(self, ex)

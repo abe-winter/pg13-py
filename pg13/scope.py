@@ -14,7 +14,7 @@ class Scope(dict):
 
   def add(self, name, target):
     "target should be a Table"
-    if not isinstance(target, table.Table):
+    if not isinstance(target, (table.Table, table.SelectResult)):
       raise TypeError(type(target), target)
     if name in self:
       # note: this is critical for avoiding cycles
@@ -56,6 +56,8 @@ class Scope(dict):
         scope_.add(exp.alias, tables[exp.name.name])
       elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, sqparse2.SelectX):
         raise RuntimeError('subqueries should have been replaced with rowlist before this')
+      elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, table.SelectResult):
+        scope_.add(exp.alias, exp.name)
       elif isinstance(exp, sqparse2.JoinX):
         scope_.add(exp.a, tables[exp.a])
         scope_.add(exp.b, tables[exp.b])

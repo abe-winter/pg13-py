@@ -108,9 +108,9 @@ def select(database, expr):
       raise NotImplementedError('todo: what to do with group/order/limit/offset in aggregate query?', {'group':expr.group, 'order':expr.order, 'limit':expr.limit, 'offset':expr.offset})
     if any(not sqex.contains(col, sqex.consumes_rows) for col in expr.cols.children):
       raise AggregationError("can't mix aggregate and non-aggregate fields") # note: sqlite allows this and returns something weird
-    return table.SelectResult(sqex.Evaluator2(rowlist, scope_).eval(expr.cols))
+    return table.SelectResult(sqex.Evaluator2(rowlist, scope_).eval(expr.cols), expr)
   else:
     if expr.order:
       rowlist.sort(key=lambda row:sqex.Evaluator2(row, scope_).eval(expr.order))
     if expr.group or expr.limit or expr.offset: raise NotImplementedError({'group':expr.group, 'order':expr.order, 'limit':expr.limit, 'offset':expr.offset})
-    return table.SelectResult([sqex.Evaluator2(row, scope_).eval(expr.cols) for row in rowlist])
+    return table.SelectResult([sqex.Evaluator2(row, scope_).eval(expr.cols) for row in rowlist], expr)

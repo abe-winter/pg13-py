@@ -16,7 +16,11 @@ FieldLookup=collections.namedtuple('FieldLookup','index type')
 class Composite: "use this for RowSource.table when a Row is composite"
 
 class RowList(list): "subclass of list; identical except for type-checking"
-class SelectResult(list): "subclass of list; for type checking in scalar subexpression"
+class SelectResult(list):
+  "this is band-aid pending better type information for intermediate values"
+  def __init__(self, vals, expr):
+    super(SelectResult, self).__init__(vals)
+    self.expr = expr
 
 class RowSource:
   "for things like update and delete we need to know where a row came from. this stores that."

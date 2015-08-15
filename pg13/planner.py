@@ -52,9 +52,10 @@ def classify_wherex(scope_, fromx, wherex):
 
 def table_to_rowlist(table_, alias):
   "helper for wherex_to_rowlist. (table.Table, [exp, ...]) -> [Row, ...]"
-  # why no call to_rowlist directly? there may be another case on the way (SelectResult)
   if isinstance(table_, table.Table):
     return table_.to_rowlist(alias)
+  elif isinstance(table_, table.SelectResult):
+    raise NotImplementedError('intermediate type schema needs redesign')
   else:
     raise TypeError('bad type for table', type(table), table)
 

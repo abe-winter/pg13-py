@@ -349,6 +349,9 @@ class Evaluator2:
       if len(row) != 1: raise ScalarSubxError('ncols != 1', len(row))
       return row[0] # todo: as an annotated scalar
     elif isinstance(exp,table.SelectResult):
+      if len(exp) == 0:
+        # warning: this needs spec support. I'm relying on 3VL to say nothing ever tests positive for x=null. Is this exactly the same as empty?
+        return None
       if len(exp) != 1: raise ScalarSubxError('nrows != 1', len(exp))
       row, = exp
       if len(row) != 1: raise ScalarSubxError('ncols != 1', len(row), row)
