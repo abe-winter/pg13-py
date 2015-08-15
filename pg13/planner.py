@@ -84,7 +84,7 @@ class Plan:
     }
     rowlists = {
       # this adds in the tables that are referenced in the fromx but have no predicate
-      table_name: single_rowlists.get(table_name) or table_to_rowlist(scope_[table_name])
+      table_name: single_rowlists[table_name] if table_name in single_rowlists else table_to_rowlist(scope_[table_name])
       for table_name in self.table_names
     }
     if len(rowlists) == 1 and not self.joins:
