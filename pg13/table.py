@@ -55,6 +55,12 @@ class Row:
       raise TypeError("can't index into composite row")
     return [f.name for f in self.source.table.fields].index(column_name)
 
+  @property
+  def allvals(self):
+    "returns ordered sub-row vals from a composite row (or self.vals if not composite)"
+    # note: casting to list so uoter sum works
+    return list(sum((row.allvals for row in self.vals),[]) if self.source.table is Composite else self.vals)
+
   def __getitem__(self, (table_name, column_name)):
     actual_row = self.get_table(table_name)
     if not actual_row:

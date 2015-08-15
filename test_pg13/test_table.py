@@ -32,6 +32,9 @@ def test_row_get_table(composite_row):
   assert composite_row.get_table('t1').get_table('t1') == composite_row.get_table('t1')
   assert composite_row.get_table('t1').get_table('t2') is None
 
+def test_allvals(composite_row):
+  assert composite_row.allvals == [1,'1',1,'1']
+
 def test_row_index(composite_row):
   with pytest.raises(TypeError):
     composite_row.index('a')
