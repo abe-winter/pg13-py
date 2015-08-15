@@ -129,8 +129,22 @@ def test_update_returning():
   runsql('insert into t1 values(1,2,3)')
   assert [[1,3]]==runsql('update t1 set b=5 where a<5 returning a,c')
   assert [[1,3]]==runsql('update t1 set b=5 where a<5 returning (a,c)')
-  
   assert [[3]]==runsql('update t1 set b=5 where a<5 returning c') # todo: make sure list of rows is the right return type
+
+def test_update_rollback():
+  tables, runsql = prep("create table t1 (a int, b int, c int)")
+  tables['t1'].rows = [[1,2,3],[4,5,6]]
+  lockref = 'lockref'
+  tables.trans_start(lockref)
+  tables.apply_sql(sqparse2.parse('update t1 set a=7'), (), lockref)
+  assert all(row[0] == 7 for row in tables['t1'].rows)
+  tables.trans_rollback()
+  assert all(row[0] != 7 for row in tables['t1'].rows)
+
+def test_reject_null_lockref():
+  tables, runsql = prep("create table t1 (a int, b int, c int)")
+  tables['t1'].rows = [[1,2,3],[4,5,6]]
+  with pytest.raises(mockdb.NullLockrefError): tables.trans_start(None)
 
 def test_in_operator():
   tables,runsql=prep("create table t1 (a int, b int, c int)")

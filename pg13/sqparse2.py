@@ -120,10 +120,15 @@ def bin_priority(op,left,right):
   elif isinstance(left,UnX) and left.op < op: return un_priority(left.op,BinX(op,left.val,right)) # note: obviously, no need to do this when right is a UnX
   elif isinstance(right,BinX) and right.op < op: return bin_priority(right.op,bin_priority(op,left,right.left),right.right)
   else: return BinX(op,left,right)
+
 def un_priority(op,val):
   "unary expression order-of-operations helper"
   if isinstance(val,BinX) and val.op < op: return bin_priority(val.op,UnX(op,val.left),val.right)
   else: return UnX(op,val)
+
+def flatten_commax(commax):
+  "this is a helper for ReturnX for the case where return-expr is a parenlist; I think it's only necessary because sqex can't return composite rows"
+  return commax.children[0] if map(type, commax.children) == [CommaX] else commax
 
 KEYWORDS = {w:'kw_'+w for w in 'array case when then else end as join on from where order by limit offset select is not and or in null default primary key if exists create table insert into values returning update set delete group inherits check constraint start transaction commit rollback left right full inner outer using drop cascade cast'.split()}
 class SqlGrammar:
@@ -321,9 +326,7 @@ class SqlGrammar:
   def p_returnx(self,t):
     "opt_returnx : kw_returning commalist \n | "
     # note: this gets weird because '(' commalist ')' is an expression but we need bare commalist to support non-paren returns
-    print 'warning: types are very weird in returnx child. does SQL distinguish between returning (a,b) and returning a,b?'
-    print 'returning:', t[1:]
-    t[0] = None if len(t)==1 else ReturnX(t[2])
+    t[0] = None if len(t)<2 else ReturnX(flatten_commax(t[2]))
   def p_optparennamelist(self,t): "opt_paren_namelist : '(' namelist ')' \n | "; t[0] = t[2] if len(t)>1 else None
   def p_insertx(self,t):
     "expression : kw_insert kw_into NAME opt_paren_namelist kw_values '(' commalist ')' opt_returnx"

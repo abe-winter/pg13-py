@@ -1,7 +1,7 @@
 "commands -- bodies for SQL commands"
 # todo: separate the special versions of commands (i.e. insert_returning)
 
-from . import scope, planner, table, sqex
+from . import scope, planner, table, sqex, sqparse2
 
 class CommandError(StandardError): "base"
 class NotNullError(CommandError): pass
@@ -18,9 +18,6 @@ def emergency_cast(colx, value):
     return dict(true=True, false=False)[value.lower()] # keyerror if other
   else:
     return value # todo: type check?
-
-def rowlist2scalar(rowlist):
-  raise NotImplementedError
 
 def field_default(colx, table_name, database):
   "takes sqparse2.ColX, Table"
@@ -39,19 +36,6 @@ def apply_defaults(database, table_, row):
     emergency_cast(colx, field_default(colx, table_.name, database) if v is table.Missing else v)
     for colx, v in zip(table_.fields, row)
   ]
-
-def update(self, rowlist):
-  "replace rows from rowlist using indexes"
-  raise NotImplementedError('todo')
-  raise NotImplementedError("delete old code below")
-  nix = sqex.NameIndexer.ctor_name(self.name)
-  nix.resolve_aonly(tables_dict,Table)
-  if not all(isinstance(x,sqparse2.AssignX) for x in setx): raise TypeError('not_xassign',map(type,setx))
-  match_rows=self.match(where,tables_dict,nix) if where else self.rows
-  raise NotImplementedError('port old Evaluator')
-  for row in match_rows:
-    for x in setx: row[self.lookup(x.col).index]=sqex.Evaluator((row,),nix,tables_dict).eval(x.expr)
-  if returning: return sqex.Evaluator((row,),nix,tables_dict).eval(returning)
 
 def delete(self, rowlist):
   "use indexes from rowlist to delete"
@@ -89,13 +73,30 @@ def insert(database, expr):
   table_.rows.append(row.vals)
   if expr.ret:
     ret = sqex.Evaluator2(row, scope_).eval(expr.ret)
-    return [ret]
+    return table.SelectResult([ret])
 
 def query(database, fromx, wherex):
   "helper for commands that use a RowList"
   scope_ = scope.Scope.from_fromx(database, fromx)
   plan = planner.Plan.from_query(scope_, fromx, wherex)
   return scope_, plan.run(scope_)
+
+def do_assign(scope_, assigns, row):
+  if not all(isinstance(x, sqparse2.AssignX) for x in assigns):
+    # in theory the parser guarantees this; we're double-checking
+    raise TypeError('not_all_AssignX', assigns, map(type, assigns))
+  source_row = row.source.table.rows[row.source.index]
+  for assign in assigns:
+    lookup = row.source.table.lookup(assign.col)
+    source_row[lookup.index] = sqex.Evaluator2(scope_, row).eval(assign.expr)
+
+def update(database, expr):
+  scope_, rowlist = query(database, expr.tables, expr.where)
+  for row in rowlist:
+    do_assign(scope_, expr.assigns, row)
+  if expr.ret:
+    # note: this is relying on row.vals being a reference
+    return table.SelectResult([sqex.Evaluator2(row, scope_).eval(expr.ret) for row in rowlist])
 
 def select(database, expr):
   print 'select', expr.cols
