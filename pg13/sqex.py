@@ -308,16 +308,16 @@ class Evaluator2:
     # todo: need a RowList type -- just a subclass of list, only exists for type checking
     if isinstance(exp,sqparse2.BinX): return evalop(exp.op.op, *map(self.eval, (exp.left, exp.right)))
     elif isinstance(exp,sqparse2.UnX): return self.eval_unx(exp)
-    elif isinstance(exp,sqparse2.NameX): return self.row[self.scope.resolve_column(exp)]
+    elif isinstance(exp,sqparse2.NameX):
+      alias, field = self.scope.resolve_column(exp)
+      return self.scope[alias].get_field(field, self.row)
     elif isinstance(exp,sqparse2.AsterX):
       raise NotImplementedError('this returns a Table2')
       return self.row
     elif isinstance(exp,sqparse2.ArrayLit): return map(self.eval,exp.vals)
     elif isinstance(exp,(sqparse2.Literal,sqparse2.ArrayLit)): return exp.toliteral()
     elif isinstance(exp,sqparse2.CommaX):
-      raise NotImplementedError('this returns a Table2')
       # todo: think about getting rid of CommaX everywhere; it complicates syntax tree navigation.
-      #   a lot of things that are CommaX now should become weval.Row.
       ret = [] # todo: this should be a composite row
       for child in exp.children:
         if starlike(child):
@@ -347,7 +347,7 @@ class Evaluator2:
     # todo: why tuple, list, dict below? throw some asserts in here and see where these are coming from.
     elif isinstance(exp,tuple): return tuple(map(self.eval, exp))
     elif isinstance(exp,table2.Table):
-      if is_returning: return exp.copy((self.row,))
+      if is_returning: return exp.copy((self.eval(exp.expr),))
       else:
         raise NotImplementedError('scalar subquery', self.row, exp)
         if len(exp) == 0:

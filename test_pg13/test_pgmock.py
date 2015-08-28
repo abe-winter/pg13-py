@@ -17,19 +17,19 @@ def test_default_null_vs_notprovided():
   runsql("insert into t1 (a,c) values (1,3)")
   # 3. passed-in None overrides default
   runsql("insert into t1 (a,b) values (1,null)")
-  assert tables['t1'].rows==[[1,2,None],[1,7,3],[1,None,None]]
+  assert tables['t1']==[[1,2,None],[1,7,3],[1,None,None]]
 
 def test_insert():
   tables,runsql=prep("create table t1 (a int, b int, c int)")
   runsql("insert into t1 (a,b,c) values (1,2,3)")
-  assert tables['t1'].rows[0]==[1,2,3]
+  assert tables['t1'][0]==[1,2,3]
 
 def test_insert_endcols():
   "test len(insert fields)<len(table fields)"
   tables={}
   tables,runsql=prep("create table t1 (a int default null, b int, c int)")
   runsql('insert into t1 (b,c) values (3,4)')
-  assert tables['t1'].rows==[[None,3,4]]
+  assert tables['t1']==[[None,3,4]]
 
 def test_insert_dupe():
   tables,runsql=prep("create table t1 (a int, b int, c int, primary key (a,b))")
@@ -39,12 +39,12 @@ def test_insert_dupe():
 def test_insert_sub():
   tables,runsql=prep("create table t1 (a int, b int, c int, primary key (a,b))")
   runsql("insert into t1 values (1,2,%s)",(3,))
-  assert tables['t1'].rows[0]==[1,2,3]
+  assert tables['t1'][0]==[1,2,3]
 
 def test_insert_default():
   tables,runsql=prep("create table t1 (a int, b int, c int default 3)")
   runsql("insert into t1 (a,b) values (1,2)")
-  assert tables['t1'].rows[0]==[1,2,3]
+  assert tables['t1'][0]==[1,2,3]
 
 def test_insert_returning():
   """raw psycopg2 does this:

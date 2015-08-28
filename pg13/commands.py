@@ -60,7 +60,7 @@ def insert(database, expr):
   if table_.pkey_get(vals):
     raise DuplicateInsert(expr, vals)
   table_.append(vals)
-  if expr.ret:
+  if expr.ret is not None:
     if not isinstance(expr.ret, table2.Table):
       raise TypeError('expected Table in expr.ret vs', expr.ret)
     if not isinstance(expr.ret.expr, scope.SUBTABLE_TYPES):

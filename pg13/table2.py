@@ -105,10 +105,14 @@ class Table(list):
       if len(indexes) != len(self.pkey):
         raise ValueError('pkey has unk fields', self.pkey, self.names)
       pkey_vals = [row[i] for i in indexes]
-      return next((r for r in self.rows if pkey_vals == [row[i] for i in indexes]), None)
+      return next((irow for irow in self if pkey_vals == [irow[i] for i in indexes]), None)
     else:
       return None
 
   def copy(self, rows):
     "return a copy of this table, replacing rows"
     return Table(self.names, self.expr, rows, self.alias)
+
+  def get_field(self, name, row):
+    "return field index from given row"
+    return row[self.names.index(name)]

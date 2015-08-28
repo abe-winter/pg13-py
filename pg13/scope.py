@@ -32,9 +32,8 @@ class Scope(dict):
     elif isinstance(ref, sqparse2.NameX):
       matches = set()
       for name, target in self.items():
-        try: target.get_column(ref.name)
-        except KeyError: pass
-        else: matches.add(name)
+        if ref.name in target.names:
+          matches.add(name)
       if not matches: raise ScopeUnkError(ref)
       elif len(matches) > 1: raise ScopeCollisionError(matches, ref)
       else: return list(matches)[0], ref.name
