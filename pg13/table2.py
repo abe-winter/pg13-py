@@ -21,6 +21,12 @@ def toliteral(probably_literal):
   if probably_literal==sqparse2.NameX('null'): return None
   return probably_literal.toliteral() if hasattr(probably_literal, 'toliteral') else probably_literal
 
+def col2string(expr):
+  "helper for the Table.fromx specializations. takes various expression types, returns a string (or None if not name-able)"
+  if isinstance(expr, basestring): return expr
+  elif isinstance(expr, sqparse2.NameX): return expr.name
+  else: raise TypeError(expr)
+
 class ColumnName:
   ""
   def __init__(self, name, tablename=None):
@@ -33,13 +39,36 @@ class ColumnName:
     elif isinstance(expr, basestring): raise NotImplementedError
     else: raise TypeError(type(expr))
 
-class Table:
+class Table(list):
   "this is for storage and also for managing intermediate results during queries"
   def __init__(self, names, expr=None, rows=(), alias=None):
     # note: list(rows) is both a cast and a copy (but each row is still a reference)
     # note: I *think* expr is mandatory for some commands (insert, for example) but optional in other cases (inside selects)
-    self.names, self.expr, self.rows, self.alias = names, expr, list(rows), alias
-    self.pkey = assemble_pkey(expr) if expr is not None else []
+    self.names, self.expr, self.alias = names, expr, alias
+    self.pkey = assemble_pkey(expr) if isinstance(expr, sqparse2.CreateX) else []
+    super(Table, self).__init__(rows)
+
+  @property
+  def col_exprs(self):
+    if isinstance(self.expr, sqparse2.CreateX): return self.expr.cols
+    elif isinstance(self.expr, sqparse2.CommaX): raise NotImplementedError
+    elif isinstance(self.expr, sqparse2.AsterX): raise NotImplementedError
+    elif isinstance(self.expr, sqparse2.SelectX): raise NotImplementedError
+    else:
+      raise TypeError('unk expr type', self.expr)
+
+  @classmethod
+  def fromx(class_, expr):
+    factory_fn = {
+      sqparse2.CreateX: class_.from_create,
+      sqparse2.CommaX: class_.from_commax,
+    }[type(expr)]
+    return factory_fn(expr)
+
+  @classmethod
+  def from_commax(class_, expr):
+    "(Commax) -> Table"
+    return class_(map(col2string, expr.children), expr)
 
   @classmethod
   def from_create(class_, expr):
@@ -65,7 +94,7 @@ class Table:
     # todo: check types here
     return literals
 
-  def __getitem__(self, row):
+  def pkey_get(self, row):
     """return the db row matched by the pkey values in the passed row.
     If this returns non-null an insert would fail (i.e. there's a dupe).
     """
@@ -79,3 +108,7 @@ class Table:
       return next((r for r in self.rows if pkey_vals == [row[i] for i in indexes]), None)
     else:
       return None
+
+  def copy(self, rows):
+    "return a copy of this table, replacing rows"
+    return Table(self.names, self.expr, rows, self.alias)

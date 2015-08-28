@@ -300,7 +300,7 @@ class Evaluator2:
     elif exp.op.op=='not': return threevl.ThreeVL.nein(inner)
     else: raise NotImplementedError('unk_op',exp.op) # pragma: no cover
 
-  def eval(self, exp):
+  def eval(self, exp, is_returning=False):
     "main dispatch for expression evaluation"
     # todo: in testing, this needs an AST-assert that all BaseX descendants are being handled
     # todo: this needs to be split into expressions that return Row vs return scalar
@@ -347,20 +347,16 @@ class Evaluator2:
     # todo: why tuple, list, dict below? throw some asserts in here and see where these are coming from.
     elif isinstance(exp,tuple): return tuple(map(self.eval, exp))
     elif isinstance(exp,table2.Table):
-      raise NotImplementedError('todo: select should return RowList (i.e. with column annotations) instead of SelectResult')
-      if len(exp) != 1: raise ScalarSubxError('nrows != 1', len(exp))
-      row = exp[0].allvals
-      if len(row) != 1: raise ScalarSubxError('ncols != 1', len(row))
-      return row[0] # todo: as an annotated scalar
-    elif isinstance(exp,table2.Table):
-      raise NotImplementedError('this used to be selectresult; hmm')
-      if len(exp) == 0:
-        # warning: this needs spec support. I'm relying on 3VL to say nothing ever tests positive for x=null. Is this exactly the same as empty?
-        return None
-      if len(exp) != 1: raise ScalarSubxError('nrows != 1', len(exp))
-      row, = exp
-      if len(row) != 1: raise ScalarSubxError('ncols != 1', len(row), row)
-      return row[0]
+      if is_returning: return exp.copy((self.row,))
+      else:
+        raise NotImplementedError('scalar subquery', self.row, exp)
+        if len(exp) == 0:
+          # warning: this needs spec support. I'm relying on 3VL to say nothing ever tests positive for x=null. Is this exactly the same as empty?
+          return None
+        if len(exp) != 1: raise ScalarSubxError('nrows != 1', len(exp))
+        row, = exp
+        if len(row) != 1: raise ScalarSubxError('ncols != 1', len(row), row)
+        return row[0]
     elif isinstance(exp,list): return map(self.eval, exp)
     elif isinstance(exp,dict): return exp
     elif isinstance(exp,sqparse2.NullX): return None

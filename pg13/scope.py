@@ -6,6 +6,8 @@ class ScopeError(StandardError): "base"
 class ScopeCollisionError(ScopeError): pass
 class ScopeUnkError(ScopeError): pass
 
+SUBTABLE_TYPES = (sqparse2.SelectX, sqparse2.CommaX, sqparse2.AsterX)
+
 class Scope(dict):
   "bundle for all the tables that are going to be used in a query, and their aliases"
   def __init__(self, expression):
@@ -40,17 +42,18 @@ class Scope(dict):
       raise TypeError('unexpected', type(ref), ref)
 
   def replace_intermediate_types(self, expr):
-    """Replace CommaX with Table so we can track the names of variables.
+    """Replace CommaX/SelectX/AsterX with Table so we can track the names of variables.
+    (doesn't apply to top-level SelectX, only subqueries. todo: think more about scalar subqueries when I know more).
     This is potentially useful at the output stage but critical with subqueries.
     Example: select a from (select * from t1) as whatever;
     """
     print expr
     def test(expr):
-      return isinstance(expr, (sqparse2.SelectX, sqparse2.CommaX, sqparse2.AsterX))
+      return isinstance(expr, SUBTABLE_TYPES)
     for path in treepath.sub_slots(expr, test):
-      print path, expr[path]
-      raise NotImplementedError
-      # IntermediateTable(expr, table)
+      # warning: is the next line valid with len(path)=1?
+      replace_path = path[:-1] if isinstance(expr[path[:-1]], sqparse2.ReturnX) else path
+      expr[replace_path] = table2.Table.fromx(expr[path])
 
   @classmethod
   def from_expr(class_, tables, expr):

@@ -34,7 +34,7 @@ def apply_defaults(database, table_, row):
   "apply defaults to missing cols for a row that's being inserted"
   return [
     emergency_cast(colx, field_default(colx, table_.alias, database) if v is table2.Missing else v)
-    for colx, v in zip(table_.expr.cols, row)
+    for colx, v in zip(table_.col_exprs, row)
   ]
 
 def delete(self, rowlist):
@@ -57,13 +57,15 @@ def insert(database, expr):
   for i, elt in enumerate(vals):
     # warning: need dependency analysis on cols. 'insert into t (a,b) values (b,1)'
     vals[i] = sqex.Evaluator2(vals, scope_).eval(elt)
-  if table_[vals]:
+  if table_.pkey_get(vals):
     raise DuplicateInsert(expr, vals)
-  table_.rows.append(vals)
+  table_.append(vals)
   if expr.ret:
-    raise NotImplementedError('port insert ret', vals)
-    ret = sqex.Evaluator2(row, scope_).eval(expr.ret)
-    return table.SelectResult([ret])
+    if not isinstance(expr.ret, table2.Table):
+      raise TypeError('expected Table in expr.ret vs', expr.ret)
+    if not isinstance(expr.ret.expr, scope.SUBTABLE_TYPES):
+      raise TypeError('expected subtable-expr table in expr.ret, not', expr.ret.expr)
+    return sqex.Evaluator2(vals, scope_).eval(expr.ret, is_returning=True)
 
 def query(database, fromx, wherex):
   "helper for commands that use a RowList"
