@@ -2,6 +2,8 @@
 
 from . import sqparse2
 
+class Missing: "for distinguishing missing columns vs passed-in null"
+
 def assemble_pkey(exp):
   "helper for Table.create. returns the pkey fields if given directly, otherwise constructs one from columns."
   if not isinstance(exp, sqparse2.CreateX):
@@ -13,6 +15,11 @@ def assemble_pkey(exp):
     return [c.name for c in exp.cols if c.pkey]
   else:
     return exp.pkey.fields if exp.pkey else []
+
+def toliteral(probably_literal):
+  # todo: among the exception cases are Missing, str. go through cases and make this cleaner. the test suite alone has multiple types here.
+  if probably_literal==sqparse2.NameX('null'): return None
+  return probably_literal.toliteral() if hasattr(probably_literal, 'toliteral') else probably_literal
 
 class ColumnName:
   ""
@@ -30,6 +37,7 @@ class Table:
   "this is for storage and also for managing intermediate results during queries"
   def __init__(self, names, expr=None, rows=(), alias=None):
     # note: list(rows) is both a cast and a copy (but each row is still a reference)
+    # note: I *think* expr is mandatory for some commands (insert, for example) but optional in other cases (inside selects)
     self.names, self.expr, self.rows, self.alias = names, expr, list(rows), alias
     self.pkey = assemble_pkey(expr) if expr is not None else []
 
@@ -42,3 +50,32 @@ class Table:
       raise TypeError("don't use Table.create for inherited tables", exp)
     names = [col.name for col in expr.cols]
     return class_(names, expr, alias=expr.name)
+
+  def expand_row(self, fields, values):
+    "helper for insert. turn (field_names, values) into the full-width, properly-ordered row"
+    reverse_indexes = {self.names.index(f):i for i, f in enumerate(fields)}
+    indexes = [reverse_indexes.get(i) for i in range(len(self.names))]
+    return [(Missing if i is None else values[i]) for i in indexes]
+
+  def fix_rowtypes(self, row):
+    "this should eventually do type-checking, maybe. for now it checks length and applies toliteral()"
+    if len(row) != len(self.names):
+      raise ValueError('wrong # of values for table', self.name, self.names, row)
+    literals = map(toliteral, row)
+    # todo: check types here
+    return literals
+
+  def __getitem__(self, row):
+    """return the db row matched by the pkey values in the passed row.
+    If this returns non-null an insert would fail (i.e. there's a dupe).
+    """
+    if len(row) != len(self.names):
+      raise ValueError("bad row length", row, self.names)
+    if self.pkey:
+      indexes=[i for i, name in enumerate(self.names) if name in self.pkey]
+      if len(indexes) != len(self.pkey):
+        raise ValueError('pkey has unk fields', self.pkey, self.names)
+      pkey_vals = [row[i] for i in indexes]
+      return next((r for r in self.rows if pkey_vals == [row[i] for i in indexes]), None)
+    else:
+      return None

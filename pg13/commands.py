@@ -33,8 +33,8 @@ def field_default(colx, table_name, database):
 def apply_defaults(database, table_, row):
   "apply defaults to missing cols for a row that's being inserted"
   return [
-    emergency_cast(colx, field_default(colx, table_.name, database) if v is table2.Missing else v)
-    for colx, v in zip(table_.fields, row)
+    emergency_cast(colx, field_default(colx, table_.alias, database) if v is table2.Missing else v)
+    for colx, v in zip(table_.expr.cols, row)
   ]
 
 def delete(self, rowlist):
@@ -52,15 +52,16 @@ def insert(database, expr):
   scope_ = scope.Scope.from_fromx(database, [expr.table])
   table_ = database[expr.table]
   vals = apply_defaults(database, table_, table_.fix_rowtypes(
-    table.expand_row(expr.cols, expr.values) if expr.cols else expr.values
+    table_.expand_row(expr.cols, expr.values) if expr.cols else expr.values
   ))
-  raise NotImplementedError('continue porting')
-  for i, elt in enumerate(row.vals):
-    row.vals[i] = sqex.Evaluator2(row, scope_).eval(elt)
-  if table_.pkey_get(row.vals):
-    raise DuplicateInsert(expr, row.vals)
-  table_.rows.append(row.vals)
+  for i, elt in enumerate(vals):
+    # warning: need dependency analysis on cols. 'insert into t (a,b) values (b,1)'
+    vals[i] = sqex.Evaluator2(vals, scope_).eval(elt)
+  if table_[vals]:
+    raise DuplicateInsert(expr, vals)
+  table_.rows.append(vals)
   if expr.ret:
+    raise NotImplementedError('port insert ret', vals)
     ret = sqex.Evaluator2(row, scope_).eval(expr.ret)
     return table.SelectResult([ret])
 

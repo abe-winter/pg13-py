@@ -264,8 +264,8 @@ class Evaluator2:
   
   def eval_agg_call(self, exp):
     "helper for eval_callx; evaluator for CallX that consume multiple rows"
-    if not isinstance(self.row, table.RowList):
-      raise TypeError('aggregate function expected a RowList')
+    if not isinstance(self.row, table2.Table):
+      raise TypeError('aggregate function expected a sub-Table')
     if len(exp.args.children)!=1: raise ValueError('aggregate function expected a single value',exp.args)
     arg,=exp.args.children # intentional: error if len!=1
     vals = [Evaluator2(row, self.scope).eval(arg) for row in self.row]
@@ -346,13 +346,14 @@ class Evaluator2:
       return exp # I think Table.insert is creating this in expand_row
     # todo: why tuple, list, dict below? throw some asserts in here and see where these are coming from.
     elif isinstance(exp,tuple): return tuple(map(self.eval, exp))
-    elif isinstance(exp,table.RowList):
+    elif isinstance(exp,table2.Table):
       raise NotImplementedError('todo: select should return RowList (i.e. with column annotations) instead of SelectResult')
       if len(exp) != 1: raise ScalarSubxError('nrows != 1', len(exp))
       row = exp[0].allvals
       if len(row) != 1: raise ScalarSubxError('ncols != 1', len(row))
       return row[0] # todo: as an annotated scalar
-    elif isinstance(exp,table.SelectResult):
+    elif isinstance(exp,table2.Table):
+      raise NotImplementedError('this used to be selectresult; hmm')
       if len(exp) == 0:
         # warning: this needs spec support. I'm relying on 3VL to say nothing ever tests positive for x=null. Is this exactly the same as empty?
         return None
