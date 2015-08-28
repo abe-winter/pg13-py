@@ -1,5 +1,5 @@
 import pytest
-from pg13 import mockdb, sqparse2, pg, sqex, pgmock_dbapi2, table, commands
+from pg13 import mockdb, sqparse2, pg, sqex, pgmock_dbapi2, table2, commands
 
 def prep(create_stmt):
   "helper for table setup"

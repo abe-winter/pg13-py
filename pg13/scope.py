@@ -1,6 +1,6 @@
 "scope -- storage class for managing an expression's tables and aliases"
 
-from . import sqparse2, table
+from . import sqparse2, table2, treepath
 
 class ScopeError(StandardError): "base"
 class ScopeCollisionError(ScopeError): pass
@@ -14,7 +14,7 @@ class Scope(dict):
 
   def add(self, name, target):
     "target should be a Table"
-    if not isinstance(target, (table.Table, table.SelectResult)):
+    if not isinstance(target, table2.Table):
       raise TypeError(type(target), target)
     if name in self:
       # note: this is critical for avoiding cycles
@@ -39,6 +39,31 @@ class Scope(dict):
     else:
       raise TypeError('unexpected', type(ref), ref)
 
+  def replace_intermediate_types(self, expr):
+    """Replace CommaX with Table so we can track the names of variables.
+    This is potentially useful at the output stage but critical with subqueries.
+    Example: select a from (select * from t1) as whatever;
+    """
+    print expr
+    def test(expr):
+      return isinstance(expr, (sqparse2.SelectX, sqparse2.CommaX, sqparse2.AsterX))
+    for path in treepath.sub_slots(expr, test):
+      print path, expr[path]
+      raise NotImplementedError
+      # IntermediateTable(expr, table)
+
+  @classmethod
+  def from_expr(class_, tables, expr):
+    if isinstance(expr, sqparse2.SelectX):
+      return class_.from_fromx(tables, expr.tables)
+    elif isinstance(expr, sqparse2.InsertX):
+      return class_.from_fromx(tables, [expr.table])
+    elif isinstance(expr, sqparse2.UpdateX): raise NotImplementedError
+    elif isinstance(expr, sqparse2.DeleteX): raise NotImplementedError
+    elif isinstance(expr, sqparse2.CreateX): return class_([])
+    else:
+      raise NotImplementedError(type(expr))
+
   @classmethod
   def from_fromx(class_, tables, fromx, ctes=()):
     """Build a Scope given TablesDict, from-expression and optional list of CTEs.
@@ -56,8 +81,6 @@ class Scope(dict):
         scope_.add(exp.alias, tables[exp.name.name])
       elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, sqparse2.SelectX):
         raise RuntimeError('subqueries should have been replaced with rowlist before this')
-      elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, table.SelectResult):
-        scope_.add(exp.alias, exp.name)
       elif isinstance(exp, sqparse2.JoinX):
         scope_.add(exp.a, tables[exp.a])
         scope_.add(exp.b, tables[exp.b])

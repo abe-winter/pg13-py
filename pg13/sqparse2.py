@@ -83,6 +83,10 @@ class SelectX(CommandX):
   ATTRS = ('cols','tables','where','group','order','limit','offset')
   VARLEN = ('tables',)
 
+class IntermediateTable(BaseX):
+  "Not used during parsing. Applied to expression tree in scope.replace_intermediate_types."
+  ATTRS = ('expr','table')
+
 class ColX(BaseX): ATTRS = ('name','coltp','isarray','not_null','default','pkey')
 class PKeyX(BaseX):
   ATTRS = ('fields',)

@@ -3,6 +3,8 @@
 import collections
 from . import threevl, sqparse2
 
+raise NotImplementedError('table.py deprecated')
+
 # errors
 class PgExecError(sqparse2.PgMockError): "base class for errors during table execution"
 class BadFieldName(PgExecError): pass

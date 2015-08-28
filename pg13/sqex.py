@@ -2,7 +2,7 @@
 # todo: most of the heavy lifting happens here. profile and identify candidates for Cython port.
 
 import itertools, collections
-from . import sqparse2, threevl, misc, treepath, table
+from . import sqparse2, threevl, misc, treepath, table2
 
 # todo: derive errors below from something pg13-specific
 class ColumnNameError(StandardError): "name not in any tables or name matches too many tables"
@@ -259,7 +259,7 @@ def starlike(x):
 
 class Evaluator2:
   def __init__(self, row, scope_):
-    "row is a weval.Row, scope_ a scope.Scope"
+    "row is a table.Row, scope_ a scope.Scope"
     self.row, self.scope = row, scope_
   
   def eval_agg_call(self, exp):
@@ -309,10 +309,13 @@ class Evaluator2:
     if isinstance(exp,sqparse2.BinX): return evalop(exp.op.op, *map(self.eval, (exp.left, exp.right)))
     elif isinstance(exp,sqparse2.UnX): return self.eval_unx(exp)
     elif isinstance(exp,sqparse2.NameX): return self.row[self.scope.resolve_column(exp)]
-    elif isinstance(exp,sqparse2.AsterX): return self.row
+    elif isinstance(exp,sqparse2.AsterX):
+      raise NotImplementedError('this returns a Table2')
+      return self.row
     elif isinstance(exp,sqparse2.ArrayLit): return map(self.eval,exp.vals)
     elif isinstance(exp,(sqparse2.Literal,sqparse2.ArrayLit)): return exp.toliteral()
     elif isinstance(exp,sqparse2.CommaX):
+      raise NotImplementedError('this returns a Table2')
       # todo: think about getting rid of CommaX everywhere; it complicates syntax tree navigation.
       #   a lot of things that are CommaX now should become weval.Row.
       ret = [] # todo: this should be a composite row
@@ -327,6 +330,7 @@ class Evaluator2:
     elif isinstance(exp,sqparse2.SelectX):
       raise NotImplementedError('subqueries should have been evaluated earlier') # todo: specific error class
     elif isinstance(exp,sqparse2.AttrX):
+      raise NotImplementedError('this returns a Table2')
       if isinstance(exp.attr, sqparse2.AsterX):
         return self.row.get_table(exp.parent.name)
       else:

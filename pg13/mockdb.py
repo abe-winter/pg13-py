@@ -3,7 +3,7 @@
 # todo: type checking of literals based on column. flag-based (i.e. not all DBs do this) cast strings to unicode.
 
 import re,collections,contextlib,threading,copy
-from . import pg, threevl, sqparse2, sqex, table, treepath, commands
+from . import pg, threevl, sqparse2, sqex, table2, treepath, commands, scope
 
 class NullLockrefError(TypeError): pass
 
@@ -86,7 +86,7 @@ class Database:
       parent.child_tables.append(child)
       child.parent_table = parent
     else:
-      self[exp.name] = table.Table.create(exp)
+      self[exp.name] = table2.Table.from_create(exp)
   
   def drop(self, ex):
     "helper for apply_sql in DropX case"
@@ -111,6 +111,7 @@ class Database:
       (safest is to make it a pgmock_dbapi2.Connection, because that will rollback on close)
     """
     sqex.depth_first_sub(ex, values)
+    scope.Scope.from_expr(self, ex).replace_intermediate_types(ex)
     with self.lock_db(lockref, isinstance(ex, sqparse2.StartX)):
       for subx_path in treepath.sub_slots(ex, lambda x:isinstance(x, sqparse2.SelectX)):
         # todo: distinguish scalar and non-scalar context (select (subselect) as alias, insert-select).

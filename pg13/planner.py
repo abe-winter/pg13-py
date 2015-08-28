@@ -1,7 +1,7 @@
 "planner -- extract predicates and joins from queries"
 
 import collections, itertools
-from . import sqparse2, sqex, misc, scope, table, treepath
+from . import sqparse2, sqex, misc, scope, table2, treepath
 
 SingleTableCond = collections.namedtuple('SingleTableCond', 'table exp')
 CartesianCond = collections.namedtuple('CartesianCond', 'exp')
