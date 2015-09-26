@@ -1,6 +1,6 @@
 "scope -- storage class for managing an expression's tables and aliases"
 
-import collections
+import collections, copy
 from . import sqparse2, table2, treepath
 
 class ScopeError(StandardError): "base"
@@ -46,8 +46,9 @@ class Scope(collections.OrderedDict):
     (doesn't apply to top-level SelectX, only subqueries. todo: think more about scalar subqueries when I know more).
     This is potentially useful at the output stage but critical with subqueries.
     Example: select a from (select * from t1) as whatever;
-    mutates expr and returns a ref.
+    returns a copy of expr (even if we don't need to change it -- because caller may rely on copy)
     """
+    expr = copy.deepcopy(expr)
     def test(expr):
       return isinstance(expr, SUBTABLE_TYPES)
     for path in treepath.sub_slots(expr, test, recurse_into_matches=False):
@@ -64,7 +65,7 @@ class Scope(collections.OrderedDict):
       return class_.from_fromx(tables, [expr.table])
     elif isinstance(expr, sqparse2.UpdateX): raise NotImplementedError
     elif isinstance(expr, sqparse2.DeleteX): raise NotImplementedError
-    elif isinstance(expr, sqparse2.CreateX): return class_([])
+    elif isinstance(expr, sqparse2.CreateX): return class_([]), expr
     else:
       raise NotImplementedError(type(expr))
 
@@ -84,10 +85,10 @@ class Scope(collections.OrderedDict):
       elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, sqparse2.NameX):
         scope_.add(exp.alias, tables[exp.name.name])
       elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, sqparse2.SelectX):
-        raise RuntimeError('subqueries should have been replaced with rowlist before this')
+        raise NotImplementedError("this needs an extra preprocessing step")
       elif isinstance(exp, sqparse2.JoinX):
         scope_.add(exp.a, tables[exp.a])
         scope_.add(exp.b, tables[exp.b])
       else:
         raise TypeError('bad fromx type', type(exp), exp)
-    return scope_
+    return scope_, expr

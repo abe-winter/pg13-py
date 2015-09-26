@@ -111,7 +111,7 @@ class Database:
       (safest is to make it a pgmock_dbapi2.Connection, because that will rollback on close)
     """
     sqex.depth_first_sub(ex, values)
-    scope.Scope.from_expr(self, ex).replace_intermediate_types(ex)
+    ex = scope.Scope.from_expr(self, ex).replace_intermediate_types(ex)
     with self.lock_db(lockref, isinstance(ex, sqparse2.StartX)):
       for subx_path in treepath.sub_slots(ex, lambda x:isinstance(x, sqparse2.SelectX)):
         # todo: distinguish scalar and non-scalar context (select (subselect) as alias, insert-select).
