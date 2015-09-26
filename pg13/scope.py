@@ -1,5 +1,6 @@
 "scope -- storage class for managing an expression's tables and aliases"
 
+import collections
 from . import sqparse2, table2, treepath
 
 class ScopeError(StandardError): "base"
@@ -8,7 +9,7 @@ class ScopeUnkError(ScopeError): pass
 
 SUBTABLE_TYPES = (sqparse2.SelectX, sqparse2.CommaX, sqparse2.AsterX)
 
-class Scope(dict):
+class Scope(collections.OrderedDict):
   "bundle for all the tables that are going to be used in a query, and their aliases"
   def __init__(self, expression):
     self.expression = expression
@@ -24,7 +25,7 @@ class Scope(dict):
     self[name] = target
 
   def resolve_column(self, ref):
-    "ref is a NameX or AttrX. return (canonical_table_name, column_name)."
+    "ref is a NameX or AttrX. return (canonical_table_name, column_name). I think column_name will always be string or AsterX"
     if isinstance(ref, sqparse2.AttrX):
       if ref.parent.name not in self:
         raise ScopeUnkError('unk table or table alias', ref.parent.name)
@@ -45,14 +46,15 @@ class Scope(dict):
     (doesn't apply to top-level SelectX, only subqueries. todo: think more about scalar subqueries when I know more).
     This is potentially useful at the output stage but critical with subqueries.
     Example: select a from (select * from t1) as whatever;
+    mutates expr and returns a ref.
     """
-    print expr
     def test(expr):
       return isinstance(expr, SUBTABLE_TYPES)
-    for path in treepath.sub_slots(expr, test):
+    for path in treepath.sub_slots(expr, test, recurse_into_matches=False):
       # warning: is the next line valid with len(path)=1?
       replace_path = path[:-1] if isinstance(expr[path[:-1]], sqparse2.ReturnX) else path
-      expr[replace_path] = table2.Table.fromx(expr[path])
+      expr[replace_path] = table2.Table.fromx(self, expr[path])
+    return expr
 
   @classmethod
   def from_expr(class_, tables, expr):

@@ -4,6 +4,19 @@ from . import sqparse2
 
 class Missing: "for distinguishing missing columns vs passed-in null"
 
+class ColumnRef:
+  "Table column names are refs, not just strings, because when Table is used as intermediate expression this has to be resolved"
+  def __init__(self, name, table=None):
+    self.table = table
+    self.name = name
+
+  @property
+  def display_name(self):
+    return ('%s-%s' % (self.table.alias, self.name)) if self.table is not None else self.name
+
+  def __repr__(self):
+    return '<ColumnRef %s>' % self.display_name
+
 def assemble_pkey(exp):
   "helper for Table.create. returns the pkey fields if given directly, otherwise constructs one from columns."
   if not isinstance(exp, sqparse2.CreateX):
@@ -21,10 +34,21 @@ def toliteral(probably_literal):
   if probably_literal==sqparse2.NameX('null'): return None
   return probably_literal.toliteral() if hasattr(probably_literal, 'toliteral') else probably_literal
 
-def col2string(expr):
+def subx2reflist(scope_, expr):
+  if isinstance(expr, sqparse2.NameX):
+    table_name, field = scope_.resolve_column(expr)
+    return [ColumnRef(field, scope_[table_name])]
+  elif isinstance(expr, sqparse2.AsterX):
+    # warning: will this ever get passed the * from inside t1.*? if yes, this is wrong.
+    return sum((table_.abs_refs for table_ in scope_.values()), [])
+  else: raise TypeError(expr)
+
+def col2string(scope_, expr):
   "helper for the Table.fromx specializations. takes various expression types, returns a string (or None if not name-able)"
+  raise NotImplementedError("use subx2namelist instead")
   if isinstance(expr, basestring): return expr
   elif isinstance(expr, sqparse2.NameX): return expr.name
+  elif isinstance(expr, (sqparse2.AsterX,)): raise NotImplementedError('this returns multiple names')
   else: raise TypeError(expr)
 
 class ColumnName:
@@ -41,12 +65,28 @@ class ColumnName:
 
 class Table(list):
   "this is for storage and also for managing intermediate results during queries"
-  def __init__(self, names, expr=None, rows=(), alias=None):
+  def __init__(self, refs, expr=None, rows=(), alias=None):
+    "refs is list of ColumnRef. for tables that are intermediate types, they'll have .table attr non-null"
     # note: list(rows) is both a cast and a copy (but each row is still a reference)
     # note: I *think* expr is mandatory for some commands (insert, for example) but optional in other cases (inside selects)
-    self.names, self.expr, self.alias = names, expr, alias
+    if not all(isinstance(ref, ColumnRef) for ref in refs):
+      raise TypeError(ColumnRef, refs)
+    self.refs, self.expr, self.alias = refs, expr, alias
     self.pkey = assemble_pkey(expr) if isinstance(expr, sqparse2.CreateX) else []
     super(Table, self).__init__(rows)
+
+  def __repr__(self):
+    return '<Table %s %s %i>' % (self.alias, self.names, len(self))
+
+  @property
+  def names(self):
+    return [ref.display_name for ref in self.refs]
+
+  @property
+  def abs_refs(self):
+    "return copy of self.refs with each ref.table=self if ref.table was null"
+    # warning: bool tests on empty tables are confusing because it inherits list.
+    return [(ref if ref.table is not None else ColumnRef(ref.name, self)) for ref in self.refs]
 
   @property
   def col_exprs(self):
@@ -58,17 +98,18 @@ class Table(list):
       raise TypeError('unk expr type', self.expr)
 
   @classmethod
-  def fromx(class_, expr):
+  def fromx(class_, scope_, expr):
     factory_fn = {
       sqparse2.CreateX: class_.from_create,
       sqparse2.CommaX: class_.from_commax,
     }[type(expr)]
-    return factory_fn(expr)
+    return factory_fn(scope_, expr)
 
   @classmethod
-  def from_commax(class_, expr):
+  def from_commax(class_, scope_, expr):
     "(Commax) -> Table"
-    return class_(map(col2string, expr.children), expr)
+    refs = sum([subx2reflist(scope_, subx) for subx in expr.children], [])
+    return class_(refs, expr)
 
   @classmethod
   def from_create(class_, expr):
@@ -77,8 +118,8 @@ class Table(list):
       raise TypeError(type(expr), expr)
     if expr.inherits:
       raise TypeError("don't use Table.create for inherited tables", exp)
-    names = [col.name for col in expr.cols]
-    return class_(names, expr, alias=expr.name)
+    refs = [ColumnRef(col.name) for col in expr.cols]
+    return class_(refs, expr, alias=expr.name)
 
   def expand_row(self, fields, values):
     "helper for insert. turn (field_names, values) into the full-width, properly-ordered row"
