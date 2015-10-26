@@ -24,6 +24,8 @@ You should consider using pg13 in your own software if:
 * your database layer has no tests because integration environments are too painful to set up
 * you need SQL semantics on top of non-sql data (i.e. python lists) (note: sqlite has a foreign data plugin that will also do this)
 
+`pg13` can also be used to provide a SQL frontend to python datastructures. For example, if your program produces stats and you want users to be able to query those stats with SQL. Or if you have a config API and you want clients to be able to edit the configs with strong typing & SQL locking semantics.
+
 But beware: this is alpha software.
 
 Drop me a line if you're using the library. `@gmail: awinter.public`
