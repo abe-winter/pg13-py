@@ -7,13 +7,13 @@
 import sys,contextlib,ujson,functools,collections
 from . import errors
 
-class Select1Error(StandardError): "base for select1 error conditions"
+class Select1Error(Exception): "base for select1 error conditions"
 class Missing(Select1Error): pass
 class NotUnique(Select1Error): pass
-class SchemaError(StandardError): "base for schema-related errors"
+class SchemaError(Exception): "base for schema-related errors"
 class FieldError(SchemaError): "no such field in model"
-class NullJsonError(StandardError): pass
-class DupeInsert(StandardError): pass
+class NullJsonError(Exception): pass
+class DupeInsert(Exception): pass
 
 def eqexpr(key,value):
   "for automatic x is null vs x=value stmts"
@@ -59,7 +59,7 @@ def set_options(pool_or_cursor,row_instance):
 def transform_specialfield(jsonify,f,v):
   "helper for serialize_row"
   raw = f.ser(v) if is_serdes(f) else v
-  return ujson.dumps(raw) if not isinstance(f,basestring) and jsonify else raw
+  return ujson.dumps(raw) if not isinstance(f,str) and jsonify else raw
 
 def dirty(field,ttl=None):
   "decorator to cache the result of a function until a field changes"
@@ -110,8 +110,8 @@ class Row(object):
   @classmethod
   def create_table(clas,pool_or_cursor):
     "uses FIELDS, PKEY, INDEXES and TABLE members to create a sql table for the model"
-    def mkfield((name,tp)): return name,(tp if isinstance(tp,basestring) else 'jsonb')
-    fields = ','.join(map(' '.join,map(mkfield,clas.FIELDS)))
+    def mkfield(xxx_todo_changeme): (name,tp) = xxx_todo_changeme; return name,(tp if isinstance(tp,str) else 'jsonb')
+    fields = ','.join(map(' '.join,list(map(mkfield,clas.FIELDS))))
     base = 'create table if not exists %s (%s'%(clas.TABLE,fields)
     if clas.PKEY: base += ',primary key (%s)'%clas.PKEY
     base += ')'
@@ -135,7 +135,7 @@ class Row(object):
     val = self.values[index]
     field = self.FIELDS[index][1]
     # todo: typecheck val on readback
-    parsed_val = ujson.loads(val) if isinstance(field,basestring) and self.JSON_READ else val
+    parsed_val = ujson.loads(val) if isinstance(field,str) and self.JSON_READ else val
     return field.des(parsed_val) if is_serdes(field) else parsed_val
   @classmethod
   def index(class_,name): "helper; returns index of field name in row"; return class_.names().index(name)
@@ -144,7 +144,7 @@ class Row(object):
     "lookup by primary keys in order"
     pkey = clas.PKEY.split(',')
     if len(vals)!=len(pkey): raise ValueError("%i args != %i-len primary key for %s"%(len(vals),len(pkey),clas.TABLE))
-    rows = list(clas.select(pool_or_cursor,**dict(zip(pkey,vals))))
+    rows = list(clas.select(pool_or_cursor,**dict(list(zip(pkey,vals)))))
     if not rows: raise Missing
     return set_options(pool_or_cursor,clas(*rows[0]))
   @classmethod
@@ -208,7 +208,7 @@ class Row(object):
   def kwinsert(clas,pool_or_cursor,**kwargs):
     "kwargs version of insert"
     returning = kwargs.pop('returning',None)
-    fields,vals = zip(*kwargs.items())
+    fields,vals = list(zip(*list(kwargs.items())))
     # note: don't do SpecialField resolution here; clas.insert takes care of it
     return clas.insert(pool_or_cursor,fields,vals,returning=returning)
   @classmethod
@@ -224,15 +224,15 @@ class Row(object):
   @classmethod
   def insert_mtac(clas,pool_or_cursor,restrict,incfield,fields=(),vals=()):
     ""
-    if not isinstance(clas.FIELDS[clas.index(incfield)][1],basestring):
+    if not isinstance(clas.FIELDS[clas.index(incfield)][1],str):
       raise TypeError('mtac_specialfield_unsupported','incfield',incfield)
-    if any(not isinstance(clas.FIELDS[clas.index(f)][1],basestring) for f in restrict):
+    if any(not isinstance(clas.FIELDS[clas.index(f)][1],str) for f in restrict):
       raise TypeError('mtac_specialfield_unsupported','restrict')
     if len(fields)!=len(vals): raise ValueError("insert_mtac len(fields)!=len(vals)")
     vals=clas.serialize_row(pool_or_cursor,fields,vals)
-    where = ' and '.join('%s=%s'%tup for tup in restrict.items())
+    where = ' and '.join('%s=%s'%tup for tup in list(restrict.items()))
     mtac = '(select coalesce(max(%s),-1)+1 from %s where %s)'%(incfield,clas.TABLE,where)
-    qcols = ','.join([incfield]+restrict.keys()+list(fields))
+    qcols = ','.join([incfield]+list(restrict.keys())+list(fields))
     # todo(awinter): are both vals ever empty? if yes this breaks.
     qvals = tuple(restrict.values())+tuple(vals)
     valstring = ','.join(['%s']*len(qvals))
@@ -242,16 +242,16 @@ class Row(object):
   def pkey_update(clas,pool_or_cursor,pkey_vals,escape_keys,raw_keys=None):
     ""
     if not clas.PKEY: raise ValueError("can't update %s, no primary key"%clas.TABLE)
-    if any(not isinstance(clas.FIELDS[clas.index(f)][1],basestring) for f in (raw_keys or ())):
+    if any(not isinstance(clas.FIELDS[clas.index(f)][1],str) for f in (raw_keys or ())):
       raise TypeError('rawkeys_specialfield_unsupported')
-    escape_keys=dict(zip(escape_keys,clas.serialize_row(pool_or_cursor,escape_keys,escape_keys.values())))
+    escape_keys=dict(list(zip(escape_keys,clas.serialize_row(pool_or_cursor,escape_keys,list(escape_keys.values())))))
     pkey = clas.PKEY.split(',')
     raw_keys=raw_keys or {}
     if any(k in pkey for k in list(escape_keys)+list(raw_keys)): raise ValueError("pkey field updates not allowed") # todo: why?
     if len(pkey_vals)!=len(pkey): raise ValueError("len(pkey_vals) %i != len(pkey) %i"%(len(pkey_vals),len(pkey)))
     # todo(awinter): if I'm going to allow SpecialField in primary key vals, serialize here
     whereclause=' and '.join('%s=%%s'%k for k in pkey)
-    setclause=','.join(['%s=%%s'%k for k in escape_keys]+['%s=%s'%tup for tup in raw_keys.items()])
+    setclause=','.join(['%s=%%s'%k for k in escape_keys]+['%s=%s'%tup for tup in list(raw_keys.items())])
     # note: raw_keys could contain %s as well as a lot of other poison
     query='update %s set %s where %s'%(clas.TABLE,setclause,whereclause)
     vals=tuple(escape_keys.values())+pkey_vals
@@ -272,8 +272,8 @@ class Row(object):
       for k in raw_keys:
         if k in self.dirty_cache:
           self.dirty_cache.pop(k)
-    escape_keys=dict(zip(escape_keys,self.serialize_row(pool_or_cursor,escape_keys,escape_keys.values(),for_read=True))) # ugly; doing it in pkey_update and this
-    for k,v in escape_keys.items(): self.values[self.index(k)]=v
+    escape_keys=dict(list(zip(escape_keys,self.serialize_row(pool_or_cursor,escape_keys,list(escape_keys.values()),for_read=True)))) # ugly; doing it in pkey_update and this
+    for k,v in list(escape_keys.items()): self.values[self.index(k)]=v
     for k in escape_keys:
       if k in self.dirty_cache:
         self.dirty_cache.pop(k)
@@ -283,9 +283,9 @@ class Row(object):
     # if clas.JSONFIELDS: raise NotImplementedError # todo(awinter): do I need to make the same change for SpecialField?
     if not where_keys or not update_keys: raise ValueError
     setclause=','.join(k+'=%s' for k in update_keys)
-    whereclause=' and '.join(eqexpr(k,v) for k,v in where_keys.items())
+    whereclause=' and '.join(eqexpr(k,v) for k,v in list(where_keys.items()))
     q='update %s set %s where %s'%(clas.TABLE,setclause,whereclause)
-    vals = tuple(update_keys.values()+where_keys.values())
+    vals = tuple(list(update_keys.values())+list(where_keys.values()))
     commit_or_execute(pool_or_cursor,q,vals)
   def delete(self,pool_or_cursor):
     ".. warning:: pgmock doesn't support delete yet, so this isn't tested"
@@ -301,7 +301,7 @@ class Row(object):
     "returns {ModelClass:list_of_pkey_tuples}. see syncschema.RefKey. Don't use this yet."
     # todo doc: better explanation of what refkeys are and how fields plays in
     dd=collections.defaultdict(list)
-    if any(f not in self.REFKEYS for f in fields): raise ValueError(fields,'not all in',self.REFKEYS.keys())
+    if any(f not in self.REFKEYS for f in fields): raise ValueError(fields,'not all in',list(self.REFKEYS.keys()))
     for f in fields:
       rk=self.REFKEYS[f]
       for model in rk.refmodels: dd[model].extend(rk.pkeys(self,f))

@@ -18,7 +18,7 @@ def RM():
     NAMESPACE = 'test_redismodel_RM'
     VERSION = 0
     KEY = [('a',int),('b',int)]
-    VALUE = [('c',basestring),('d',list)]
+    VALUE = [('c',str),('d',list)]
   return RM
 
 def test_getitem(RM):

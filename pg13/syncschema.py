@@ -13,6 +13,7 @@ Describe this as a 'distributed versioned foreign-key system'.
 
 import collections,binascii,ujson
 from . import pg,diff,misc
+from functools import reduce
 
 COMPACTION_TIME_THRESH=600 # 10 minutes
 COMPACTION_LEN_THRESH=256
@@ -21,7 +22,7 @@ class Syncable(object):
   "base class for isinstance/issubclass or whatever common features crop up.\
   version(), generate(), ser(), des()."
 Increment=collections.namedtuple('Increment','utc value')
-class SyncError(StandardError): "base class"
+class SyncError(Exception): "base class"
 class BadBaseV(SyncError): ""
 class ValidationFail(SyncError): ""
 
@@ -45,8 +46,8 @@ class RefKey(object):
       template[inull]=x
       return tuple(template)
     val=parent[field]
-    if self.getter is not None: return map(mk,self.getter(val))
-    elif isinstance(val,VDList): return map(mk,val.generate())
+    if self.getter is not None: return list(map(mk,self.getter(val)))
+    elif isinstance(val,VDList): return list(map(mk,val.generate()))
     else: raise NotImplementedError(type(val))
 
 def detect_change_mode(text,change):
@@ -142,7 +143,7 @@ class VHString(SyncableString):
   @staticmethod
   def validate(changes):
     SyncableString.validate_base(changes)
-    if not all(isinstance(c.deltas,basestring) for c in changes): raise ValidationFail('nonstring_deltas')
+    if not all(isinstance(c.deltas,str) for c in changes): raise ValidationFail('nonstring_deltas')
   @classmethod
   def des(clas,underlying,validate=True):
     if not isinstance(underlying,list): raise TypeError('expected list, got %s' % type(underlying))

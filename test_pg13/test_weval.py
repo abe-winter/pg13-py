@@ -33,7 +33,7 @@ def test_classify_wherex():
   tables, run = prep('create table t1 (a int, b text)')
   run('create table t2 (a int, b text)')
   scope_ = scope.Scope.from_fromx(tables, EXP.tables)
-  print weval.classify_wherex(scope_, EXP.tables, EXP.where)
+  print(weval.classify_wherex(scope_, EXP.tables, EXP.where))
   (_, single), (cart,) = weval.classify_wherex(scope_, EXP.tables, EXP.where)
   assert isinstance(single, weval.SingleTableCond) and single.table == 't1' and isinstance(single.exp, sqparse2.BinX)
   assert isinstance(cart, weval.CartesianCond) and isinstance(cart.exp, sqparse2.BinX)
@@ -42,9 +42,9 @@ def test_classify_wherex():
 def test_wherex_to_rowlist():
   tables, run = prep('create table t1 (a int, b text)')
   exp = sqparse2.parse('select * from t1')
-  print weval.wherex_to_rowlist(
+  print(weval.wherex_to_rowlist(
     scope.Scope.from_fromx(tables, exp.tables),
     exp.tables,
     exp.where
-  )
+  ))
   raise NotImplementedError

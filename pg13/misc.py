@@ -14,8 +14,9 @@ def tbfuncs(frames):
   return ['%s:%s:%s'%(os.path.split(f.f_code.co_filename)[-1],f.f_code.co_name,f.f_lineno) for f in frames]
 def trace(): return tbfuncs(tbframes(sys.exc_info()[2]))
 
-def key_from_pair((k, v)):
+def key_from_pair(xxx_todo_changeme2):
   "helper for multimap"
+  (k, v) = xxx_todo_changeme2
   return k
 
 def multimap(kv_pairs):
@@ -31,10 +32,10 @@ EnvBundle=collections.namedtuple('EnvBundle','pool redis sesh userid chanid apic
 class GetterBy(list):
   "sort of like a read-only dict for namedtuple. inherits from list so it's iterable"
   def __init__(self,tups): super(GetterBy,self).__init__(tups)
-  def __getitem__(self,(key,value)): return next(x for x in self if getattr(x,key)==value)
-  def __contains__(self,(key,value)): return any(getattr(x,key)==value for x in self)
+  def __getitem__(self, xxx_todo_changeme): (key,value) = xxx_todo_changeme; return next(x for x in self if getattr(x,key)==value)
+  def __contains__(self, xxx_todo_changeme1): (key,value) = xxx_todo_changeme1; return any(getattr(x,key)==value for x in self)
 
-class CallOnceError(StandardError): pass
+class CallOnceError(Exception): pass
 def meth_once(f):
   "call once for member function (i.e. takes self as first arg)"
   attr = '__meth_once_'+f.__name__

@@ -43,7 +43,7 @@ def classify_wherex(scope_, fromx, wherex):
       # todo: probably just add exp.on_stmt as a CartesianCond. don't write this until tests are ready.
       # todo: do join-on clauses get special scoping w.r.t. column names? check spec.
       raise NotImplementedError('join')
-    elif isinstance(exp, basestring):
+    elif isinstance(exp, str):
       exprs.append(exp)
   def test_and(exp):
     return isinstance(exp, sqparse2.BinX) and exp.op.op == 'and'
@@ -53,11 +53,11 @@ def classify_wherex(scope_, fromx, wherex):
   single_conds = []
   cartesian_conds = []
   for exp in exprs:
-    if isinstance(exp, basestring):
+    if isinstance(exp, str):
       # note: bare table names need their own case because they don't work with resolve_column
       single_conds.append(SingleTableCond(exp, exp))
     else:
-      tables = zip(*map(scope_.resolve_column, names_from_exp(exp)))[0]
+      tables = zip(*list(map(scope_.resolve_column, names_from_exp(exp))))[0]
       if len(tables) > 1:
         cartesian_conds.append(CartesianCond(exp))
       else:
@@ -86,6 +86,6 @@ def wherex_to_rowlist(scope_, fromx, wherex):
   single, multi = classify_wherex(scope_, fromx, wherex)
   single_rowlists = {
     tablename: table_to_rowlist(scope_[tablename], conds)
-    for tablename, conds in misc.multimap(single).items() # i.e. {cond.table:[cond.exp, ...]}
+    for tablename, conds in list(misc.multimap(single).items()) # i.e. {cond.table:[cond.exp, ...]}
   }
   raise NotImplementedError

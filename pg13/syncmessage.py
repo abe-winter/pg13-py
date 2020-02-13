@@ -41,13 +41,14 @@ def parse_serialdiff(sd_dict):
 def translate_update(blob):
   "converts JSON parse output to self-aware objects"
   # note below: v will be int or null
-  return {translate_key(k):parse_serialdiff(v) for k,v in blob.items()}
+  return {translate_key(k):parse_serialdiff(v) for k,v in list(blob.items())}
 def translate_check(blob):
   "JSON blob to objects"
-  return {translate_key(k):v for k,v in blob.items()}
+  return {translate_key(k):v for k,v in list(blob.items())}
 
-def fkapply(models,pool,fn,missing_fn,(nombre,pkey,field),*args):
+def fkapply(models,pool,fn,missing_fn, xxx_todo_changeme,*args):
   "wrapper for do_* funcs to call process_* with missing handler. Unpacks the FieldKey."
+  (nombre,pkey,field) = xxx_todo_changeme
   if (nombre,pkey) in models: return fn(pool,models[nombre,pkey],field,*args)
   else: return missing_fn(pool,field,*args) if missing_fn else ['missing']
 
@@ -83,7 +84,7 @@ def missing_update(pool,field,sdiff):
   return ['chkstale',None,None] if isinstance(sdiff,CheckStale) else ['missing']
 def do_update(pool,request,models):
   "unlike *_check() below, update doesn't worry about missing children"
-  return {k:fkapply(models,pool,process_update,missing_update,k,v) for k,v in request.items()}
+  return {k:fkapply(models,pool,process_update,missing_update,k,v) for k,v in list(request.items())}
 
 def process_check(pool,model,field,version):
   "helper for do_check. version is an integer or null. returns ..."
@@ -100,12 +101,12 @@ def merge_null_missing(request,name,field,pkeys):
   request.update({rk:None for rk in [FieldKey(name,pkey,field) for pkey in pkeys] if rk not in request})
 def add_missing_children(models,request,include_children_for,modelgb):
   "helper for do_check. mutates request"
-  for (nombre,pkey),model in models.items():
-    for modelclass,pkeys in model.refkeys(include_children_for.get(nombre,())).items():
+  for (nombre,pkey),model in list(models.items()):
+    for modelclass,pkeys in list(model.refkeys(include_children_for.get(nombre,())).items()):
       # warning: this is defaulting to all fields of child object. don't give clients a way to restrict that until there's a reason to.
       childname=modelgb['row',modelclass].name
       for childfield,cftype in modelclass.FIELDS:
-        if not isinstance(cftype,basestring) and inspect.isclass(cftype) and issubclass(cftype,syncschema.Syncable):
+        if not isinstance(cftype,str) and inspect.isclass(cftype) and issubclass(cftype,syncschema.Syncable):
           merge_null_missing(request,childname,childfield,pkeys)
         elif childfield in modelclass.SENDRAW: merge_null_missing(request,childname,childfield,pkeys)
         else: pass # intentional: ignore the field
@@ -116,4 +117,4 @@ def do_check(pool,request,models,include_children_for,modelgb):
   The caller should have gone through the same ICF logic when looking up models so the arg has all the refs the DB knows.\
   modelgb is misc.GetterBy<ModelInfo>, used by AMC for resolution."
   add_missing_children(models,request,include_children_for,modelgb)
-  return {k:fkapply(models,pool,process_check,None,k,v) for k,v in request.items()}
+  return {k:fkapply(models,pool,process_check,None,k,v) for k,v in list(request.items())}

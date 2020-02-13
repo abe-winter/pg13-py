@@ -9,8 +9,8 @@ def test_3vl_basics():
   assert ThreeVL('f')!=ThreeVL('t')
   assert ThreeVL('t')==ThreeVL('t')
   assert [True,False,False]==[ThreeVL.test(ThreeVL(c)) for c in 'tfu']
-  assert map(ThreeVL,'ftu')==[ThreeVL.nein(ThreeVL(c)) for c in 'tfu']
-  assert map(ThreeVL,'ft')==map(ThreeVL.nein,(True,False))
+  assert list(map(ThreeVL,'ftu'))==[ThreeVL.nein(ThreeVL(c)) for c in 'tfu']
+  assert list(map(ThreeVL,'ft'))==list(map(ThreeVL.nein,(True,False)))
 
 def test_3vl_andor():
   from pg13.threevl import ThreeVL

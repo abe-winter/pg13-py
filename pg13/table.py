@@ -59,15 +59,15 @@ class Table:
     if len(self.pkey):
       indexes=[i for i,f in enumerate(self.fields) if f.name in self.pkey]
       if len(indexes)!=len(self.pkey): raise ValueError('bad pkey')
-      pkey_vals=map(row.__getitem__,indexes)
-      return next((r for r in self.rows if pkey_vals==map(r.__getitem__,indexes)),None)
+      pkey_vals=list(map(row.__getitem__,indexes))
+      return next((r for r in self.rows if pkey_vals==list(map(r.__getitem__,indexes))),None)
     else:
       # warning: is this right? it's saying that if not given, the pkey is the whole row. test dupe inserts on a real DB.
       return row if row in self.rows else None
   
   def fix_rowtypes(self,row):
     if len(row)!=len(self.fields): raise ValueError
-    return map(toliteral,row)
+    return list(map(toliteral,row))
   
   def apply_defaults(self, row, tables_dict):
     "apply defaults to missing cols for a row that's being inserted"
@@ -100,7 +100,7 @@ class Table:
   def update(self,setx,where,returning,tables_dict):
     nix = sqex.NameIndexer.ctor_name(self.name)
     nix.resolve_aonly(tables_dict,Table)
-    if not all(isinstance(x,sqparse2.AssignX) for x in setx): raise TypeError('not_xassign',map(type,setx))
+    if not all(isinstance(x,sqparse2.AssignX) for x in setx): raise TypeError('not_xassign',list(map(type,setx)))
     match_rows=self.match(where,tables_dict,nix) if where else self.rows
     for row in match_rows:
       for x in setx: row[self.lookup(x.col).index]=sqex.Evaluator((row,),nix,tables_dict).eval(x.expr)

@@ -51,7 +51,7 @@ def test_contigsub():
 
 def test_worddiff():
   a="testing testing testing testing testing testing."; b="testing testing  testing testing."
-  deltas=diff.word_diff(a,b); print deltas; assert diff.applydiff(a,deltas)==b
+  deltas=diff.word_diff(a,b); print(deltas); assert diff.applydiff(a,deltas)==b
   # check a multi-delta change:
   a='c d e f'; b='a b '+a+' g h'
   deltas=diff.word_diff(a,b)
@@ -73,7 +73,7 @@ def test_rediff():
 
 @pytest.mark.xfail
 def test_translate_diff():
-  raise NotImplementedError,'todo next'
+  raise NotImplementedError('todo next')
 
 @pytest.mark.xfail
 def test_final_space_diffing():

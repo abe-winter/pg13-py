@@ -111,7 +111,7 @@ def test_repr(): assert '<Model(pg.Row) userid:0,id2:0>'==repr(Model(0,0,'a',[])
 
 def test_selectxiny():
   ebuns=populate(2)
-  print ebuns.pool.tables['model'].rows
+  print(ebuns.pool.tables['model'].rows)
   # [<Model(pg.Row) userid:0,id2:0>, <Model(pg.Row) userid:0,id2:1>]
   assert [Model(0,0,'a',[]),Model(0,1,'a',[])]==list(Model.select_xiny(ebuns.pool,0,'id2',[0,1]))
   assert [Model(0,0,'a',[])]==list(Model.select_xiny(ebuns.pool,0,'id2',[0]))

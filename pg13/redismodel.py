@@ -92,7 +92,7 @@ class RedisSimplePubsub:
     self.sock,self.buf,self.reset,self.sublist=None,'',False,set()
   def getcon(self):
     if self.sock is None:
-      print 'getcon todo: lock and recheck'
+      print('getcon todo: lock and recheck')
       self.sock=socket.create_connection((self.host,self.port))
       if self.timeout is not None: self.sock.settimeout(self.timeout) # float seconds
       self.onrecon()

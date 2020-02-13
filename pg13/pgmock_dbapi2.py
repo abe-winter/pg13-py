@@ -16,11 +16,11 @@ def add_db():
   global NEXT_DB_ID
   db_id, NEXT_DB_ID = NEXT_DB_ID, NEXT_DB_ID + 1
   DATABASES[db_id] = pgmock.TablesDict()
-  print 'created db %i' % db_id
+  print('created db %i' % db_id)
   return db_id
 
 # todo: catch pgmock errors and raise these
-class Error(StandardError): pass
+class Error(Exception): pass
 class InterfaceError(Error): pass
 class DatabaseError(Error): pass
 class DataError(DatabaseError): pass
@@ -55,7 +55,7 @@ class ROWID(PGMockType): pass
 def expression_type(con, topx, ex):
   "take a BaseX descendant from sqparse2, return a type class from above"
   if isinstance(ex,sqparse2.Literal):
-    if isinstance(ex.val,basestring): return STRING
+    if isinstance(ex.val,str): return STRING
     else: raise NotImplementedError('literal', type(ex.val))
   elif isinstance(ex,sqparse2.AttrX):
     if ex.parent.name in con.db: # warning: what if it's not a table? what if it's aliased?
@@ -146,7 +146,7 @@ class Connection:
     self.closed = False
     self.db_id = add_db() if db_id is None else db_id
     self.db = DATABASES[self.db_id]
-    print 'connected db %i' % self.db_id
+    print('connected db %i' % self.db_id)
     self._autocommit = False
     self.transaction_open = False
   @property
@@ -173,13 +173,13 @@ class Connection:
     if not self.transaction_open: raise OperationalError("can't commit without transaction_open")
     self.db.trans_commit()
     self.transaction_open = False
-    print 'commit'
+    print('commit')
   @open_only
   def rollback(self):
     if not self.transaction_open: raise OperationalError("can't rollback without transaction_open")
     self.db.trans_rollback()
     self.transaction_open = False
-    print 'rollback'
+    print('rollback')
   @open_only
   def cursor(self): return Cursor(self)
   @open_only

@@ -20,7 +20,7 @@ def test_vdstring_serdes():
   assert deltas==[(0,0,'hello')]
   vds=VDString.des(VDString.create('whatsup').ser()) # des
   assert vds.version()==1 and vds.generate()=='whatsup'
-  with pytest.raises(StandardError): VDString.des('"garbage"') # des fail
+  with pytest.raises(Exception): VDString.des('"garbage"') # des fail
 
 def test_vhstring():
   # see test_vdstring and test_vdlist for more comments about what's being tested here
@@ -37,7 +37,7 @@ def test_vhstring_serdes():
   from pg13.syncschema import VHString
   vhs=VHString.des(VHString.create('hello').ser())
   assert vhs.generate()=='hello' and vhs.version()==1
-  with pytest.raises(StandardError): VHString.des('fail')
+  with pytest.raises(Exception): VHString.des('fail')
   with pytest.raises(TypeError): VHString.des(ujson.dumps([0,[],None]))
 
 def test_vdlist():
@@ -60,7 +60,7 @@ def test_empties():
 
 def test_schema_unicode():
   "make sure the V** classes can handle unicode"
-  hearts=u'\u2661'*3
+  hearts='\u2661'*3
   assert [hearts]==syncschema.VDList.create([hearts]).generate()
   vds=syncschema.VDString().apply(0,[diff.Delta(0,0,hearts)],binascii.crc32(hearts.encode('utf-8')))
   assert vds.generate()==hearts
@@ -79,10 +79,10 @@ def test_translate_update():
     ujson.dumps(['nombre',['k1','k2'],'f2']):['checkstale',0],
   })
   assert all(isinstance(k,syncmessage.FieldKey) for k in translated)
-  assert all(isinstance(v,(syncmessage.SerialDiff,syncmessage.CheckStale)) for v in translated.values())
-  assert all(isinstance(d,diff.Delta) for d in next(v for k,v in translated.items() if k.field=='field').deltas)
+  assert all(isinstance(v,(syncmessage.SerialDiff,syncmessage.CheckStale)) for v in list(translated.values()))
+  assert all(isinstance(d,diff.Delta) for d in next(v for k,v in list(translated.items()) if k.field=='field').deltas)
 def test_translate_check():
-  (k,v),=syncmessage.translate_check({ujson.dumps(['nombre',['k1','k2'],'field']):0,}).items()
+  (k,v),=list(syncmessage.translate_check({ujson.dumps(['nombre',['k1','k2'],'field']):0,}).items())
   assert isinstance(k,syncmessage.FieldKey) and isinstance(v,int)
 
 class Ref(pg.Row):
@@ -153,13 +153,13 @@ def test_do_update():
   assert update_helper(mkdict(syncmessage.SerialDiff(0,1,0,[],None)))==mkdict(['merge!',1,[]])
 
 def test_update_checkstale():
-  assert [['chkstale',1,[]]]==update_helper(syncmessage.translate_update({
+  assert [['chkstale',1,[]]]==list(update_helper(syncmessage.translate_update({
     ujson.dumps(['simple',[0,'1'],'tags']):['checkstale',0],
-  })).values()
+  })).values())
   # and also make sure missing doesn't kill it
-  assert [['chkstale',None,None]]==update_helper(syncmessage.translate_update({
+  assert [['chkstale',None,None]]==list(update_helper(syncmessage.translate_update({
     ujson.dumps(['simple',[0,'2'],'tags']):['checkstale',0],
-  })).values()
+  })).values())
 
 def check_helper(request,include_children_for={},make_models=lambda x:None):
   pool=pgmock_dbapi2.PgPoolMock()
@@ -180,12 +180,12 @@ def test_check_raw():
   assert check_helper(mkdict(None),{'simple':['tags']},make_models)[syncmessage.FieldKey('ref',(0,'1','tag'),'tag')]==['here',None,'tag']
 
 def test_missing_fields():
-  assert [['?field']]==check_helper(mkdict(0,field='whatever')).values()
-  assert [['?field']]==update_helper(mkdict(0,field='whatever')).values()
+  assert [['?field']]==list(check_helper(mkdict(0,field='whatever')).values())
+  assert [['?field']]==list(update_helper(mkdict(0,field='whatever')).values())
 
 def test_check_missing():
   "figure out what to do when model lookup fails"
-  assert [['missing']]==check_helper(mkdict(0,pkey=(0,'2'))).values()
+  assert [['missing']]==list(check_helper(mkdict(0,pkey=(0,'2'))).values())
 
 def test_detect_change_mode():
   # warning: 'corpus corpus corpus ' >> 'corpus corpus ' is treated as deleting the first word, not the last, because of how the diffing algo works. maybe not important in real life.

@@ -2,7 +2,7 @@
 
 from . import sqparse2, table
 
-class ScopeError(StandardError): "base"
+class ScopeError(Exception): "base"
 class ScopeCollisionError(ScopeError): pass
 class ScopeUnkError(ScopeError): pass
 
@@ -20,7 +20,7 @@ class SyntheticTable:
 
   def columns(self, scope):
     "return list of column names. needs scope for resolving asterisks."
-    return map(col2name, self.exp.cols.children)
+    return list(map(col2name, self.exp.cols.children))
 
 class Scope:
   "bundle for all the tables that are going to be used in a query, and their aliases"
@@ -51,7 +51,7 @@ class Scope:
       return ref.parent.name, ref.attr.name
     elif isinstance(ref, sqparse2.NameX):
       matches = set()
-      for name, target in self.names.items():
+      for name, target in list(self.names.items()):
         if isinstance(target, SyntheticTable):
           if ref.name in target.columns(self):
             matches.add(name)
@@ -78,7 +78,7 @@ class Scope:
     if ctes: raise NotImplementedError # note: I don't think any other part of the program supports CTEs yet either
     scope_ = class_(fromx)
     for exp in fromx:
-      if isinstance(exp, basestring):
+      if isinstance(exp, str):
         scope_.add(exp, tables[exp])
       elif isinstance(exp, sqparse2.AliasX) and isinstance(exp.name, sqparse2.NameX):
         scope_.add(exp.alias, tables[exp.name.name])

@@ -28,7 +28,7 @@ def commonelts(a,b):
 def splitstatus(a,statusfn):
   'split sequence into subsequences based on binary condition statusfn. a is a list, returns list of lists'
   groups=[]; mode=None
-  for elt,status in zip(a,map(statusfn,a)):
+  for elt,status in zip(a,list(map(statusfn,a))):
     assert isinstance(status,bool)
     if status!=mode: mode=status; group=[mode]; groups.append(group)
     group.append(elt)
@@ -45,7 +45,7 @@ def seqingroups(groups,seq):
   if not (groups and seq): return None
   bestmatch=None,None,0
   if any(len(g)<2 for g in groups): raise ValueError('some subgroups have length < 2')
-  for i,g in filter(lambda x:x[1][0],enumerate(groups)): # i.e. we're only interested in groups with common elements
+  for i,g in [x for x in enumerate(groups) if x[1][0]]: # i.e. we're only interested in groups with common elements
     # begin starts at 0 so begin+1 starts at 1. (first elt of each group is the bool indicator)
     begin=0
     while 1:
@@ -114,7 +114,7 @@ def cumsum(a):
 
 def translate_diff(origtext,deltas):
   'take diff run on separated words and convert the deltas to character offsets'
-  lens=[0]+cumsum(map(len,splitpreserve(origtext))) # [0] at the head for like 'length before'
+  lens=[0]+cumsum(list(map(len,splitpreserve(origtext)))) # [0] at the head for like 'length before'
   return [Delta(lens[a],lens[b],''.join(replace)) for a,b,replace in deltas]
 
 def word_diff(a,b):
