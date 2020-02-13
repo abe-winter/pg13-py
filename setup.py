@@ -21,10 +21,10 @@ setuptools.setup(
   ],
   keywords=['sql','mocking','orm','database','testing'],
   author='Abe Winter',
-  author_email='abe-winter@users.noreply.github.com',
+  author_email='awinter.public+pg13@gmail.com',
   url='https://github.com/abe-winter/pg13-py',
   license='MIT',
   packages=setuptools.find_packages(),
   install_requires=['pytest','ujson','ply'],
-  extras_require={'psyco':['psycopg2'], 'redis':['hiredis','redis','msgpack-python'], 'sqla':['sqlalchemy']},
+  extras_require={'psyco':['psycopg2'], 'sqla':['sqlalchemy']},
 )
