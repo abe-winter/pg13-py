@@ -25,6 +25,10 @@ setuptools.setup(
   url='https://github.com/abe-winter/pg13-py',
   license='MIT',
   packages=setuptools.find_packages(),
-  install_requires=['pytest','ujson','ply'],
-  extras_require={'psyco':['psycopg2'], 'sqla':['sqlalchemy']},
+  install_requires=['ujson==1.35', 'ply==3.11'],
+  extras_require={
+    'psyco':['psycopg2'],
+    'sqla':['sqlalchemy'],
+    'test':['pytest'],
+  },
 )
