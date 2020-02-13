@@ -4,7 +4,7 @@
 # todo: add profiling hooks
 # todo: need deserialize for SELECT / RETURNING values according to JSON_WRITE, JSON_READ
 
-import sys,contextlib,ujson,functools,collections
+import sys,contextlib,json,functools,collections
 from . import errors
 
 class Select1Error(Exception): "base for select1 error conditions"
@@ -59,7 +59,7 @@ def set_options(pool_or_cursor,row_instance):
 def transform_specialfield(jsonify,f,v):
   "helper for serialize_row"
   raw = f.ser(v) if is_serdes(f) else v
-  return ujson.dumps(raw) if not isinstance(f,str) and jsonify else raw
+  return json.dumps(raw) if not isinstance(f,str) and jsonify else raw
 
 def dirty(field,ttl=None):
   "decorator to cache the result of a function until a field changes"
@@ -139,7 +139,7 @@ class Row(object):
     val = self.values[index]
     field = self.FIELDS[index][1]
     # todo: typecheck val on readback
-    parsed_val = ujson.loads(val) if isinstance(field,str) and self.JSON_READ else val
+    parsed_val = json.loads(val) if isinstance(field,str) and self.JSON_READ else val
     return field.des(parsed_val) if is_serdes(field) else parsed_val
   @classmethod
   def index(class_,name): "helper; returns index of field name in row"; return class_.names().index(name)

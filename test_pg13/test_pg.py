@@ -1,6 +1,6 @@
 "pg.Row tests using pgmock"
 
-import pytest,collections,ujson
+import pytest,collections,json
 from pg13 import pg,pgmock,misc,pgmock_dbapi2
 
 class Model(pg.Row):
@@ -152,7 +152,7 @@ def test_specialfield_ser():
   from pg13.pg import SpecialField
   for sfargs,val in SF_TESTS:
     if sfargs[1:2]==('class',): assert val.ser(None)==SpecialField(*sfargs).ser(val)
-    else: assert ujson.dumps(val)==SpecialField(*sfargs).ser(val)
+    else: assert json.dumps(val)==SpecialField(*sfargs).ser(val)
 
 @pytest.mark.xfail
 def test_specialfield_des():
@@ -160,7 +160,7 @@ def test_specialfield_des():
   # note: namedtuples evaluate equal to tuples, but json ser/deses to list. so if there are tuples in there, this is probably working.
   for sfargs,val in SF_TESTS:
     if sfargs[1:2]==('class',): assert sfargs[0].des(val.ser(),None)==SpecialField(*sfargs).des(val.ser())
-    else: assert val==SpecialField(*sfargs).des(ujson.dumps(val))
+    else: assert val==SpecialField(*sfargs).des(json.dumps(val))
 
 def test_dirtycache():
   ebuns=prepmock(Model)
