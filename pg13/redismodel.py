@@ -107,7 +107,10 @@ class RedisSimplePubsub:
         self.reset=True
         logging.error('RedisSimplePubsub.send %s %s'%(e.__class__.__name__,str(e)))
       else: break
-  def onrecon(self): "this gets called on reconnect"; map(self.subscribe,self.sublist)
+  def onrecon(self):
+    "this gets called on reconnect"
+    for item in self.sublist:
+      self.subscribe(item)
   def subscribe(self,k):
     self.sublist.add(k)
     self.getcon().send('*2\r\n'+bulkstring('SUBSCRIBE')+bulkstring(k))

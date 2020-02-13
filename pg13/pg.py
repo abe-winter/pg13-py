@@ -269,10 +269,14 @@ class Row(object):
     # note: Row has no __setitem__ because this is the only time we want to modify our copy of data (after an update to reflect DB)
     if raw_keys:
       for k,v in zip(raw_keys,rawvals): self.values[self.index(k)]=v # this is necessary because raw_keys can contain expressions
-      map(self.dirty_cache.pop,[k for k in raw_keys if k in self.dirty_cache])
+      for k in raw_keys:
+        if k in self.dirty_cache:
+          self.dirty_cache.pop(k)
     escape_keys=dict(zip(escape_keys,self.serialize_row(pool_or_cursor,escape_keys,escape_keys.values(),for_read=True))) # ugly; doing it in pkey_update and this
     for k,v in escape_keys.items(): self.values[self.index(k)]=v
-    map(self.dirty_cache.pop,[k for k in escape_keys if k in self.dirty_cache])
+    for k in escape_keys:
+      if k in self.dirty_cache:
+        self.dirty_cache.pop(k)
   @classmethod
   def updatewhere(clas,pool_or_cursor,where_keys,**update_keys):
     "this doesn't allow raw_keys for now"
