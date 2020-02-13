@@ -13,8 +13,8 @@ setuptools.setup(
   classifiers=[
     'Development Status :: 4 - Beta',
     'License :: OSI Approved :: MIT License',
-    'Programming Language :: Python :: 2.7',
-    'Programming Language :: Python :: 2 :: Only',
+    'Programming Language :: Python :: 3.6',
+    'Programming Language :: Python :: 3 :: Only',
     'Topic :: Database',
     'Topic :: Software Development :: Interpreters',
     'Topic :: Software Development :: Testing',
