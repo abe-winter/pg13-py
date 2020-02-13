@@ -57,7 +57,7 @@ def classify_wherex(scope_, fromx, wherex):
       # note: bare table names need their own case because they don't work with resolve_column
       single_conds.append(SingleTableCond(exp, exp))
     else:
-      tables = zip(*list(map(scope_.resolve_column, names_from_exp(exp))))[0]
+      tables = list(zip(*map(scope_.resolve_column, names_from_exp(exp))))[0]
       if len(tables) > 1:
         cartesian_conds.append(CartesianCond(exp))
       else:

@@ -117,8 +117,12 @@ class Row(object):
     base += ')'
     commit_or_execute(pool_or_cursor,base)
     clas.create_indexes(pool_or_cursor)
+
   @classmethod
-  def names(class_): "helper; returns list of the FIELDS names"; return zip(*class_.FIELDS)[0]
+  def names(class_):
+    "helper; returns list of the FIELDS names"
+    return [name for name, val in class_.FIELDS]
+
   def __eq__(self,other): return isinstance(other,type(self)) and all(self[k]==other[k] for k in self.names())
   def __neq__(self,other): return not self==other
   def __init__(self,*cols):
