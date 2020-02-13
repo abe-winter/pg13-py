@@ -14,10 +14,9 @@ def tbfuncs(frames):
   return ['%s:%s:%s'%(os.path.split(f.f_code.co_filename)[-1],f.f_code.co_name,f.f_lineno) for f in frames]
 def trace(): return tbfuncs(tbframes(sys.exc_info()[2]))
 
-def key_from_pair(xxx_todo_changeme2):
+def key_from_pair(pair):
   "helper for multimap"
-  (k, v) = xxx_todo_changeme2
-  return k
+  return pair[0]
 
 def multimap(kv_pairs):
   # note: sort is on just key, not k + v, because sorting on both would require sortable value type
@@ -31,9 +30,16 @@ EnvBundle=collections.namedtuple('EnvBundle','pool redis sesh userid chanid apic
 
 class GetterBy(list):
   "sort of like a read-only dict for namedtuple. inherits from list so it's iterable"
-  def __init__(self,tups): super(GetterBy,self).__init__(tups)
-  def __getitem__(self, xxx_todo_changeme): (key,value) = xxx_todo_changeme; return next(x for x in self if getattr(x,key)==value)
-  def __contains__(self, xxx_todo_changeme1): (key,value) = xxx_todo_changeme1; return any(getattr(x,key)==value for x in self)
+  def __init__(self,tups):
+    super().__init__(tups)
+
+  def __getitem__(self, pair):
+    key, value = pair
+    return next(x for x in self if getattr(x, key) == value)
+
+  def __contains__(self, pair):
+    key, value = pair
+    return any(getattr(x, key) == value for x in self)
 
 class CallOnceError(Exception): pass
 def meth_once(f):

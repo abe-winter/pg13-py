@@ -110,10 +110,13 @@ class Row(object):
   @classmethod
   def create_table(clas,pool_or_cursor):
     "uses FIELDS, PKEY, INDEXES and TABLE members to create a sql table for the model"
-    def mkfield(xxx_todo_changeme): (name,tp) = xxx_todo_changeme; return name,(tp if isinstance(tp,str) else 'jsonb')
-    fields = ','.join(map(' '.join,list(map(mkfield,clas.FIELDS))))
-    base = 'create table if not exists %s (%s'%(clas.TABLE,fields)
-    if clas.PKEY: base += ',primary key (%s)'%clas.PKEY
+    def mkfield(pair):
+      name, tp = pair
+      return name, (tp if isinstance(tp, str) else 'jsonb')
+
+    fields = ','.join(map(' '.join,list(map(mkfield, clas.FIELDS))))
+    base = 'create table if not exists %s (%s' % (clas.TABLE, fields)
+    if clas.PKEY: base += ',primary key (%s)' % clas.PKEY
     base += ')'
     commit_or_execute(pool_or_cursor,base)
     clas.create_indexes(pool_or_cursor)
