@@ -10,7 +10,7 @@ import ply.lex, ply.yacc, itertools
 from . import treepath
 
 # errors
-class PgMockError(StandardError): pass
+class PgMockError(Exception): pass
 class SQLSyntaxError(PgMockError):
   """base class for errors during parsing.
   beware: this gets called during table execution for things we should catch during parsing.
@@ -311,7 +311,7 @@ class SqlGrammar:
       if PKeyX in all_constraints and len(all_constraints[PKeyX]) != 1:
         raise SQLSyntaxError('too_many_pkeyx', all_constraints[PKeyX])
       # note below: this is a rare case where issubclass is safe
-      table_constraints = sum([v for k,v in all_constraints.items() if issubclass(k, TableConstraintX)], [])
+      table_constraints = sum([v for k,v in list(all_constraints.items()) if issubclass(k, TableConstraintX)], [])
       t[0] = CreateX(t[3], t[4], all_constraints.get(ColX) or [], pkey, table_constraints, t[8])
   def p_ifexists(self,t): "ifexists : kw_if kw_exists \n | "; t[0] = len(t) > 1
   def p_cascade(self,t): "cascade : kw_cascade \n | "; t[0] = len(t) > 1
@@ -363,6 +363,6 @@ def lex(string):
 YACC = ply.yacc.yacc(module=SqlGrammar(),debug=0,write_tables=0)
 def parse(string):
   "return a BaseX tree for the string"
-  print string
+  print(string)
   if string.strip().lower().startswith('create index'): return IndexX(string)
   return YACC.parse(string, lexer=LEXER.clone())

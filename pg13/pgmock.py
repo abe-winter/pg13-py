@@ -20,9 +20,9 @@ class TablesDict:
   def __delitem__(self, k): del self.levels[-1][k]
   def update(self, *args, **kwargs): self.levels[-1].update(*args,**kwargs)
   def __iter__(self): return iter(self.levels[-1])
-  def keys(self): return self.levels[-1].keys()
-  def values(self): return self.levels[-1].values()
-  def items(self): return self.levels[-1].items()
+  def keys(self): return list(self.levels[-1].keys())
+  def values(self): return list(self.levels[-1].values())
+  def items(self): return list(self.levels[-1].items())
   
   @contextlib.contextmanager
   def tempkeys(self):

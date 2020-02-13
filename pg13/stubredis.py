@@ -1,6 +1,6 @@
 "redis-compatible server for doing windows testing (i.e. redis doesn't build on windows)."
 
-import redis,msgpack,time,os,SocketServer,argparse,socket,threading,logging
+import redis,msgpack,time,os,socketserver,argparse,socket,threading,logging
 from collections import defaultdict
 from . import redismodel
 
@@ -24,12 +24,12 @@ class RedisState:
     command=msg[0]
     try: f={'GET':self.get,'SET':self.set,'SUBSCRIBE':self.sub,'PUBLISH':self.pub,
       'PING':self.ping,'GETSET':self.getset,'EXPIRE':self.expire,'DEL':self.delete}[command]
-    except KeyError: print msg; raise
+    except KeyError: print(msg); raise
     args=msg[1:]
     try: return f(sock,*args) if command in self.SOCK_COMMANDS else f(*args)
     except Exception as e:
-      print e
-      print msg
+      print(e)
+      print(msg)
       return '-ERROR\r\n'
   def get(self,k):
     if k in self.ttl and self.ttl[k]<time.time(): del self.ttl[k]; del self.keys[k]
@@ -39,8 +39,8 @@ class RedisState:
     self.ttl.pop(k,None)
     if args:
       if len(args)%2!=0: raise ValueError(args)
-      kwargs=dict(zip(args[::2],args[1::2]))
-      for argk,v in kwargs.items():
+      kwargs=dict(list(zip(args[::2],args[1::2])))
+      for argk,v in list(kwargs.items()):
         if argk=='EX': self.ttl[k]=time.time()+int(v)
         else: raise NotImplementedError('unk set kwargs in %r'%kwargs)
     return REDIS_OK
@@ -53,11 +53,11 @@ class RedisState:
     if k in self.pubsub:
       msg='*3\r\n'+bulkstring('message')+bulkstring(k)+bulkstring(v)
       for sock in self.pubsub[k][:]: # copy so we can delete while iterating
-        try: sock.send(msg); print 'sent %r to sock %s'%(msg,sock)
-        except socket.error: self.pubsub[k].remove(sock); print 'removed sock %s'%sock
+        try: sock.send(msg); print('sent %r to sock %s'%(msg,sock))
+        except socket.error: self.pubsub[k].remove(sock); print('removed sock %s'%sock)
     return REDIS_OK # is this right?
   def sub(self,sock,k):
-    print 'todo: I think SUBSCRIBE can have more than one key'
+    print('todo: I think SUBSCRIBE can have more than one key')
     if k in self.sock2sub[sock]: raise NotImplementedError # return error for double-subscribe
     self.pubsub[k].append(sock)
     self.sock2sub[sock].append(k)
@@ -106,16 +106,16 @@ class RedisHandler:
   (I'm not sure if there's a 1:1 map of python type to redis reply format.\
     Maybe I can with knowledge of the command)."
   def __init__(self,sock,addr,server,verbose=True):
-    if verbose: print 'RedisHandler for client %s:%i'%addr
+    if verbose: print('RedisHandler for client %s:%i'%addr)
     buf=''
     sock.settimeout(0.5)
     while not server.stop_looping:
       try: data=sock.recv(1000)
       except socket.timeout: continue
       except socket.error as e:
-        print 'breaking on %s'%e
+        print('breaking on %s'%e)
         break
-      if not data: print 'breaking on null recv'; break
+      if not data: print('breaking on null recv'); break
       buf+=data
       msg,buf=complete_message(buf)
       if msg:
@@ -135,8 +135,8 @@ class SubNotifyThread(threading.Thread):
         dict(sub=self.pubsub.subscribe,unsub=self.pubsub.unsubscribe)[command](key)
       try: msg=self.pubsub.wait()
       except socket.timeout: pass
-      except PubsubDisco: print 'todo: handle disco'; raise
-      else: print 'todo: msg',msg
+      except PubsubDisco: print('todo: handle disco'); raise
+      else: print('todo: msg',msg)
   def subscribe(self,k): self.commands.append(('sub',k))
   def unsubscribe(self,k): self.commands.append(('unsub',k))
 
@@ -146,26 +146,26 @@ def repl(host,port):
   pubsub=client.pubsub()
   snt=SubNotifyThread(host,port); snt.start()
   while 1:
-    try: command=raw_input('command> ') # this has up/down command history on windows. How?
-    except KeyboardInterrupt: print 'ctrl+c'; break
+    try: command=input('command> ') # this has up/down command history on windows. How?
+    except KeyboardInterrupt: print('ctrl+c'); break
     if command=='exit': break
     if not command: continue
     toks=command.split()
     try: f=dict(get=client.get,set=client.set,pub=client.publish,sub=snt.subscribe,unsub=snt.unsubscribe,ping=client.ping)[toks[0]]
-    except KeyError: print 'unk_command %s'%toks[0]; continue
-    try: print f(*toks[1:])
-    except Exception as e: print 'error %s %s'%(e.__class__.__name__,str(e))
+    except KeyError: print('unk_command %s'%toks[0]); continue
+    try: print(f(*toks[1:]))
+    except Exception as e: print('error %s %s'%(e.__class__.__name__,str(e)))
   snt.dead=True
-  print 'waiting for pubsub thread'
+  print('waiting for pubsub thread')
   snt.join() # todo: just kill it
 
 def servermode(host,port):
-  tcps=SocketServer.ThreadingTCPServer((host,port),RedisHandler)
+  tcps=socketserver.ThreadingTCPServer((host,port),RedisHandler)
   tcps.redis_state=RedisState()
   tcps.stop_looping=False
-  print 'starting server'
+  print('starting server')
   try: tcps.serve_forever()
-  except KeyboardInterrupt: print 'ctrl+c'
+  except KeyboardInterrupt: print('ctrl+c')
   tcps.stop_looping=True
 
 def main():

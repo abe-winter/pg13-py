@@ -1,4 +1,5 @@
 import ast,os,setuptools
+from pg13 import version
 
 def get_version(fname):
   "grab __version__ variable from fname (assuming fname is a python file). parses without importing."
@@ -8,23 +9,27 @@ def get_version(fname):
 
 setuptools.setup(
   name='pg13',
-  version=get_version(os.path.join(os.path.dirname(__file__),'pg13/__init__.py')),
+  version=version.__version__,
   description='sql evaluator for mocking',
   classifiers=[
     'Development Status :: 4 - Beta',
     'License :: OSI Approved :: MIT License',
-    'Programming Language :: Python :: 2.7',
-    'Programming Language :: Python :: 2 :: Only',
+    'Programming Language :: Python :: 3.6',
+    'Programming Language :: Python :: 3 :: Only',
     'Topic :: Database',
     'Topic :: Software Development :: Interpreters',
     'Topic :: Software Development :: Testing',
   ],
   keywords=['sql','mocking','orm','database','testing'],
   author='Abe Winter',
-  author_email='abe-winter@users.noreply.github.com',
+  author_email='awinter.public+pg13@gmail.com',
   url='https://github.com/abe-winter/pg13-py',
   license='MIT',
   packages=setuptools.find_packages(),
-  install_requires=['pytest','ujson','ply'],
-  extras_require={'psyco':['psycopg2'], 'redis':['hiredis','redis','msgpack-python'], 'sqla':['sqlalchemy']},
+  install_requires=['ply==3.11'],
+  extras_require={
+    'psyco':['psycopg2'],
+    'sqla':['sqlalchemy'],
+    'test':['pytest'],
+  },
 )

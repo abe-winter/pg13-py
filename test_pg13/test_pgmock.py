@@ -98,7 +98,7 @@ def test_select_coalesce():
 def test_insert_select():
   tables,runsql=prep("create table t1 (a int, b int, c int)")
   runsql("insert into t1 (a,b,c) values (1,2,3)")
-  print sqparse2.parse('insert into t1 (a,b,c) values (2,3,(select c from t1 where a=1))')
+  print(sqparse2.parse('insert into t1 (a,b,c) values (2,3,(select c from t1 where a=1))'))
   runsql("insert into t1 (a,b,c) values (2,3,(select c from t1 where a=1))")
   assert tables['t1'].rows==[[1,2,3],[2,3,3]]
 
@@ -147,7 +147,7 @@ def test_not():
   "todo: double-check operator precedence of not vs ="
   tables,runsql=prep("create table t1 (a int,b int)")
   tables['t1'].rows=[[0,0],[1,1]]
-  print sqparse2.parse("select * from t1 where not a=0")
+  print(sqparse2.parse("select * from t1 where not a=0"))
   assert [[1,1]]==runsql("select * from t1 where not a=0")
 
 def test_null_handling():
@@ -170,7 +170,7 @@ def test_case():
   tables,runsql=prep('create table t1 (a int,b int)')
   tables['t1'].rows=[[0,1],[1,2],[2,3]]
   assert [[2],[6],[9]]==runsql('select case when a=0 then 2*b else 3*b end from t1')
-  print runsql('select case when a=0 then 2*b end from t1')
+  print(runsql('select case when a=0 then 2*b end from t1'))
   assert [[2],[None],[None]]==runsql('select case when a=0 then 2*b end from t1') # i.e. missing else returns null
 
 def test_array_ops():
@@ -186,9 +186,9 @@ def test_select_order():
   # todo: asc/desc, test more complicated expressions
   tables,runsql=prep('create table t1 (a int,b int)')
   tables['t1'].rows=[[i,0] for i in range(10,0,-1)]
-  print sqparse2.parse('select * from t1 order by a')
+  print(sqparse2.parse('select * from t1 order by a'))
   rows=runsql('select * from t1 order by a')
-  print 'tso',rows
+  print('tso',rows)
   assert rows==sorted(rows)
 
 def setup_join_test():
@@ -343,19 +343,19 @@ def test_transaction_basics():
   # 1. test that create table persists past commit
   with ppm.withcur() as cursor:
     cursor.execute('create table t1 (a int, b int)')
-  assert ppm.tables.keys() == ['t1']
+  assert list(ppm.tables.keys()) == ['t1']
   # 2. test that insert persists past commit
   with ppm.withcur() as cursor:
     cursor.execute('insert into t1 values (1,3)')
   assert len(ppm.tables['t1'].rows) == 1
-  class IgnorableError(StandardError): pass
+  class IgnorableError(Exception): pass
   # 3. test that create table doesn't survive a rollback
   try:
     with ppm.withcur() as cursor:
       cursor.execute('create table t2 (a int, b int)')
       raise IgnorableError
   except IgnorableError: pass
-  assert ppm.tables.keys() == ['t1']
+  assert list(ppm.tables.keys()) == ['t1']
   # 4. test that insert doesn't survive a rollback
   try:
     with ppm.withcur() as cursor:

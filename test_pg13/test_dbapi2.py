@@ -38,7 +38,7 @@ def test_exmany():
   vals = [[1,2],[3,4],[5,6]]
   with pgmock_dbapi2.connect() as db, db.cursor() as cur:
     cur.execute('create table t1 (a int, b int)')
-    cur.executemany('insert into t1 (a, b) values (%s, %s)', map(tuple, vals))
+    cur.executemany('insert into t1 (a, b) values (%s, %s)', list(map(tuple, vals)))
   assert db.db['t1'].rows == vals
 
 def test_iter():

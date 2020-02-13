@@ -11,7 +11,7 @@ class ThreeVL:
     if not isinstance(other,(bool,ThreeVL)): return False
     return self.value==other.value if isinstance(other,ThreeVL) else {True:'t',False:'f'}[other]==self.value
   def __neq__(self,other): return not (self==other)
-  def __nonzero__(self):
+  def __bool__(self):
     # if self.value=='u': raise ValueError("can't cast 3VL 'unknown' to bool") # I think this is okay at top level
     return self.value=='t'
   @staticmethod
@@ -31,11 +31,11 @@ class ThreeVL:
     # is this the right one? https://en.wikipedia.org/wiki/Three-valued_logic#Kleene_logic
     if operator not in ('and','or'): raise ValueError('unk_operator',operator)
     vals=a,b
-    if not all(isinstance(x,(bool,ThreeVL)) for x in vals): raise TypeError(map(type,vals))
+    if not all(isinstance(x,(bool,ThreeVL)) for x in vals): raise TypeError(list(map(type,vals)))
     if ThreeVL('u') in vals:
       if operator=='or' and True in vals: return True
       return False if False in vals else ThreeVL('u')
-    a,b=map(bool,vals)
+    a,b=list(map(bool,vals))
     return (a and b) if operator=='and' else (a or b)
   @staticmethod
   def compare(operator,a,b):

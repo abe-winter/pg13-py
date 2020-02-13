@@ -5,8 +5,8 @@ import itertools, collections
 from . import sqparse2, threevl, misc, treepath
 
 # todo: derive errors below from something pg13-specific
-class ColumnNameError(StandardError): "name not in any tables or name matches too many tables"
-class TableNameError(StandardError): "expression referencing unk table"
+class ColumnNameError(Exception): "name not in any tables or name matches too many tables"
+class TableNameError(Exception): "expression referencing unk table"
 
 # todo doc: explain why it's not necessary to do these checks on the whereclause
 def consumes_rows(ex): return isinstance(ex,sqparse2.CallX) and ex.f in ('min','max','count')
@@ -58,11 +58,11 @@ def infer_columns(selectx,tables_dict):
   table2fields = {}
   table_order = []
   for t in selectx.tables:
-    if isinstance(t,basestring):
+    if isinstance(t,str):
       table2fields[t]=tables_dict[t].fields
       table_order.append(t)
     elif isinstance(t,sqparse2.AliasX):
-      if isinstance(t.name,basestring):
+      if isinstance(t.name,str):
         table2fields[t]=tables_dict[t]
         table_order.append(t.name)
       elif isinstance(t.name,sqparse2.SelectX): raise NotImplementedError('todo: inner subquery')
@@ -87,7 +87,7 @@ def infer_columns(selectx,tables_dict):
           elif isinstance(x.attr,sqparse2.AsterX): cols.extend(table2fields[x.parent.name])
           else: raise TypeError('attr_unk_type',type(x.attr))
         elif isinstance(x,sqparse2.NameX):
-          matching_fields = filter(None,(next((f for f in table2fields[t] if f.name==x.name),None) for t in table_order))
+          matching_fields = [_f for _f in (next((f for f in table2fields[t] if f.name==x.name),None) for t in table_order) if _f]
           if len(matching_fields)!=1: raise sqparse2.SQLSyntaxError('missing_or_dupe_field',x,matching_fields)
           cols.append(matching_fields[0])
         elif isinstance(x,sqparse2.AliasX): cols.append(sqparse2.ColX(x.alias,None,None,None,None,None))
@@ -103,9 +103,9 @@ class NameIndexer:
   @staticmethod
   def update_aliases(aliases,aonly,x):
     "helper for ctor. takes AliasX or string as second arg"
-    if isinstance(x,basestring): aliases[x]=x
+    if isinstance(x,str): aliases[x]=x
     elif isinstance(x,sqparse2.AliasX):
-      if not isinstance(x.alias,basestring): raise TypeError('alias not string',type(x.alias))
+      if not isinstance(x.alias,str): raise TypeError('alias not string',type(x.alias))
       if isinstance(x.name,sqparse2.NameX): aliases.update({x.alias:x.name.name,x.name.name:x.name.name})
       elif isinstance(x.name,sqparse2.SelectX):
         aliases.update({x.alias:x.alias})
@@ -117,7 +117,7 @@ class NameIndexer:
     aliases={}
     aonly={}
     for from_item in fromlistx:
-      if isinstance(from_item,basestring): clas.update_aliases(aliases,aonly,from_item)
+      if isinstance(from_item,str): clas.update_aliases(aliases,aonly,from_item)
       elif isinstance(from_item,sqparse2.AliasX): clas.update_aliases(aliases,aonly,from_item)
       elif isinstance(from_item,sqparse2.JoinX):
         clas.update_aliases(aliases,aonly,from_item.a)
@@ -133,7 +133,7 @@ class NameIndexer:
   @misc.meth_once
   def resolve_aonly(self,tables_dict,table_ctor):
     "circular depends on pgmock.Table. refactor."
-    for alias,selectx in self.aonly.items():
+    for alias,selectx in list(self.aonly.items()):
       table = table_ctor(alias,infer_columns(selectx,tables_dict),None)
       table.rows = run_select(selectx,tables_dict,table_ctor)
       self.aonly[alias] = table
@@ -144,7 +144,7 @@ class NameIndexer:
     with tables_dict.tempkeys():
       tables_dict.update(self.aonly) # todo: find spec support for aliases overwriting existing tables. (more likely, it's an error)
       index = index.name if isinstance(index,sqparse2.NameX) else index
-      if isinstance(index,basestring):
+      if isinstance(index,str):
         candidates = [t for t in self.table_order if any(f.name==index for f in tables_dict[t].fields)]
         if len(candidates)!=1: raise ColumnNameError(("ambiguous_column" if candidates else "no_such_column"),index)
         tname, = candidates
@@ -204,7 +204,7 @@ def replace_subqueries(ex,tables,table_ctor):
 
 def unnest_helper(cols,row):
   wrapped = [val if contains(col,returns_rows) else [val] for col,val in zip(cols.children,row)]
-  return map(list,itertools.product(*wrapped))
+  return list(map(list,itertools.product(*wrapped)))
 
 def collapse_group_expr(groupx,cols,ret_row):
   "collapses columns matching the group expression. I'm sure this is buggy; look at a real DB's imp of this."
@@ -221,7 +221,7 @@ def run_select(ex,tables,table_ctor):
     if ex.order: # note: order comes before limit / offset
       composite_rows.sort(key=lambda c_row:Evaluator(c_row,nix,tables).eval(ex.order))
     if ex.limit or ex.offset: # pragma: no cover
-      print ex.limit, ex.offset
+      print(ex.limit, ex.offset)
       raise NotImplementedError('notimp: limit,offset,group')
     if ex.group:
       # todo: non-aggregate expressions are allowed if they consume only the group expression
@@ -235,7 +235,7 @@ def run_select(ex,tables,table_ctor):
         k = Evaluator(row,nix,tables).eval(ex.group)
         if k not in groups: groups[k] = []
         groups[k].append(row)
-      return [collapse_group_expr(ex.group, ex.cols, Evaluator(g_rows,nix,tables).eval(ex.cols)) for g_rows in groups.values()]
+      return [collapse_group_expr(ex.group, ex.cols, Evaluator(g_rows,nix,tables).eval(ex.cols)) for g_rows in list(groups.values())]
     if contains(ex.cols,consumes_rows):
       if not all(contains(col,consumes_rows) for col in ex.cols.children):
         # todo: this isn't good enough. what about nesting cases like max(min(whatever))
@@ -297,11 +297,11 @@ class Evaluator:
   def eval(self, exp):
     "main dispatch for expression evaluation"
     # todo: this needs an AST-assert that all BaseX descendants are being handled
-    if isinstance(exp,sqparse2.BinX): return evalop(exp.op.op, *map(self.eval, (exp.left, exp.right)))
+    if isinstance(exp,sqparse2.BinX): return evalop(exp.op.op, *list(map(self.eval, (exp.left, exp.right))))
     elif isinstance(exp,sqparse2.UnX): return self.eval_unx(exp)
     elif isinstance(exp,sqparse2.NameX): return self.nix.rowget(self.tables,self.c_row,exp)
     elif isinstance(exp,sqparse2.AsterX): return sum(self.c_row,[]) # todo doc: how does this get disassembled by caller?
-    elif isinstance(exp,sqparse2.ArrayLit): return map(self.eval,exp.vals)
+    elif isinstance(exp,sqparse2.ArrayLit): return list(map(self.eval,exp.vals))
     elif isinstance(exp,(sqparse2.Literal,sqparse2.ArrayLit)): return exp.toliteral()
     elif isinstance(exp,sqparse2.CommaX):
       # todo: think about getting rid of CommaX everywhere; it complicates syntax tree navigation.
@@ -319,19 +319,19 @@ class Evaluator:
         if self.eval(case.when): return self.eval(case.then)
       return self.eval(exp.elsex)
     elif isinstance(exp,sqparse2.CastX):
-      if exp.to_type.type.lower() in ('text','varchar'): return unicode(self.eval(exp.expr))
+      if exp.to_type.type.lower() in ('text','varchar'): return str(self.eval(exp.expr))
       else: raise NotImplementedError('unhandled_cast_type',exp.to_type)
-    elif isinstance(exp,(int,basestring,float,type(None))):
+    elif isinstance(exp,(int,str,float,type(None))):
       return exp # I think Table.insert is creating this in expand_row
     # todo: why tuple, list, dict below? throw some asserts in here and see where these are coming from.
     elif isinstance(exp,tuple): return tuple(map(self.eval, exp))
-    elif isinstance(exp,list): return map(self.eval, exp)
+    elif isinstance(exp,list): return list(map(self.eval, exp))
     elif isinstance(exp,dict): return exp
     elif isinstance(exp,sqparse2.NullX): return None
     elif isinstance(exp,sqparse2.ReturnX):
       # todo: I think ReturnX is *always* CommaX now; revisit this
       ret=self.eval(exp.expr)
-      print "warning: not sure what I'm doing here with cardinality tweak on CommaX"
+      print("warning: not sure what I'm doing here with cardinality tweak on CommaX")
       return [ret] if isinstance(exp.expr,(sqparse2.CommaX,sqparse2.AsterX)) else [[ret]] # todo: update parser so this is always * or a commalist
     elif isinstance(exp,sqparse2.AliasX): return self.eval(exp.name) # todo: rename AliasX 'name' to 'expr'
     else: raise NotImplementedError(type(exp), exp) # pragma: no cover
@@ -342,7 +342,7 @@ def depth_first_sub(expr,values):
   if len(arr)!=len(values): raise ValueError('len',len(arr),len(values))
   for path,val in zip(arr,values):
     # todo: does ArrayLit get us anything? tree traversal?
-    if isinstance(val,(basestring,int,float,type(None),dict)): expr[path] = sqparse2.Literal(val)
+    if isinstance(val,(str,int,float,type(None),dict)): expr[path] = sqparse2.Literal(val)
     elif isinstance(val,(list,tuple)): expr[path] = sqparse2.ArrayLit(val)
     else: raise TypeError('unk_sub_type',type(val),val) # pragma: no cover
   return expr

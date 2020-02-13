@@ -53,7 +53,7 @@ def test_parse_case():
     [WhenX(Literal(1),Literal(10))],
     Literal(20)
   )
-  print sqparse2.parse('case when 1 then 10 when x=5 then 11 else 5 end')
+  print(sqparse2.parse('case when 1 then 10 when x=5 then 11 else 5 end'))
   assert sqparse2.parse('case when 1 then 10 when x=5 then 11 else 5 end')==CaseX(
     [WhenX(Literal(1),Literal(10)), WhenX(BinX(OpX('='),NameX('x'),Literal(5)),Literal(11))],
     Literal(5)

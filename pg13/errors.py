@@ -1,1 +1,1 @@
-class PgPoolError(StandardError): pass
+class PgPoolError(Exception): pass
