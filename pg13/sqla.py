@@ -4,7 +4,8 @@ sqlalchemy_akiban doesn't have a LICENSE file but setup.py has MIT license
 """
 
 import sqlalchemy
-from . import pgmock_dbapi2, __version__
+from . import pgmock_dbapi2
+from .version import __version__
 
 class PG13Dialect(sqlalchemy.engine.default.DefaultDialect):
   name = 'pg13'
@@ -36,7 +37,7 @@ class PG13Dialect(sqlalchemy.engine.default.DefaultDialect):
   # def dbapi(db=None, paramstyle=None):
   #   # todo: no idea what this does or why it's necessary. taking out the paramstyle arg seriously alters behavior.
   #   return pgmock_dbapi2.connect(db)
-  
+
   def on_connect(self): pass
   def _get_default_schema_name(self, connection): return 'default' # hmm; I don't support schemas, do I?
   def has_schema(self, connection, schema): raise NotImplementedError("has_schema")

@@ -1,4 +1,5 @@
 import ast,os,setuptools
+from pg13 import version
 
 def get_version(fname):
   "grab __version__ variable from fname (assuming fname is a python file). parses without importing."
@@ -8,7 +9,7 @@ def get_version(fname):
 
 setuptools.setup(
   name='pg13',
-  version=get_version(os.path.join(os.path.dirname(__file__),'pg13/__init__.py')),
+  version=version.__version__,
   description='sql evaluator for mocking',
   classifiers=[
     'Development Status :: 4 - Beta',
