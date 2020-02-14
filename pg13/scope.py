@@ -2,15 +2,21 @@
 
 from . import sqparse2, table
 
-class ScopeError(Exception): "base"
-class ScopeCollisionError(ScopeError): pass
-class ScopeUnkError(ScopeError): pass
+class ScopeError(Exception):
+  "base"
+class ScopeCollisionError(ScopeError):
+  pass
+class ScopeUnkError(ScopeError):
+  pass
 
 def col2name(col_item):
   "helper for SyntheticTable.columns. takes something from SelectX.cols, returns a string column name"
-  if isinstance(col_item, sqparse2.NameX): return col_item.name
-  elif isinstance(col_item, sqparse2.AliasX): return col_item.alias
-  else: raise TypeError(type(col_item), col_item)
+  if isinstance(col_item, sqparse2.NameX):
+    return col_item.name
+  elif isinstance(col_item, sqparse2.AliasX):
+    return col_item.alias
+  else:
+    raise TypeError(type(col_item), col_item)
 
 class SyntheticTable:
   def __init__(self, exp):
@@ -18,7 +24,7 @@ class SyntheticTable:
       raise TypeError('expected SelectX for', type(exp), exp)
     self.exp = exp
 
-  def columns(self, scope):
+  def columns(self, _scope):
     "return list of column names. needs scope for resolving asterisks."
     return list(map(col2name, self.exp.cols.children))
 
@@ -45,6 +51,7 @@ class Scope:
 
   def resolve_column(self, ref):
     "ref is a NameX or AttrX. return (canonical_table_name, column_name)."
+    # pylint: disable=too-many-branches
     if isinstance(ref, sqparse2.AttrX):
       if ref.parent.name not in self:
         raise ScopeUnkError('unk table or table alias', ref.parent.name)
@@ -56,27 +63,34 @@ class Scope:
           if ref.name in target.columns(self):
             matches.add(name)
         elif isinstance(target, table.Table):
-          try: target.get_column(ref.name)
-          except KeyError: pass
-          else: matches.add(name)
+          try:
+            target.get_column(ref.name)
+          except KeyError:
+            pass
+          else:
+            matches.add(name)
         else:
           raise TypeError('expected SyntheticTable', type(target), target)
-      if not matches: raise ScopeUnkError(ref)
-      elif len(matches) > 1: raise ScopeCollisionError(matches, ref)
-      else: return list(matches)[0], ref.name
+      if not matches:
+        raise ScopeUnkError(ref)
+      elif len(matches) > 1:
+        raise ScopeCollisionError(matches, ref)
+      else:
+        return list(matches)[0], ref.name
     else:
       raise TypeError('unexpected', type(ref), ref)
 
   @classmethod
-  def from_fromx(class_, tables, fromx, ctes=()):
+  def from_fromx(cls, tables, fromx, ctes=()):
     """Build a Scope given TablesDict, from-expression and optional list of CTEs.
     fromx is a list of expressions (e.g. SelectX.tables). The list elts can be:
       1. string (i.e. tablename)
       2. AliasX(SelectX as name)
       3. AliasX(name as name)
     """
-    if ctes: raise NotImplementedError # note: I don't think any other part of the program supports CTEs yet either
-    scope_ = class_(fromx)
+    if ctes:
+      raise NotImplementedError # note: I don't think any other part of the program supports CTEs yet either
+    scope_ = cls(fromx)
     for exp in fromx:
       if isinstance(exp, str):
         scope_.add(exp, tables[exp])

@@ -1,7 +1,0 @@
-pg13.diff module
-================
-
-.. automodule:: pg13.diff
-    :members:
-    :undoc-members:
-    :show-inheritance:

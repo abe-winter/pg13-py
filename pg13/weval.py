@@ -1,26 +1,26 @@
 "weval -- where-clause evaluation"
 
 import collections
-from . import sqparse2, sqex, misc, scope, table, treepath
+from . import sqparse2, misc, scope, table, treepath
 
 class RowType(list):
   "ctor takes list of (name, type). name is string, type is a sqparse2.ColX."
   def index(self, name):
     # todo: when a name isn't found, this should look in any children that have type=RowType
-    return zip(*self)[0].index(name)
+    return list(zip(*self))[0].index(name)
 
 class RowSource:
   "for things like update and delete we need to know where a row came from. this stores that."
-  def __init__(self, table, index):
-    "table is a table.Table or a scope.SyntheticTable"
-    self.table, self.index = table, index
+  def __init__(self, tab, index):
+    "tab is a table.Table or a scope.SyntheticTable"
+    self.table, self.index = tab, index
 
 class Row:
-  def __init__(self, source, type, vals):
+  def __init__(self, source, type_, vals):
     "source is a RowSource or None if it isn't from a table"
-    if len(type) != len(vals):
-      raise ValueError('type/vals length mismatch', len(type), len(vals))
-    self.source, self.type, self.vals = source, type, vals
+    if len(type_) != len(vals):
+      raise ValueError('type/vals length mismatch', len(type_), len(vals))
+    self.source, self.type, self.vals = source, type_, vals
 
   def __getitem__(self, name):
     return self.vals[self.type.index(name)]

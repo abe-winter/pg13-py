@@ -1,7 +1,0 @@
-pg13.cdiff module
-=================
-
-.. automodule:: pg13.cdiff
-    :members:
-    :undoc-members:
-    :show-inheritance:

@@ -28,8 +28,7 @@ setuptools.setup(
   packages=setuptools.find_packages(),
   install_requires=['ply==3.11'],
   extras_require={
-    'psyco':['psycopg2'],
-    'sqla':['sqlalchemy'],
-    'test':['pytest'],
+    'psyco':['psycopg2-binary==2.8.4'],
+    'sqla':['sqlalchemy==1.3.13'],
   },
 )

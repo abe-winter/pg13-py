@@ -1,7 +1,0 @@
-pg13.syncmessage module
-=======================
-
-.. automodule:: pg13.syncmessage
-    :members:
-    :undoc-members:
-    :show-inheritance:

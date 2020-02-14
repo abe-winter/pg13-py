@@ -1,0 +1,18 @@
+name: test
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-python@v1
+      with:
+        python-version: '>=3.6'
+    - name: deps
+      run: |
+        pip install -e .[psyco,sqla]
+        pip install pytest pylint
+    - name: test
+      run: pytest
+    - name: lint
+      run: pylint pg13
