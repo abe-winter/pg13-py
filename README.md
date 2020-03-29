@@ -1,4 +1,6 @@
-# pg13 [![Build Status](https://travis-ci.org/abe-winter/pg13-py.svg?branch=master)](https://travis-ci.org/abe-winter/pg13-py)
+> warning: despite recent CI commits, this repo is stale. Use it very cautiously, consider opening an issue with your use case before investing any time.
+
+# pg13
 
 - [intro](#intro)
 - [examples](#examples)
